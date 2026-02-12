@@ -1,0 +1,25 @@
+{
+  "ts-node": {
+    "transpileOnly": true,
+    "files": true,
+    "tmpDir": "/tmp/ts-app",
+    "cache": false,
+    "compilerOptions": {
+      "module": "commonjs"
+    }
+  },
+  "compilerOptions": {
+    "module": "CommonJS",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "target": "es6",
+    "types": ["node", "jest"],
+    "noImplicitAny": false,
+    "moduleResolution": "node",
+    "sourceMap": false,
+    "outDir": "dist",
+    "baseUrl": ".",
+    // "skipLibCheck": true
+  },
+  "include": ["./src/**/*", "server.ts"]
+}

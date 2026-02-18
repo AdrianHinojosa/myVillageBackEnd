@@ -186,7 +186,7 @@ class Controllers {
         delete updatedAdministrator.User.sPassword;
         
         return res.status(201).json({
-            message: SuccessMessages.Administrators.updateAdministrator[sLang],
+            message: SuccessMessages.Administrators.patchAdministratorAccess[sLang],
             updatedAdministrator: updatedAdministrator,
             success: true
         })

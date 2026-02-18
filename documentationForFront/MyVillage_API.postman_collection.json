@@ -1,15 +1,15 @@
 {
 	"info": {
 		"name": "MyVillage API",
-		"description": "# MyVillage Schools Management Platform API\n\nComplete API documentation for the MyVillage backend.\n\n## Base URL\n`http://localhost:3000/development/api/v1/sp`\n\n## Authentication\nAll protected endpoints require a Bearer token in the `Authorization` header.\n\n### User Types\n- **SuperAdmin**: Platform administrators (token expires in 4 hours)\n- **SchoolAdmin**: School users (token expires in 120 hours)\n\n## How to Run All Tests\n1. Set `adminEmail` and `adminPassword` collection variables\n2. Set `schoolEmail` and `schoolPassword` collection variables\n3. Click **Run Collection** → Select all requests → **Run**\n4. The auto-login pre-request scripts will handle token management automatically\n\n## Conventions\n- Hungarian Notation: `s`=string/UUID, `b`=boolean, `i`=integer, `d`=decimal, `t`=timestamp, `a`=array, `o`=object\n- Soft deletes via `bActive` flag\n- Pagination: `iPageNumber` (>=1), `iItemsPerPage` (>=1), `sSearch` (optional)",
+		"description": "# MyVillage Schools Management Platform API\n\nComplete API documentation for the MyVillage backend.\n\n## Base URL\n`http://localhost:3000/development/api/v1/sp`\n\n## Authentication\nAll protected endpoints require a Bearer token in the `Authorization` header.\n\n### User Types\n- **SuperAdmin**: Platform administrators (token expires in 4 hours)\n- **SchoolAdmin**: School users (token expires in 120 hours)\n\n## How to Run All Tests\n1. Set `adminEmail` and `adminPassword` collection variables\n2. Set `schoolEmail` and `schoolPassword` collection variables\n3. Run **Login (SuperAdmin)** first — saves `sAdminToken` automatically\n4. Run **Login (SchoolAdmin)** next — saves `sSchoolToken` and `createdSchoolId` automatically\n5. Click **Run Collection** → Select all requests → **Run**\n\n## Conventions\n- Hungarian Notation: `s`=string/UUID, `b`=boolean, `i`=integer, `d`=decimal, `t`=timestamp, `a`=array, `o`=object\n- Soft deletes via `bActive` flag\n- Pagination: `iPageNumber` (>=1), `iItemsPerPage` (>=1), `sSearch` (optional)",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"variable": [
 		{ "key": "baseUrl", "value": "http://localhost:3000/development/api/v1/sp" },
-		{ "key": "adminToken", "value": "" },
-		{ "key": "schoolToken", "value": "" },
-		{ "key": "adminEmail", "value": "admin@example.com" },
-		{ "key": "adminPassword", "value": "Password123" },
+		{ "key": "sAdminToken", "value": "" },
+		{ "key": "sSchoolToken", "value": "" },
+		{ "key": "adminEmail", "value": "admin@myvillage.com" },
+		{ "key": "adminPassword", "value": "MyVillage0!" },
 		{ "key": "schoolEmail", "value": "school@example.com" },
 		{ "key": "schoolPassword", "value": "Password123" },
 		{ "key": "createdAdminId", "value": "" },
@@ -20,18 +20,6 @@
 		{ "key": "testCountryId", "value": "" },
 		{ "key": "testStateId", "value": "" },
 		{ "key": "adminModuleId", "value": "" }
-	],
-	"event": [
-		{
-			"listen": "prerequest",
-			"script": {
-				"type": "text/javascript",
-				"exec": [
-					"// Auto-login helper: call this from folder-level pre-request scripts",
-					"// This is the collection-level script - individual folders handle their own auth"
-				]
-			}
-		}
 	],
 	"item": [
 		{
@@ -49,13 +37,14 @@
 									"pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
 									"pm.test('Response has token', function () {",
 									"    var json = pm.response.json();",
-									"    pm.expect(json).to.have.property('sToken');",
-									"    pm.expect(json).to.have.property('sUserType');",
-									"    pm.collectionVariables.set('adminToken', json.sToken);",
+									"    pm.expect(json).to.have.property('results');",
+									"    pm.expect(json.results).to.have.property('sToken');",
+									"    pm.expect(json.results).to.have.property('sUserType');",
+									"    pm.collectionVariables.set('sAdminToken', json.results.sToken);",
 									"});",
 									"pm.test('User type is SuperAdmin', function () {",
 									"    var json = pm.response.json();",
-									"    pm.expect(json.sUserType).to.eql('SuperAdmin');",
+									"    pm.expect(json.results.sUserType).to.eql('SuperAdmin');",
 									"});"
 								]
 							}
@@ -69,7 +58,7 @@
 							"raw": "{\n    \"sEmail\": \"{{adminEmail}}\",\n    \"sPassword\": \"{{adminPassword}}\"\n}"
 						},
 						"url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
-						"description": "Authenticate a user. Detects user type automatically:\n- Checks Administrators table first → SuperAdmin (4h token)\n- Then SchoolUsers table → SchoolAdmin (120h token)\n\n**Response includes:** `sToken`, `sUserType`, `oUser`, and `oSchool` (for SchoolAdmin only)"
+						"description": "Authenticate as SuperAdmin.\n\nSaves `sAdminToken` automatically on success.\n\n**Response:** `{ message, status, results: { sUserId, sToken, sEmail, sFullName, sUserType } }`"
 					}
 				},
 				{
@@ -83,16 +72,21 @@
 									"pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
 									"pm.test('Response has token', function () {",
 									"    var json = pm.response.json();",
-									"    pm.expect(json).to.have.property('sToken');",
-									"    pm.collectionVariables.set('schoolToken', json.sToken);",
+									"    pm.expect(json).to.have.property('results');",
+									"    pm.expect(json.results).to.have.property('sToken');",
+									"    pm.collectionVariables.set('sSchoolToken', json.results.sToken);",
+									"    if (json.results.oSchool && json.results.oSchool.sSchoolId) {",
+									"        pm.collectionVariables.set('createdSchoolId', json.results.oSchool.sSchoolId);",
+									"    }",
 									"});",
 									"pm.test('User type is SchoolAdmin', function () {",
 									"    var json = pm.response.json();",
-									"    pm.expect(json.sUserType).to.eql('SchoolAdmin');",
+									"    pm.expect(json.results.sUserType).to.eql('SchoolAdmin');",
 									"});",
 									"pm.test('Response includes school info', function () {",
 									"    var json = pm.response.json();",
-									"    pm.expect(json).to.have.property('oSchool');",
+									"    pm.expect(json.results).to.have.property('oSchool');",
+									"    pm.expect(json.results.oSchool).to.have.property('sSchoolId');",
 									"});"
 								]
 							}
@@ -106,7 +100,7 @@
 							"raw": "{\n    \"sEmail\": \"{{schoolEmail}}\",\n    \"sPassword\": \"{{schoolPassword}}\"\n}"
 						},
 						"url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
-						"description": "Login as a school user. Returns `oSchool` with `sSchoolId`, `sSchoolName`, `sSchoolLogo`, `oImages`."
+						"description": "Authenticate as SchoolAdmin.\n\nSaves `sSchoolToken` and `createdSchoolId` automatically on success.\n\n**Response:** `{ message, status, results: { sUserId, sToken, sEmail, sFullName, sUserType, oSchool: { sSchoolId, sSchoolName, sSchoolLogo, oImages } } }`"
 					}
 				},
 				{
@@ -120,7 +114,7 @@
 									"pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
 									"pm.test('Response has success message', function () {",
 									"    var json = pm.response.json();",
-									"    pm.expect(json).to.have.property('sMessage');",
+									"    pm.expect(json).to.have.property('message');",
 									"});"
 								]
 							}
@@ -145,7 +139,6 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"// This will fail without a valid token - test the structure",
 									"pm.test('Status is 200 or 400/404', function () {",
 									"    pm.expect(pm.response.code).to.be.oneOf([200, 400, 404]);",
 									"});"
@@ -337,15 +330,14 @@
 		},
 		{
 			"name": "04 - Administrators",
-			"description": "Administrator CRUD endpoints.\n\n**Auth required:** SuperAdmin token with `Administración` module permissions.\n\nAll requests in this folder auto-login as SuperAdmin.",
+			"description": "Administrator CRUD endpoints.\n\n**Auth required:** SuperAdmin token (`sAdminToken`).",
 			"event": [
 				{
 					"listen": "prerequest",
 					"script": {
 						"type": "text/javascript",
 						"exec": [
-							"// Auto-login as SuperAdmin if no token exists",
-							"var token = pm.collectionVariables.get('adminToken');",
+							"var token = pm.collectionVariables.get('sAdminToken');",
 							"if (!token || token === '') {",
 							"    var baseUrl = pm.collectionVariables.get('baseUrl');",
 							"    var email = pm.collectionVariables.get('adminEmail');",
@@ -358,7 +350,7 @@
 							"    }, function (err, res) {",
 							"        if (!err && res.code === 200) {",
 							"            var json = res.json();",
-							"            pm.collectionVariables.set('adminToken', json.sToken);",
+							"            pm.collectionVariables.set('sAdminToken', json.results.sToken);",
 							"        }",
 							"    });",
 							"}"
@@ -378,7 +370,7 @@
 									"pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
 									"pm.test('Response has administrator data', function () {",
 									"    var json = pm.response.json();",
-									"    pm.expect(json).to.have.property('sMessage');",
+									"    pm.expect(json).to.have.property('message');",
 									"    if (json.oData && json.oData.sAdministratorId) {",
 									"        pm.collectionVariables.set('createdAdminId', json.oData.sAdministratorId);",
 									"    }",
@@ -391,14 +383,14 @@
 						"method": "POST",
 						"header": [
 							{ "key": "Content-Type", "value": "application/json" },
-							{ "key": "Authorization", "value": "{{adminToken}}" }
+							{ "key": "Authorization", "value": "{{sAdminToken}}" }
 						],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n    \"sName\": \"Test\",\n    \"sLastName\": \"Administrator\",\n    \"sSecondLastName\": \"Postman\",\n    \"sEmail\": \"testadmin@example.com\",\n    \"sPhoneNumber\": \"+521234567890\",\n    \"aAdministratorPermissionsSet\": [\n        {\n            \"sAdministratorModuleId\": \"{{adminModuleId}}\",\n            \"sActionCode\": \"WRITE\"\n        }\n    ]\n}"
 						},
 						"url": { "raw": "{{baseUrl}}/administrators", "host": ["{{baseUrl}}"], "path": ["administrators"] },
-						"description": "Create a new administrator.\n\n**Requires:** `Administración` module WRITE permission\n\n**Body:**\n- `sName` (required)\n- `sLastName` (required)\n- `sSecondLastName` (optional)\n- `sEmail` (required, valid email)\n- `sPhoneNumber` (required, valid phone)\n- `sPhoneExtension` (optional)\n- `aAdministratorPermissionsSet` (required, array of `{sAdministratorModuleId, sActionCode}`)"
+						"description": "Create a new administrator.\n\n**Requires:** `General` module WRITE permission\n\n**Body:**\n- `sName` (required)\n- `sLastName` (required)\n- `sSecondLastName` (optional)\n- `sEmail` (required, valid email)\n- `sPhoneNumber` (required)\n- `aAdministratorPermissionsSet` (required, array of `{sAdministratorModuleId, sActionCode}`)"
 					}
 				},
 				{
@@ -425,7 +417,7 @@
 					],
 					"request": {
 						"method": "GET",
-						"header": [{ "key": "Authorization", "value": "{{adminToken}}" }],
+						"header": [{ "key": "Authorization", "value": "{{sAdminToken}}" }],
 						"url": {
 							"raw": "{{baseUrl}}/administrators?iPageNumber=1&iItemsPerPage=10",
 							"host": ["{{baseUrl}}"],
@@ -437,7 +429,7 @@
 								{ "key": "bPlatformAccess", "value": "true", "disabled": true }
 							]
 						},
-						"description": "Get all administrators with pagination.\n\n**Requires:** `Administración` module READ permission\n\n**Query params:**\n- `sSearch` (optional)\n- `iPageNumber` (optional, >=1)\n- `iItemsPerPage` (optional, >=1)\n- `bPlatformAccess` (optional, boolean filter)"
+						"description": "Get all administrators with pagination."
 					}
 				},
 				{
@@ -461,7 +453,7 @@
 					],
 					"request": {
 						"method": "GET",
-						"header": [{ "key": "Authorization", "value": "{{adminToken}}" }],
+						"header": [{ "key": "Authorization", "value": "{{sAdminToken}}" }],
 						"url": {
 							"raw": "{{baseUrl}}/administrators/modules?iPageNumber=1&iItemsPerPage=50",
 							"host": ["{{baseUrl}}"],
@@ -471,7 +463,7 @@
 								{ "key": "iItemsPerPage", "value": "50" }
 							]
 						},
-						"description": "Get all administrator permission modules.\n\n**Requires:** `Administración` module READ permission"
+						"description": "Get all administrator permission modules. Saves `adminModuleId` for use in Create/Update Administrator."
 					}
 				},
 				{
@@ -495,9 +487,9 @@
 					],
 					"request": {
 						"method": "GET",
-						"header": [{ "key": "Authorization", "value": "{{adminToken}}" }],
+						"header": [{ "key": "Authorization", "value": "{{sAdminToken}}" }],
 						"url": { "raw": "{{baseUrl}}/administrators/{{createdAdminId}}", "host": ["{{baseUrl}}"], "path": ["administrators", "{{createdAdminId}}"] },
-						"description": "Get a single administrator by ID.\n\n**Requires:** Own profile OR `Administración` module READ permission\n\n**Path params:** `sAdministratorId` (UUID)"
+						"description": "Get a single administrator by ID."
 					}
 				},
 				{
@@ -511,7 +503,7 @@
 									"pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
 									"pm.test('Response has success message', function () {",
 									"    var json = pm.response.json();",
-									"    pm.expect(json).to.have.property('sMessage');",
+									"    pm.expect(json).to.have.property('message');",
 									"});"
 								]
 							}
@@ -521,14 +513,14 @@
 						"method": "PUT",
 						"header": [
 							{ "key": "Content-Type", "value": "application/json" },
-							{ "key": "Authorization", "value": "{{adminToken}}" }
+							{ "key": "Authorization", "value": "{{sAdminToken}}" }
 						],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n    \"sName\": \"Test Updated\",\n    \"sLastName\": \"Administrator\",\n    \"sSecondLastName\": \"Postman\",\n    \"sPhoneNumber\": \"+521234567890\",\n    \"aAdministratorPermissionsSet\": [\n        {\n            \"sAdministratorModuleId\": \"{{adminModuleId}}\",\n            \"sActionCode\": \"ADMIN\"\n        }\n    ]\n}"
 						},
 						"url": { "raw": "{{baseUrl}}/administrators/{{createdAdminId}}", "host": ["{{baseUrl}}"], "path": ["administrators", "{{createdAdminId}}"] },
-						"description": "Update an administrator.\n\n**Requires:** `Administración` module WRITE permission"
+						"description": "Update an administrator."
 					}
 				},
 				{
@@ -548,14 +540,14 @@
 						"method": "PATCH",
 						"header": [
 							{ "key": "Content-Type", "value": "application/json" },
-							{ "key": "Authorization", "value": "{{adminToken}}" }
+							{ "key": "Authorization", "value": "{{sAdminToken}}" }
 						],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n    \"bPlatformAccess\": true\n}"
 						},
 						"url": { "raw": "{{baseUrl}}/administrators/{{createdAdminId}}", "host": ["{{baseUrl}}"], "path": ["administrators", "{{createdAdminId}}"] },
-						"description": "Toggle administrator platform access.\n\n**Requires:** `Administración` module WRITE permission\n\n**Body:** `bPlatformAccess` (boolean, required)"
+						"description": "Toggle administrator platform access.\n\n**Body:** `bPlatformAccess` (boolean, required)"
 					}
 				},
 				{
@@ -573,23 +565,23 @@
 					],
 					"request": {
 						"method": "DELETE",
-						"header": [{ "key": "Authorization", "value": "{{adminToken}}" }],
+						"header": [{ "key": "Authorization", "value": "{{sAdminToken}}" }],
 						"url": { "raw": "{{baseUrl}}/administrators/{{createdAdminId}}", "host": ["{{baseUrl}}"], "path": ["administrators", "{{createdAdminId}}"] },
-						"description": "Soft-delete an administrator.\n\n**Requires:** `Administración` module WRITE permission"
+						"description": "Soft-delete an administrator."
 					}
 				}
 			]
 		},
 		{
 			"name": "05 - Schools",
-			"description": "School CRUD endpoints.\n\n**Auth required:** SuperAdmin token with `General` module permissions.\n\nAll requests auto-login as SuperAdmin.",
+			"description": "School CRUD endpoints.\n\n**Auth required:** `sAdminToken` (SuperAdmin).\n\nAll requests auto-login as SuperAdmin if token is missing.",
 			"event": [
 				{
 					"listen": "prerequest",
 					"script": {
 						"type": "text/javascript",
 						"exec": [
-							"var token = pm.collectionVariables.get('adminToken');",
+							"var token = pm.collectionVariables.get('sAdminToken');",
 							"if (!token || token === '') {",
 							"    var baseUrl = pm.collectionVariables.get('baseUrl');",
 							"    var email = pm.collectionVariables.get('adminEmail');",
@@ -601,7 +593,8 @@
 							"        body: { mode: 'raw', raw: JSON.stringify({ sEmail: email, sPassword: password }) }",
 							"    }, function (err, res) {",
 							"        if (!err && res.code === 200) {",
-							"            pm.collectionVariables.set('adminToken', res.json().sToken);",
+							"            var json = res.json();",
+							"            pm.collectionVariables.set('sAdminToken', json.results.sToken);",
 							"        }",
 							"    });",
 							"}"
@@ -618,16 +611,21 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test('Status is 200', function () { pm.response.to.have.status(200); });"
+									"pm.test('Status is 201', function () { pm.response.to.have.status(201); });",
+									"pm.test('Response has analytics data', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json).to.have.property('countActiveSchools');",
+									"    pm.expect(json).to.have.property('success');",
+									"});"
 								]
 							}
 						}
 					],
 					"request": {
 						"method": "GET",
-						"header": [{ "key": "Authorization", "value": "{{adminToken}}" }],
+						"header": [{ "key": "Authorization", "value": "{{sAdminToken}}" }],
 						"url": { "raw": "{{baseUrl}}/schools/analytics", "host": ["{{baseUrl}}"], "path": ["schools", "analytics"] },
-						"description": "Get schools analytics dashboard data.\n\n**Requires:** `General` module READ permission"
+						"description": "Get schools analytics dashboard data.\n\n**Response:** `{ message, countActiveSchools, success }`"
 					}
 				},
 				{
@@ -638,12 +636,13 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+									"pm.test('Status is 201', function () { pm.response.to.have.status(201); });",
 									"pm.test('Response has school data', function () {",
 									"    var json = pm.response.json();",
-									"    pm.expect(json).to.have.property('sMessage');",
-									"    if (json.oData && json.oData.sSchoolId) {",
-									"        pm.collectionVariables.set('createdSchoolId', json.oData.sSchoolId);",
+									"    pm.expect(json).to.have.property('message');",
+									"    pm.expect(json).to.have.property('school');",
+									"    if (json.school && json.school.sSchoolId) {",
+									"        pm.collectionVariables.set('createdSchoolId', json.school.sSchoolId);",
 									"    }",
 									"});"
 								]
@@ -654,14 +653,14 @@
 						"method": "POST",
 						"header": [
 							{ "key": "Content-Type", "value": "application/json" },
-							{ "key": "Authorization", "value": "{{adminToken}}" }
+							{ "key": "Authorization", "value": "{{sAdminToken}}" }
 						],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n    \"sName\": \"Test School Postman\",\n    \"sPhone\": \"+521234567890\",\n    \"iUsersLimit\": 10,\n    \"iStudentsLimit\": 100,\n    \"sAdminName\": \"School\",\n    \"sLastName\": \"Admin\",\n    \"sSecondLastName\": \"Test\",\n    \"sEmail\": \"schooltest@example.com\"\n}"
 						},
 						"url": { "raw": "{{baseUrl}}/schools", "host": ["{{baseUrl}}"], "path": ["schools"] },
-						"description": "Create a new school with its initial admin user.\n\n**Requires:** `General` module WRITE permission\n\n**Body:**\n- `sName` (required) - School name\n- `sPhone` (optional)\n- `iUsersLimit` (required) - Max school users\n- `iStudentsLimit` (required) - Max students\n- `sAdminName` (required) - School admin first name\n- `sLastName` (required) - School admin last name\n- `sSecondLastName` (optional)\n- `sEmail` (required) - School admin email (receives welcome email)"
+						"description": "Create a new school with its initial admin user.\n\nSaves `createdSchoolId` automatically on success.\n\n**Body:**\n- `sName` (required)\n- `sPhone` (optional)\n- `iUsersLimit` (required, positive integer)\n- `iStudentsLimit` (required, positive integer)\n- `sAdminName` (required) - School admin first name\n- `sLastName` (required)\n- `sSecondLastName` (optional)\n- `sEmail` (required) - School admin email\n\n**Response:** `{ message, school: { sSchoolId, sName, ... } }`"
 					}
 				},
 				{
@@ -672,13 +671,14 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+									"pm.test('Status is 201', function () { pm.response.to.have.status(201); });",
 									"pm.test('Response has paginated data', function () {",
 									"    var json = pm.response.json();",
-									"    pm.expect(json).to.have.property('aData');",
-									"    pm.expect(json.aData).to.be.an('array');",
-									"    if (json.aData.length > 0 && !pm.collectionVariables.get('createdSchoolId')) {",
-									"        pm.collectionVariables.set('createdSchoolId', json.aData[0].sSchoolId);",
+									"    pm.expect(json).to.have.property('schools');",
+									"    pm.expect(json.schools).to.be.an('array');",
+									"    pm.expect(json).to.have.property('iTotal');",
+									"    if (json.schools.length > 0 && !pm.collectionVariables.get('createdSchoolId')) {",
+									"        pm.collectionVariables.set('createdSchoolId', json.schools[0].sSchoolId);",
 									"    }",
 									"});"
 								]
@@ -687,7 +687,7 @@
 					],
 					"request": {
 						"method": "GET",
-						"header": [{ "key": "Authorization", "value": "{{adminToken}}" }],
+						"header": [{ "key": "Authorization", "value": "{{sAdminToken}}" }],
 						"url": {
 							"raw": "{{baseUrl}}/schools?iPageNumber=1&iItemsPerPage=10",
 							"host": ["{{baseUrl}}"],
@@ -699,7 +699,7 @@
 								{ "key": "bBlocked", "value": "false", "disabled": true }
 							]
 						},
-						"description": "Get all schools with pagination.\n\n**Requires:** `General` module READ permission\n\n**Query params:**\n- `sSearch`, `iPageNumber`, `iItemsPerPage`\n- `bBlocked` (optional, filter by blocked status)"
+						"description": "Get all schools with pagination.\n\n**Response:** `{ message, schools: [...], iTotal, iNumPages, success }`"
 					}
 				},
 				{
@@ -710,11 +710,12 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+									"pm.test('Status is 201', function () { pm.response.to.have.status(201); });",
 									"pm.test('Response has school data', function () {",
 									"    var json = pm.response.json();",
-									"    pm.expect(json).to.have.property('sSchoolId');",
-									"    pm.expect(json).to.have.property('sName');",
+									"    pm.expect(json).to.have.property('school');",
+									"    pm.expect(json.school).to.have.property('sSchoolId');",
+									"    pm.expect(json.school).to.have.property('sName');",
 									"});"
 								]
 							}
@@ -722,9 +723,9 @@
 					],
 					"request": {
 						"method": "GET",
-						"header": [{ "key": "Authorization", "value": "{{adminToken}}" }],
+						"header": [{ "key": "Authorization", "value": "{{sAdminToken}}" }],
 						"url": { "raw": "{{baseUrl}}/schools/{{createdSchoolId}}", "host": ["{{baseUrl}}"], "path": ["schools", "{{createdSchoolId}}"] },
-						"description": "Get a single school by ID.\n\n**Requires:** `General` module READ permission"
+						"description": "Get a single school by ID.\n\n**Response:** `{ message, school: { sSchoolId, sName, ... }, success }`"
 					}
 				},
 				{
@@ -735,7 +736,12 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test('Status is 200', function () { pm.response.to.have.status(200); });"
+									"pm.test('Status is 201', function () { pm.response.to.have.status(201); });",
+									"pm.test('Response has success message', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json).to.have.property('message');",
+									"    pm.expect(json).to.have.property('success');",
+									"});"
 								]
 							}
 						}
@@ -744,14 +750,14 @@
 						"method": "PUT",
 						"header": [
 							{ "key": "Content-Type", "value": "application/json" },
-							{ "key": "Authorization", "value": "{{adminToken}}" }
+							{ "key": "Authorization", "value": "{{sAdminToken}}" }
 						],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n    \"sName\": \"Test School Updated\",\n    \"sPhone\": \"+521234567890\",\n    \"iUsersLimit\": 20,\n    \"iStudentsLimit\": 200\n}"
 						},
 						"url": { "raw": "{{baseUrl}}/schools/{{createdSchoolId}}", "host": ["{{baseUrl}}"], "path": ["schools", "{{createdSchoolId}}"] },
-						"description": "Update a school.\n\n**Requires:** `General` module WRITE permission\n\n**Body:** `sName`, `sPhone`, `iUsersLimit`, `iStudentsLimit`"
+						"description": "Update a school.\n\n**Body:** `sName`, `sPhone`, `iUsersLimit`, `iStudentsLimit`"
 					}
 				},
 				{
@@ -762,7 +768,12 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test('Status is 200', function () { pm.response.to.have.status(200); });"
+									"pm.test('Status is 201', function () { pm.response.to.have.status(201); });",
+									"pm.test('Response has success', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json).to.have.property('message');",
+									"    pm.expect(json).to.have.property('success');",
+									"});"
 								]
 							}
 						}
@@ -771,14 +782,14 @@
 						"method": "PATCH",
 						"header": [
 							{ "key": "Content-Type", "value": "application/json" },
-							{ "key": "Authorization", "value": "{{adminToken}}" }
+							{ "key": "Authorization", "value": "{{sAdminToken}}" }
 						],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n    \"bBlocked\": false\n}"
 						},
 						"url": { "raw": "{{baseUrl}}/schools/{{createdSchoolId}}", "host": ["{{baseUrl}}"], "path": ["schools", "{{createdSchoolId}}"] },
-						"description": "Toggle school blocked status.\n\n**Requires:** `General` module WRITE permission\n\n**Body:** `bBlocked` (boolean, required)"
+						"description": "Toggle school blocked status.\n\n**Body:** `bBlocked` (boolean, required)"
 					}
 				},
 				{
@@ -789,14 +800,19 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test('Status is 200', function () { pm.response.to.have.status(200); });"
+									"pm.test('Status is 201', function () { pm.response.to.have.status(201); });",
+									"pm.test('Response has school data', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json).to.have.property('message');",
+									"    pm.expect(json).to.have.property('success');",
+									"});"
 								]
 							}
 						}
 					],
 					"request": {
 						"method": "POST",
-						"header": [{ "key": "Authorization", "value": "{{adminToken}}" }],
+						"header": [{ "key": "Authorization", "value": "{{sSchoolToken}}" }],
 						"body": {
 							"mode": "formdata",
 							"formdata": [
@@ -805,7 +821,7 @@
 							]
 						},
 						"url": { "raw": "{{baseUrl}}/schools/image", "host": ["{{baseUrl}}"], "path": ["schools", "image"] },
-						"description": "Upload or delete a school logo image.\n\n**Requires:** `General` module WRITE permission\n\n**Body (form-data):**\n- `oImage` (file, optional)\n- `bDeleteImage` (boolean, required - set true to remove current image)"
+						"description": "Upload or delete a school logo image. Must be called with SchoolAdmin token (`sSchoolToken`) — the school is identified from the token context.\n\n**Body (form-data):**\n- `oImage` (file, optional)\n- `bDeleteImage` (boolean, required — set `true` to remove current image)"
 					}
 				},
 				{
@@ -816,30 +832,35 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test('Status is 200', function () { pm.response.to.have.status(200); });"
+									"pm.test('Status is 201', function () { pm.response.to.have.status(201); });",
+									"pm.test('Response has success', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json).to.have.property('message');",
+									"    pm.expect(json).to.have.property('success');",
+									"});"
 								]
 							}
 						}
 					],
 					"request": {
 						"method": "DELETE",
-						"header": [{ "key": "Authorization", "value": "{{adminToken}}" }],
+						"header": [{ "key": "Authorization", "value": "{{sAdminToken}}" }],
 						"url": { "raw": "{{baseUrl}}/schools/{{createdSchoolId}}", "host": ["{{baseUrl}}"], "path": ["schools", "{{createdSchoolId}}"] },
-						"description": "Soft-delete a school.\n\n**Requires:** `General` module WRITE permission"
+						"description": "Soft-delete a school."
 					}
 				}
 			]
 		},
 		{
 			"name": "06 - Students",
-			"description": "Student CRUD endpoints.\n\n**Auth required:** SchoolAdmin token with `General` module permissions.\n\nAll requests auto-login as SchoolAdmin.",
+			"description": "Student CRUD endpoints.\n\n**Auth required:** `sSchoolToken` (SchoolAdmin).\n\nAll requests auto-login as SchoolAdmin if token is missing.",
 			"event": [
 				{
 					"listen": "prerequest",
 					"script": {
 						"type": "text/javascript",
 						"exec": [
-							"var token = pm.collectionVariables.get('schoolToken');",
+							"var token = pm.collectionVariables.get('sSchoolToken');",
 							"if (!token || token === '') {",
 							"    var baseUrl = pm.collectionVariables.get('baseUrl');",
 							"    var email = pm.collectionVariables.get('schoolEmail');",
@@ -851,7 +872,11 @@
 							"        body: { mode: 'raw', raw: JSON.stringify({ sEmail: email, sPassword: password }) }",
 							"    }, function (err, res) {",
 							"        if (!err && res.code === 200) {",
-							"            pm.collectionVariables.set('schoolToken', res.json().sToken);",
+							"            var json = res.json();",
+							"            pm.collectionVariables.set('sSchoolToken', json.results.sToken);",
+							"            if (json.results.oSchool && json.results.oSchool.sSchoolId) {",
+							"                pm.collectionVariables.set('createdSchoolId', json.results.oSchool.sSchoolId);",
+							"            }",
 							"        }",
 							"    });",
 							"}"
@@ -871,7 +896,7 @@
 									"pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
 									"pm.test('Response has student data', function () {",
 									"    var json = pm.response.json();",
-									"    pm.expect(json).to.have.property('sMessage');",
+									"    pm.expect(json).to.have.property('message');",
 									"    if (json.oData && json.oData.sStudentId) {",
 									"        pm.collectionVariables.set('createdStudentId', json.oData.sStudentId);",
 									"    }",
@@ -884,14 +909,14 @@
 						"method": "POST",
 						"header": [
 							{ "key": "Content-Type", "value": "application/json" },
-							{ "key": "Authorization", "value": "{{schoolToken}}" }
+							{ "key": "Authorization", "value": "{{sSchoolToken}}" }
 						],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n    \"sName\": \"Test\",\n    \"sLastName\": \"Student\",\n    \"sSecondLastName\": \"Postman\",\n    \"iBirthYear\": 2015,\n    \"sGrade\": \"3ro Primaria\",\n    \"sGroup\": \"A\",\n    \"sDiagnosis\": \"TDAH\",\n    \"sNotes\": \"Test student created via Postman\"\n}"
 						},
 						"url": { "raw": "{{baseUrl}}/students", "host": ["{{baseUrl}}"], "path": ["students"] },
-						"description": "Create a new student in the school.\n\n**Requires:** SchoolAdmin token, `General` module WRITE permission\n\n**Body:**\n- `sName` (required)\n- `sLastName` (required)\n- `sSecondLastName` (optional)\n- `iBirthYear` (required, integer)\n- `sGrade` (required)\n- `sGroup` (optional)\n- `sDiagnosis` (optional)\n- `sNotes` (optional)"
+						"description": "Create a new student in the school.\n\nSaves `createdStudentId` automatically.\n\n**Body:**\n- `sName` (required)\n- `sLastName` (required)\n- `sSecondLastName` (optional)\n- `iBirthYear` (required, integer)\n- `sGrade` (required)\n- `sGroup` (optional)\n- `sDiagnosis` (optional)\n- `sNotes` (optional)"
 					}
 				},
 				{
@@ -917,7 +942,7 @@
 					],
 					"request": {
 						"method": "GET",
-						"header": [{ "key": "Authorization", "value": "{{schoolToken}}" }],
+						"header": [{ "key": "Authorization", "value": "{{sSchoolToken}}" }],
 						"url": {
 							"raw": "{{baseUrl}}/students?iPageNumber=1&iItemsPerPage=10",
 							"host": ["{{baseUrl}}"],
@@ -929,7 +954,7 @@
 								{ "key": "sGrade", "value": "", "disabled": true }
 							]
 						},
-						"description": "Get all students in the school with pagination.\n\n**Query params:** `sSearch`, `iPageNumber`, `iItemsPerPage`, `sGrade` (optional filter)"
+						"description": "Get all students in the school with pagination."
 					}
 				},
 				{
@@ -952,7 +977,7 @@
 					],
 					"request": {
 						"method": "GET",
-						"header": [{ "key": "Authorization", "value": "{{schoolToken}}" }],
+						"header": [{ "key": "Authorization", "value": "{{sSchoolToken}}" }],
 						"url": { "raw": "{{baseUrl}}/students/{{createdStudentId}}", "host": ["{{baseUrl}}"], "path": ["students", "{{createdStudentId}}"] },
 						"description": "Get a single student by ID."
 					}
@@ -974,7 +999,7 @@
 						"method": "PUT",
 						"header": [
 							{ "key": "Content-Type", "value": "application/json" },
-							{ "key": "Authorization", "value": "{{schoolToken}}" }
+							{ "key": "Authorization", "value": "{{sSchoolToken}}" }
 						],
 						"body": {
 							"mode": "raw",
@@ -999,7 +1024,7 @@
 					],
 					"request": {
 						"method": "DELETE",
-						"header": [{ "key": "Authorization", "value": "{{schoolToken}}" }],
+						"header": [{ "key": "Authorization", "value": "{{sSchoolToken}}" }],
 						"url": { "raw": "{{baseUrl}}/students/{{createdStudentId}}", "host": ["{{baseUrl}}"], "path": ["students", "{{createdStudentId}}"] },
 						"description": "Soft-delete a student."
 					}
@@ -1008,14 +1033,14 @@
 		},
 		{
 			"name": "07 - Goals",
-			"description": "Goal CRUD endpoints for student goals.\n\n**Auth required:** SchoolAdmin token.\n\nAll requests auto-login as SchoolAdmin.",
+			"description": "Goal CRUD endpoints for student goals.\n\n**Auth required:** `sSchoolToken` (SchoolAdmin).\n\nAll requests auto-login as SchoolAdmin if token is missing.",
 			"event": [
 				{
 					"listen": "prerequest",
 					"script": {
 						"type": "text/javascript",
 						"exec": [
-							"var token = pm.collectionVariables.get('schoolToken');",
+							"var token = pm.collectionVariables.get('sSchoolToken');",
 							"if (!token || token === '') {",
 							"    var baseUrl = pm.collectionVariables.get('baseUrl');",
 							"    var email = pm.collectionVariables.get('schoolEmail');",
@@ -1027,7 +1052,11 @@
 							"        body: { mode: 'raw', raw: JSON.stringify({ sEmail: email, sPassword: password }) }",
 							"    }, function (err, res) {",
 							"        if (!err && res.code === 200) {",
-							"            pm.collectionVariables.set('schoolToken', res.json().sToken);",
+							"            var json = res.json();",
+							"            pm.collectionVariables.set('sSchoolToken', json.results.sToken);",
+							"            if (json.results.oSchool && json.results.oSchool.sSchoolId) {",
+							"                pm.collectionVariables.set('createdSchoolId', json.results.oSchool.sSchoolId);",
+							"            }",
 							"        }",
 							"    });",
 							"}"
@@ -1047,7 +1076,7 @@
 									"pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
 									"pm.test('Response has goal data', function () {",
 									"    var json = pm.response.json();",
-									"    pm.expect(json).to.have.property('sMessage');",
+									"    pm.expect(json).to.have.property('message');",
 									"    if (json.oData && json.oData.sGoalId) {",
 									"        pm.collectionVariables.set('createdGoalId', json.oData.sGoalId);",
 									"    }",
@@ -1060,14 +1089,14 @@
 						"method": "POST",
 						"header": [
 							{ "key": "Content-Type", "value": "application/json" },
-							{ "key": "Authorization", "value": "{{schoolToken}}" }
+							{ "key": "Authorization", "value": "{{sSchoolToken}}" }
 						],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n    \"sStudentId\": \"{{createdStudentId}}\",\n    \"sTitle\": \"Test Goal from Postman\",\n    \"sDescription\": \"Goal created via automated tests\",\n    \"sMeasurementType\": \"TAREAS\",\n    \"tStartDate\": \"2026-02-01\",\n    \"tTargetDate\": \"2026-06-01\",\n    \"iTargetValue\": 80,\n    \"aTasks\": [\n        { \"sTitle\": \"Task 1\", \"iOrder\": 1 },\n        { \"sTitle\": \"Task 2\", \"iOrder\": 2 }\n    ]\n}"
 						},
 						"url": { "raw": "{{baseUrl}}/goals", "host": ["{{baseUrl}}"], "path": ["goals"] },
-						"description": "Create a new goal for a student.\n\n**Body:**\n- `sStudentId` (UUID, required)\n- `sTitle` (required)\n- `sDescription` (optional)\n- `sMeasurementType` (required): `EXACTITUD` | `TAREAS` | `ESCALA` | `FRECUENCIA` | `DURACION` | `OPORTUNIDAD`\n- `tStartDate` (required)\n- `tTargetDate` (required)\n- `iTargetValue`, `iTargetDuration`, `iScaleMin`, `iScaleMax`, `sFrequencyUnit` (optional, depends on measurement type)\n- `aTasks` (optional, array of `{sTitle, iOrder}`)"
+						"description": "Create a new goal for a student. Uses `createdStudentId`.\n\nSaves `createdGoalId` automatically.\n\n**Body:**\n- `sStudentId` (UUID, required)\n- `sTitle` (required)\n- `sDescription` (optional)\n- `sMeasurementType` (required): `EXACTITUD` | `TAREAS` | `ESCALA` | `FRECUENCIA` | `DURACION` | `OPORTUNIDAD`\n- `tStartDate` (required)\n- `tTargetDate` (required)\n- `iTargetValue`, `iTargetDuration`, `iScaleMin`, `iScaleMax`, `sFrequencyUnit` (optional)\n- `aTasks` (optional, array of `{sTitle, iOrder}`)"
 					}
 				},
 				{
@@ -1093,7 +1122,7 @@
 					],
 					"request": {
 						"method": "GET",
-						"header": [{ "key": "Authorization", "value": "{{schoolToken}}" }],
+						"header": [{ "key": "Authorization", "value": "{{sSchoolToken}}" }],
 						"url": {
 							"raw": "{{baseUrl}}/goals/student/{{createdStudentId}}?iPageNumber=1&iItemsPerPage=10",
 							"host": ["{{baseUrl}}"],
@@ -1105,7 +1134,7 @@
 								{ "key": "sStatus", "value": "", "disabled": true }
 							]
 						},
-						"description": "Get all goals for a specific student.\n\n**Path params:** `sStudentId` (UUID)\n**Query params:** `sSearch`, `iPageNumber`, `iItemsPerPage`, `sStatus` (optional filter)"
+						"description": "Get all goals for a specific student. Uses `createdStudentId`."
 					}
 				},
 				{
@@ -1128,9 +1157,9 @@
 					],
 					"request": {
 						"method": "GET",
-						"header": [{ "key": "Authorization", "value": "{{schoolToken}}" }],
+						"header": [{ "key": "Authorization", "value": "{{sSchoolToken}}" }],
 						"url": { "raw": "{{baseUrl}}/goals/{{createdGoalId}}", "host": ["{{baseUrl}}"], "path": ["goals", "{{createdGoalId}}"] },
-						"description": "Get a single goal by ID."
+						"description": "Get a single goal by ID. Uses `createdGoalId`."
 					}
 				},
 				{
@@ -1150,14 +1179,14 @@
 						"method": "PUT",
 						"header": [
 							{ "key": "Content-Type", "value": "application/json" },
-							{ "key": "Authorization", "value": "{{schoolToken}}" }
+							{ "key": "Authorization", "value": "{{sSchoolToken}}" }
 						],
 						"body": {
 							"mode": "raw",
 							"raw": "{\n    \"sTitle\": \"Updated Goal Title\",\n    \"sDescription\": \"Updated via Postman\",\n    \"tStartDate\": \"2026-02-01\",\n    \"tTargetDate\": \"2026-07-01\",\n    \"iTargetValue\": 90,\n    \"aTasks\": [\n        { \"sTitle\": \"Updated Task 1\", \"bCompleted\": false, \"iOrder\": 1 },\n        { \"sTitle\": \"Updated Task 2\", \"bCompleted\": true, \"iOrder\": 2 }\n    ]\n}"
 						},
 						"url": { "raw": "{{baseUrl}}/goals/{{createdGoalId}}", "host": ["{{baseUrl}}"], "path": ["goals", "{{createdGoalId}}"] },
-						"description": "Update a goal.\n\n**Body:** Same as create minus `sStudentId` and `sMeasurementType`. Tasks include `bCompleted`."
+						"description": "Update a goal. Uses `createdGoalId`."
 					}
 				},
 				{
@@ -1177,7 +1206,7 @@
 						"method": "PATCH",
 						"header": [
 							{ "key": "Content-Type", "value": "application/json" },
-							{ "key": "Authorization", "value": "{{schoolToken}}" }
+							{ "key": "Authorization", "value": "{{sSchoolToken}}" }
 						],
 						"body": {
 							"mode": "raw",
@@ -1202,7 +1231,7 @@
 					],
 					"request": {
 						"method": "DELETE",
-						"header": [{ "key": "Authorization", "value": "{{schoolToken}}" }],
+						"header": [{ "key": "Authorization", "value": "{{sSchoolToken}}" }],
 						"url": { "raw": "{{baseUrl}}/goals/{{createdGoalId}}", "host": ["{{baseUrl}}"], "path": ["goals", "{{createdGoalId}}"] },
 						"description": "Soft-delete a goal."
 					}
@@ -1211,14 +1240,14 @@
 		},
 		{
 			"name": "08 - Goal Tasks",
-			"description": "Goal Task sub-resource endpoints (nested under Goals).\n\n**Auth required:** SchoolAdmin token.\n\nAll requests auto-login as SchoolAdmin.",
+			"description": "Goal Task sub-resource endpoints (nested under Goals).\n\n**Auth required:** `sSchoolToken` (SchoolAdmin).\n\nAll requests auto-login as SchoolAdmin if token is missing.",
 			"event": [
 				{
 					"listen": "prerequest",
 					"script": {
 						"type": "text/javascript",
 						"exec": [
-							"var token = pm.collectionVariables.get('schoolToken');",
+							"var token = pm.collectionVariables.get('sSchoolToken');",
 							"if (!token || token === '') {",
 							"    var baseUrl = pm.collectionVariables.get('baseUrl');",
 							"    var email = pm.collectionVariables.get('schoolEmail');",
@@ -1230,7 +1259,11 @@
 							"        body: { mode: 'raw', raw: JSON.stringify({ sEmail: email, sPassword: password }) }",
 							"    }, function (err, res) {",
 							"        if (!err && res.code === 200) {",
-							"            pm.collectionVariables.set('schoolToken', res.json().sToken);",
+							"            var json = res.json();",
+							"            pm.collectionVariables.set('sSchoolToken', json.results.sToken);",
+							"            if (json.results.oSchool && json.results.oSchool.sSchoolId) {",
+							"                pm.collectionVariables.set('createdSchoolId', json.results.oSchool.sSchoolId);",
+							"            }",
 							"        }",
 							"    });",
 							"}"
@@ -1261,9 +1294,9 @@
 					],
 					"request": {
 						"method": "GET",
-						"header": [{ "key": "Authorization", "value": "{{schoolToken}}" }],
+						"header": [{ "key": "Authorization", "value": "{{sSchoolToken}}" }],
 						"url": { "raw": "{{baseUrl}}/goals/{{createdGoalId}}/goalTasks", "host": ["{{baseUrl}}"], "path": ["goals", "{{createdGoalId}}", "goalTasks"] },
-						"description": "Get all tasks for a specific goal.\n\n**Path params:** `sGoalId` (UUID)"
+						"description": "Get all tasks for a specific goal. Uses `createdGoalId`. Saves `createdGoalTaskId` automatically."
 					}
 				},
 				{
@@ -1283,7 +1316,7 @@
 						"method": "PUT",
 						"header": [
 							{ "key": "Content-Type", "value": "application/json" },
-							{ "key": "Authorization", "value": "{{schoolToken}}" }
+							{ "key": "Authorization", "value": "{{sSchoolToken}}" }
 						],
 						"body": {
 							"mode": "raw",
@@ -1310,7 +1343,7 @@
 						"method": "PATCH",
 						"header": [
 							{ "key": "Content-Type", "value": "application/json" },
-							{ "key": "Authorization", "value": "{{schoolToken}}" }
+							{ "key": "Authorization", "value": "{{sSchoolToken}}" }
 						],
 						"body": {
 							"mode": "raw",
@@ -1335,9 +1368,9 @@
 					],
 					"request": {
 						"method": "DELETE",
-						"header": [{ "key": "Authorization", "value": "{{schoolToken}}" }],
+						"header": [{ "key": "Authorization", "value": "{{sSchoolToken}}" }],
 						"url": { "raw": "{{baseUrl}}/goals/{{createdGoalId}}/goalTasks/{{createdGoalTaskId}}", "host": ["{{baseUrl}}"], "path": ["goals", "{{createdGoalId}}", "goalTasks", "{{createdGoalTaskId}}"] },
-						"description": "Delete a goal task.\n\n**Path params:** `sGoalId` (UUID), `sGoalTaskId` (UUID)"
+						"description": "Delete a goal task."
 					}
 				}
 			]

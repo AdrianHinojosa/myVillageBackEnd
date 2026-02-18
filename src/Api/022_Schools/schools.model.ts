@@ -13,8 +13,10 @@ Model.knex(db);
 export interface ISchools {
     sSchoolId?: string;
     sName?: string;
+    sEmail?: string;
     sImageKey?: string;
     sPhone?: string;
+    sAddress?: string;
     sCityId?: string;
     iUsersLimit?: number;
     iStudentsLimit?: number;
@@ -28,8 +30,10 @@ export interface ISchools {
 export class SchoolsModel extends Model {
     public sSchoolId?: string;
     public sName?: string;
+    public sEmail?: string;
     public sImageKey?: string;
     public sPhone?: string;
+    public sAddress?: string;
     public sCityId?: string;
     public iUsersLimit?: number;
     public iStudentsLimit?: number;

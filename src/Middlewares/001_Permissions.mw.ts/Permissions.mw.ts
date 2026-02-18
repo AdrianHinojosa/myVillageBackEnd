@@ -38,15 +38,15 @@ type TokenData = {
 
 
 // Helper function: Verify JWT token asynchronously.
-const verifyToken = async (token: string, sLang = 'sp') => {
+const verifyToken = async (token: string): Promise<any | false> => {
+    if (!token) return false;
     try {
-        return new Promise((resolve, reject) => {
+        return await new Promise((resolve) => {
             JWT.verify(token, process.env.JWT_SECRET, (err, decoded) => {
-                if (err) {
-                    reject(false);
-                } else {
-                    return resolve(decoded);
+                if (err || !decoded) {
+                    return resolve(false);
                 }
+                return resolve(decoded);
             });
         });
     } catch (error) {
@@ -105,9 +105,10 @@ export const verifyAdminPermissions = (sArrModules: Permission[]) => async (req:
     const { authorization } = req.headers;
     if (!authorization) return next(new MyError(401, ErrorMessages.Authentication.invalidToken[sLang]));
     const bearerToken = authorization.split(' ')[1];
+    if (!bearerToken) return next(new MyError(401, ErrorMessages.Authentication.invalidToken[sLang]));
     const encryptedToken: any = await verifyToken(bearerToken);
     
-    if (!encryptedToken.hash) {
+    if (!encryptedToken || !encryptedToken.hash) {
         return next(new MyError(401, ErrorMessages.Authentication.invalidToken[sLang]));
     }
 
@@ -121,10 +122,13 @@ export const verifyAdminPermissions = (sArrModules: Permission[]) => async (req:
         const isAuthorized = await AdministratorQueries.bIsAdminAuthorizedForModules(adminSession.sAdministratorId, sArrModules);
         if (!isAuthorized) return next(new MyError(403, ErrorMessages.Authentication.accessDenied[sLang]));
     }
+    console.log('Admin session and permissions verified successfully.');
+    console.log(adminSession)
 
     // If Super Admin just proceed.
     res.locals.sSessionId = adminSession.sSessionId;
-    res.locals.sUserId = adminSession.sUserId;
+    // Prefer session user id, fallback to token user id to avoid empty audit fields.
+    res.locals.sUserId = adminSession.sUserId || TokenData.sUserId;
     res.locals.TokenData = TokenData;
     res.locals.sTypeUser = 'Administrator';
 

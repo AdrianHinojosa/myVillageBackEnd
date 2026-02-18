@@ -52,10 +52,6 @@ export default {
     Authentication: {
         // ========== LOGIN Errors ==========
         login: {
-            notFoundUser: {
-                sp: "El usuario específico no existe.",
-                en: "Could not find your account."
-            },
             invalidCredentials: {
                 sp: "Las credenciales ingresadas son incorrectas.",
                 en: "The credentials entered are incorrect."
@@ -67,10 +63,6 @@ export default {
             blockedFromPlatform: {
                 sp: "La cuenta ha sido bloqueada temporlamente, por favor contacte al administrador.",
                 en: "The account has been termporarly blocked, please contact the administrator."
-            },
-            notVerifiedAccount: {
-                sp: "Su cuenta no ha sido verificada. Por favor verifique su correo electrónico",
-                en: "Your account has not been verified. Please verify your email address."
             },
         },
         // ========== Revovery Errors ==========
@@ -112,10 +104,6 @@ export default {
             sp: "Accesso denegado.",
             en: "Access denied."
         },
-        forbiddenAggressive: {
-            sp: "Violación de acceso detectada. Detén esta actividad inmediatamente o enfrentarás una prohibición permanente y tu IP será incluida en la lista negra. Esta es tu única advertencia.",
-            en: "Access violation detected. Cease this activity immediately or face permanent ban and IP blacklisting. This is your only warning."
-        },
         corruptedToken: {
             sp: "Token inválido.",
             en: "Invalid token."
@@ -127,23 +115,7 @@ export default {
                 sp: "El correo electrónico de usuario está en uso. Por favor prueba con otro.",
                 en: "That user email is already taken. Try another."
             },
-            usernameExist: {
-                sp: "El nombre de usuario está en uso. Por favor prueba con otro.",
-                en: "That username is already taken. Try another."
-            },
-            platformAccessFalse: {
-                sp: "Su cuenta se encuentra temporalmente suspendida.",
-                en: "Your account is temporarily suspended."
-            },
-            platformAccessMinutes: {
-                sp: "Su cuenta se encuentra temporalmente suspendida por",
-                en: "Your account is temporarily suspended for"
-            },
         },
-        verify: {
-            sp: "Usuario verificado con éxito.",
-            en: "Verified user successfully."
-        }
 
     },
 

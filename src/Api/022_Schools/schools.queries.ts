@@ -10,7 +10,7 @@ class Queries {
 
     // DONE: Verify school Exists and not blocked
     static async verifySchoolExists(sSchoolId) {
-        return await SchoolsModel.query().findById(sSchoolId).select('*').where('bActive', true).where('bBlocked', false)
+        return await SchoolsModel.query().findById(sSchoolId).select('*').where('bActive', true)
     }
 
     // DONE: Insert school
@@ -56,15 +56,13 @@ class Queries {
     }
 
     // Done: Update school
-    static async updateSchool(sSchoolId, {sName, sPhone, sEmail, sAddress, sCityId, iUsersLimit, iStudentsLimit, sLastUpdatedBy}) {
+    static async updateSchool(sSchoolId, {sName, sPhone, sCityId, iUsersLimit, iStudentsLimit, sLastUpdatedBy}) {
 
         return await SchoolsModel.transaction(async (trx) => {
             // Update school
             let updatedSchool =  await SchoolsModel.query(trx).patchAndFetchById(sSchoolId, {
                 sName,
                 sPhone,
-                sEmail,
-                sAddress,
                 sCityId,
                 iUsersLimit,
                 iStudentsLimit,
@@ -77,9 +75,9 @@ class Queries {
                     .select('City:State.sName AS sStateName', 'City:State.sStateId')
                     .select('City:State:Country.sName AS sCountryName', 'City:State:Country.sCountryId')
                     .where('Schools.bActive', true)
-                    .joinRelated('City')
-                    .joinRelated('City.State')
-                    .joinRelated('City.State.Country')
+                    .leftJoinRelated('City')
+                    .leftJoinRelated('City.State')
+                    .leftJoinRelated('City.State.Country')
                     .withGraphFetched('SchoolUser')
                     .modifyGraph('SchoolUser', builder => {
                         builder.joinRelated('User')
@@ -107,9 +105,9 @@ class Queries {
             queryBuilder.select('City:State.sName AS sStateName', 'City:State.sStateId')
             queryBuilder.select('City:State:Country.sName AS sCountryName', 'City:State:Country.sCountryId')
             queryBuilder.where('Schools.bActive', true)
-            queryBuilder.joinRelated('City')
-            queryBuilder.joinRelated('City.State')
-            queryBuilder.joinRelated('City.State.Country')
+            queryBuilder.leftJoinRelated('City')
+            queryBuilder.leftJoinRelated('City.State')
+            queryBuilder.leftJoinRelated('City.State.Country')
             queryBuilder.withGraphFetched('SchoolUser')
             queryBuilder.modifyGraph('SchoolUser', builder => {
                 builder.joinRelated('User')
@@ -144,9 +142,9 @@ class Queries {
                                     .select('City:State.sName AS sStateName', 'City:State.sStateId')
                                     .select('City:State:Country.sName AS sCountryName', 'City:State:Country.sCountryId')
                                     .where('Schools.bActive', true)
-                                    .joinRelated('City')
-                                    .joinRelated('City.State')
-                                    .joinRelated('City.State.Country')
+                                    .leftJoinRelated('City')
+                                    .leftJoinRelated('City.State')
+                                    .leftJoinRelated('City.State.Country')
                                     .withGraphFetched('SchoolUser')
                                     .modifyGraph('SchoolUser', builder => {
                                         builder.joinRelated('User')

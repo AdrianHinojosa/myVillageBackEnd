@@ -7,7 +7,7 @@ exports.seed = async function (knex) {
     // Insert General category with fixed UUID
     await knex('SchoolModuleCategories').insert([
         {
-            sSchoolModuleCategoryId: 'a1b2c3d4-e5f6-7890-1234-567890abcdef',
+            sSchoolModuleCategoryId: '6a4c3811-189a-4c42-b73b-98c4246bb171',
             sIcon: 'mdi-view-dashboard',
             sNameSP: 'General',
             sNameEN: 'General',
@@ -19,8 +19,8 @@ exports.seed = async function (knex) {
     // Insert General module with fixed UUID
     return knex('SchoolModules').insert([
         {
-            sSchoolModuleId: 'b2c3d4e5-f6a7-8901-2345-678901bcdefg',
-            sSchoolModuleCategoryId: 'a1b2c3d4-e5f6-7890-1234-567890abcdef',
+            sSchoolModuleId: 'd7706bd1-b7af-48fb-a565-006ddeedb429',
+            sSchoolModuleCategoryId: '6a4c3811-189a-4c42-b73b-98c4246bb171',
             iType: 0,
             sUniqueName: 'General',
             sNameSP: 'General',

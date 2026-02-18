@@ -38,6 +38,9 @@ class Controllers {
         }
 
         const sCreatedBy = res.locals.sUserId;
+        if (!sCreatedBy) {
+            return next(new MyError(401, ErrorMessages.Authentication.invalidToken[sLang]));
+        }
 
         const myObject = await SchoolQueries.insertSchool({sName, sPhone, sEmail, sAddress: null, sCityId: null, iUsersLimit, iStudentsLimit, sCreatedBy, sAdminName, sLastName, sSecondLastName});
 
@@ -124,7 +127,7 @@ class Controllers {
         const sLastUpdatedBy = res.locals.sUserId;
 
         // Update school
-        const updatedSchool = await SchoolQueries.updateSchool(sSchoolId, { sName, sPhone, sEmail: null, sAddress: null, sCityId: null, iUsersLimit, iStudentsLimit, sLastUpdatedBy })
+        const updatedSchool = await SchoolQueries.updateSchool(sSchoolId, { sName, sPhone, sCityId: null, iUsersLimit, iStudentsLimit, sLastUpdatedBy })
 
         return res.status(201).json({
             message: SuccessMessages.Schools.updateSchool[sLang],
@@ -178,7 +181,8 @@ class Controllers {
 
     // Creates/Updates School Logo
     async uploadSchoolImage(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
-        const {sLang, sSchoolId} = res.locals;
+        const {sLang} = res.locals;
+        const {sSchoolId} = req.params;
         var {bDeleteImage} = req.body;
 
         bDeleteImage = Boolean(bDeleteImage);

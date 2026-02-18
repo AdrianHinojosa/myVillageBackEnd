@@ -7,6 +7,8 @@ export async function up(Knex): Promise<void> {
             table.string('sName').defaultTo('');
             table.string('sImageKey').defaultTo('');
             table.string('sPhone').defaultTo('');
+            table.string('sEmail').defaultTo('');
+            table.text('sAddress').defaultTo('');
             table.uuid('sCityId').references('sCityId').inTable('Cities').nullable();
             table.integer('iUsersLimit').defaultTo(0);
             table.integer('iStudentsLimit').defaultTo(0);

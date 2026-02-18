@@ -43,7 +43,7 @@ class Queries {
     // Used: For permissions middleware: Find by sessionId where the session is active, has not expired and the user within the session is active AND an ADMIN.
     static async verifyActiveSessionAdmin(sSessionId: string) : Promise<any> {
         return await SessionsModel.query()
-            .select('Sessions.*', 'Administrators.*', 'Users.sCreatedBy')
+            .select('Sessions.*', 'Administrators.*', 'Users.sCreatedBy', 'Users.sUserId')
             .innerJoin('Users', 'Users.sUserId', '=', 'Sessions.sUserId')
             .innerJoin('Administrators', 'Administrators.sAdministratorId', '=', 'Users.sUserId')
             .where('Sessions.sSessionId', '=', sSessionId)

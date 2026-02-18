@@ -13,7 +13,7 @@ exports.seed = async  function (knex) {
                 sLastName: 'Admin',
                 sEmail: 'admin@myvillage.com',
                 // Pass is: MyVillage0!
-                sPassword: '$2a$10$mgeoZV2aQ6gGGvj72ZBhS.EJPQaMJGAUABa.2cMrboiaYPgBKwjA6',
+                sPassword: '$2a$10$BsRejg/EVSfKZwBOAStfSemOz1SUdAwdNbHZ4bvFCpT1uPOZ6tDea',
                 sPhoneNumber: '+521234567890',
                 bPlatformAccess: true,
                 bVerified: true,

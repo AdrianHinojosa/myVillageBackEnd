@@ -52,7 +52,7 @@ router.patch('/:sSchoolId',
 
 
 // POST Insert school logo (Admin route)
-router.post('/image',
+router.post('/:sSchoolId/image',
     aH(upload()),
     celebrate({
         body: SchoolValidations.PostSchoolImage

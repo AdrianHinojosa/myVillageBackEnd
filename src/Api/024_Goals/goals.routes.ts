@@ -5,11 +5,15 @@ import GoalController from './goals.controllers';
 import * as GoalValidations from './goals.validations';
 import { verifySchoolUserPermissions } from '../../Middlewares/001_Permissions.mw.ts/schools.permissions';
 import GoalTaskRoutes from './001_GoalTasks/goalTasks.routes';
+import GoalFileRoutes from './002_GoalFiles/goalFiles.routes';
 
 const router = Router();
 
 // GoalTask sub-routes
 router.use('/:sGoalId/goalTasks', aH(GoalTaskRoutes));
+
+// GoalFile sub-routes
+router.use('/:sGoalId/goalFiles', aH(GoalFileRoutes));
 
 // Create Goal
 router.post('/',

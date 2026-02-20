@@ -17,6 +17,7 @@
 		{ "key": "createdStudentId", "value": "" },
 		{ "key": "createdGoalId", "value": "" },
 		{ "key": "createdGoalTaskId", "value": "" },
+		{ "key": "createdGoalFileId", "value": "" },
 		{ "key": "testCountryId", "value": "" },
 		{ "key": "testStateId", "value": "" },
 		{ "key": "adminModuleId", "value": "" }
@@ -1273,6 +1274,41 @@
 			],
 			"item": [
 				{
+					"name": "Create Goal Task",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 201', function () { pm.response.to.have.status(201); });",
+									"pm.test('Response has goalTask data', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json).to.have.property('message');",
+									"    pm.expect(json).to.have.property('goalTask');",
+									"    if (json.goalTask && json.goalTask.sGoalTaskId) {",
+									"        pm.collectionVariables.set('createdGoalTaskId', json.goalTask.sGoalTaskId);",
+									"    }",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "{{sSchoolToken}}" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"sTitle\": \"New standalone task\",\n    \"bCompleted\": false,\n    \"iOrder\": 3\n}"
+						},
+						"url": { "raw": "{{baseUrl}}/goals/{{createdGoalId}}/goalTasks", "host": ["{{baseUrl}}"], "path": ["goals", "{{createdGoalId}}", "goalTasks"] },
+						"description": "Create a single task under an existing goal. Uses `createdGoalId`. Saves `createdGoalTaskId` automatically.\n\n**Body:**\n- `sTitle` (string, required)\n- `bCompleted` (boolean, optional — defaults to `false`)\n- `iOrder` (positive integer, optional)\n\n**Response:** `{ message, goalTask: { sGoalTaskId, sGoalId, sTitle, bCompleted, iOrder }, success: true }`"
+					}
+				},
+				{
 					"name": "Get Goal Tasks",
 					"event": [
 						{
@@ -1371,6 +1407,198 @@
 						"header": [{ "key": "Authorization", "value": "{{sSchoolToken}}" }],
 						"url": { "raw": "{{baseUrl}}/goals/{{createdGoalId}}/goalTasks/{{createdGoalTaskId}}", "host": ["{{baseUrl}}"], "path": ["goals", "{{createdGoalId}}", "goalTasks", "{{createdGoalTaskId}}"] },
 						"description": "Delete a goal task."
+					}
+				}
+			]
+		},
+		{
+			"name": "09 - Goal Files",
+			"description": "Goal File upload and retrieval endpoints (nested under Goals).\n\n**Auth required:** `sSchoolToken` (SchoolAdmin).\n\nAll requests auto-login as SchoolAdmin if token is missing.\n\nAll endpoints are available at `{{baseUrl}}/goals/:sGoalId/goalFiles`.",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							"var token = pm.collectionVariables.get('sSchoolToken');",
+							"if (!token || token === '') {",
+							"    var baseUrl = pm.collectionVariables.get('baseUrl');",
+							"    var email = pm.collectionVariables.get('schoolEmail');",
+							"    var password = pm.collectionVariables.get('schoolPassword');",
+							"    pm.sendRequest({",
+							"        url: baseUrl + '/auth/login',",
+							"        method: 'POST',",
+							"        header: { 'Content-Type': 'application/json' },",
+							"        body: { mode: 'raw', raw: JSON.stringify({ sEmail: email, sPassword: password }) }",
+							"    }, function (err, res) {",
+							"        if (!err && res.code === 200) {",
+							"            var json = res.json();",
+							"            pm.collectionVariables.set('sSchoolToken', json.results.sToken);",
+							"            if (json.results.oSchool && json.results.oSchool.sSchoolId) {",
+							"                pm.collectionVariables.set('createdSchoolId', json.results.oSchool.sSchoolId);",
+							"            }",
+							"        }",
+							"    });",
+							"}"
+						]
+					}
+				}
+			],
+			"item": [
+				{
+					"name": "Upload Goal File(s)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 201', function () { pm.response.to.have.status(201); });",
+									"pm.test('Response has file data', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json).to.have.property('message');",
+									"    pm.expect(json).to.have.property('goalFile', true);",
+									"    pm.expect(json).to.have.property('newFiles');",
+									"    pm.expect(json.newFiles).to.be.an('array');",
+									"    if (json.newFiles && json.newFiles.length > 0) {",
+									"        pm.collectionVariables.set('createdGoalFileId', json.newFiles[0].sGoalFileId);",
+									"    }",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Authorization", "value": "{{sSchoolToken}}" }
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "oFile",
+									"type": "file",
+									"src": "",
+									"description": "File to upload. Repeat this field for multiple files. Field name must be exactly 'oFile'."
+								},
+								{
+									"key": "sArrGoalFileNames",
+									"value": "My Document",
+									"type": "text",
+									"description": "Display name for the file. Must match file count — send one string per file (repeat field). For a single file, a plain string is accepted."
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}/goals/{{createdGoalId}}/goalFiles",
+							"host": ["{{baseUrl}}"],
+							"path": ["goals", "{{createdGoalId}}", "goalFiles"]
+						},
+						"description": "Upload one or more files to a goal. Uses `createdGoalId`. Saves `createdGoalFileId` from the first file in the response.\n\n**Content-Type:** `multipart/form-data` (set automatically by Postman when using form-data body)\n\n**Form fields:**\n- `oFile` (file, required) — the file to upload. Repeat this field for multiple files.\n- `sArrGoalFileNames` (string, required) — display name for each file. Must match the count of `oFile` entries. For a single file, one plain string suffices; for multiple files, repeat the field once per file.\n\n**Example — single file:**\n```\noFile        = [file.pdf]\nsArrGoalFileNames = My Document\n```\n\n**Example — multiple files:**\n```\noFile        = [file1.pdf]\noFile        = [file2.jpg]\nsArrGoalFileNames = Report\nsArrGoalFileNames = Photo\n```\n\n**Storage:** Files are uploaded to S3 at `{sSchoolId}/goalFiles/{sGoalId}/` and the key is stored in the Files table.\n\n**Response:**\n```json\n{\n  \"message\": \"The goal file was created successfully.\",\n  \"goalFile\": true,\n  \"newFiles\": [\n    {\n      \"sGoalFileId\": \"uuid\",\n      \"sGoalId\": \"uuid\",\n      \"sFileKey\": \"s3-key\",\n      \"sFileName\": \"My Document\",\n      \"sFileType\": \"application/pdf\"\n    }\n  ],\n  \"arrFilesObject\": [\n    {\n      \"sFileId\": \"uuid\",\n      \"sKey\": \"s3-key\",\n      \"sFileName\": \"My Document\",\n      \"sFileType\": \"application/pdf\",\n      \"bActive\": true\n    }\n  ]\n}\n```"
+					}
+				},
+				{
+					"name": "Get All Goal Files",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+									"pm.test('Response has goalFiles array', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json).to.have.property('goalFiles');",
+									"    pm.expect(json.goalFiles).to.be.an('array');",
+									"    pm.expect(json).to.have.property('iTotal');",
+									"    pm.expect(json).to.have.property('success', true);",
+									"    if (json.goalFiles.length > 0 && !pm.collectionVariables.get('createdGoalFileId')) {",
+									"        pm.collectionVariables.set('createdGoalFileId', json.goalFiles[0].sGoalFileId);",
+									"    }",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Authorization", "value": "{{sSchoolToken}}" }
+						],
+						"url": {
+							"raw": "{{baseUrl}}/goals/{{createdGoalId}}/goalFiles",
+							"host": ["{{baseUrl}}"],
+							"path": ["goals", "{{createdGoalId}}", "goalFiles"],
+							"query": [
+								{ "key": "sSearch", "value": "", "disabled": true, "description": "Optional search string to filter by file name" }
+							]
+						},
+						"description": "Get all files attached to a goal. Uses `createdGoalId`. Saves `createdGoalFileId` from the first result.\n\n**Query params:**\n- `sSearch` (string, optional) — filter by file name\n\n**Response:**\n```json\n{\n  \"message\": \"...\",\n  \"goalFiles\": [\n    {\n      \"sGoalFileId\": \"uuid\",\n      \"sGoalId\": \"uuid\",\n      \"sFileKey\": \"s3-key\",\n      \"sFileName\": \"My Document\",\n      \"sFileType\": \"application/pdf\",\n      \"File\": {\n        \"sFileId\": \"uuid\",\n        \"sKey\": \"s3-key\",\n        \"bActive\": true,\n        \"CreatedByUser\": { \"sUserId\": \"uuid\", \"sName\": \"...\", \"sEmail\": \"...\" },\n        \"LastUpdatedByUser\": { \"sUserId\": \"uuid\", \"sName\": \"...\", \"sEmail\": \"...\" }\n      }\n    }\n  ],\n  \"iTotal\": 1,\n  \"success\": true\n}\n```"
+					}
+				},
+				{
+					"name": "Get One Goal File",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+									"pm.test('Response has goalFile data', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json).to.have.property('goalFile');",
+									"    pm.expect(json.goalFile).to.have.property('sGoalFileId');",
+									"    pm.expect(json.goalFile).to.have.property('sFileName');",
+									"    pm.expect(json).to.have.property('success', true);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Authorization", "value": "{{sSchoolToken}}" }
+						],
+						"url": {
+							"raw": "{{baseUrl}}/goals/{{createdGoalId}}/goalFiles/{{createdGoalFileId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["goals", "{{createdGoalId}}", "goalFiles", "{{createdGoalFileId}}"]
+						},
+						"description": "Get a single goal file by ID. Uses `createdGoalId` and `createdGoalFileId`.\n\n**Response:**\n```json\n{\n  \"message\": \"...\",\n  \"goalFile\": {\n    \"sGoalFileId\": \"uuid\",\n    \"sGoalId\": \"uuid\",\n    \"sFileKey\": \"s3-key\",\n    \"sFileName\": \"My Document\",\n    \"sFileType\": \"application/pdf\",\n    \"File\": {\n      \"sFileId\": \"uuid\",\n      \"sKey\": \"s3-key\",\n      \"bActive\": true,\n      \"CreatedByUser\": { \"sUserId\": \"uuid\", \"sName\": \"...\", \"sEmail\": \"...\" },\n      \"LastUpdatedByUser\": { \"sUserId\": \"uuid\", \"sName\": \"...\", \"sEmail\": \"...\" }\n    }\n  },\n  \"success\": true\n}\n```"
+					}
+				},
+				{
+					"name": "Delete Goal File",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+									"pm.test('Response has success', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json).to.have.property('message');",
+									"    pm.expect(json).to.have.property('success', true);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{ "key": "Authorization", "value": "{{sSchoolToken}}" }
+						],
+						"url": {
+							"raw": "{{baseUrl}}/goals/{{createdGoalId}}/goalFiles/{{createdGoalFileId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["goals", "{{createdGoalId}}", "goalFiles", "{{createdGoalFileId}}"]
+						},
+						"description": "Soft-delete a goal file. Uses `createdGoalId` and `createdGoalFileId`.\n\nSets `bActive: false` on the underlying Files record. The GoalFiles record itself is not removed.\n\n**Response:**\n```json\n{\n  \"message\": \"The goal file was deleted successfully.\",\n  \"success\": true\n}\n```"
 					}
 				}
 			]

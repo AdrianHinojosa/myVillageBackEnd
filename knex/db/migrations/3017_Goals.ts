@@ -12,6 +12,7 @@ export async function up(Knex): Promise<void> {
             table.date('tStartDate').nullable();
             table.date('tTargetDate').nullable();
             table.date('tCompletedDate').nullable();
+            table.text('sCompletionNotes').defaultTo('');
             table.integer('iTargetValue').nullable();
             table.integer('iTargetDuration').nullable();
             table.integer('iScaleMin').nullable();

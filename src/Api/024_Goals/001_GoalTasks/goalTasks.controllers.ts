@@ -5,6 +5,7 @@ import MyError from '../../../Middlewares/Error.mw';
 
 // Queries
 import GoalTaskQueries from './goalTasks.queries';
+import GoalQueries from '../goals.queries';
 
 // Messages
 import SuccessMessages from '../../../Utils/SuccessMessage.util';
@@ -14,10 +15,42 @@ class Controllers {
     constructor() {
     };
 
+    // Create a single goal task
+    async createGoalTask(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
+        const {sLang} = res.locals;
+        const {sGoalId} = req.params;
+        const {sTitle, bCompleted, iOrder} = req.body;
+
+        // Verify goal exists and is active
+        const myGoal = await GoalQueries.verifyGoalExists(sGoalId);
+        if (!myGoal) {
+            return next(new MyError(404, ErrorMessages.Goals.notFound[sLang]));
+        }
+
+        const newGoalTask = await GoalTaskQueries.insertGoalTask({
+            sGoalId,
+            sTitle,
+            bCompleted: bCompleted ?? false,
+            iOrder
+        });
+
+        return res.status(201).json({
+            message: SuccessMessages.GoalTasks.createGoalTask[sLang],
+            goalTask: newGoalTask,
+            success: true
+        });
+    }
+
     // Get all tasks for a goal
     async getGoalTasks(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
         const {sLang} = res.locals;
         const {sGoalId} = req.params;
+
+        // Verify goal exists and is active
+        const myGoal = await GoalQueries.verifyGoalExists(sGoalId);
+        if (!myGoal) {
+            return next(new MyError(404, ErrorMessages.Goals.notFound[sLang]));
+        }
 
         const goalTasks = await GoalTaskQueries.findGoalTasksByGoal(sGoalId);
 
@@ -31,8 +64,14 @@ class Controllers {
     // Update a goal task
     async updateGoalTask(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
         const {sLang} = res.locals;
-        const {sGoalTaskId} = req.params;
+        const {sGoalId, sGoalTaskId} = req.params;
         const {sTitle, bCompleted, iOrder} = req.body;
+
+        // Verify goal exists and is active
+        const myGoal = await GoalQueries.verifyGoalExists(sGoalId);
+        if (!myGoal) {
+            return next(new MyError(404, ErrorMessages.Goals.notFound[sLang]));
+        }
 
         // Verify task exists
         const myGoalTask = await GoalTaskQueries.verifyGoalTaskExists(sGoalTaskId);
@@ -57,8 +96,14 @@ class Controllers {
     // Toggle completed status of a goal task
     async toggleGoalTask(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
         const {sLang} = res.locals;
-        const {sGoalTaskId} = req.params;
+        const {sGoalId, sGoalTaskId} = req.params;
         const {bCompleted} = req.body;
+
+        // Verify goal exists and is active
+        const myGoal = await GoalQueries.verifyGoalExists(sGoalId);
+        if (!myGoal) {
+            return next(new MyError(404, ErrorMessages.Goals.notFound[sLang]));
+        }
 
         // Verify task exists
         const myGoalTask = await GoalTaskQueries.verifyGoalTaskExists(sGoalTaskId);
@@ -79,7 +124,13 @@ class Controllers {
     // Delete a goal task (hard delete)
     async deleteGoalTask(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
         const {sLang} = res.locals;
-        const {sGoalTaskId} = req.params;
+        const {sGoalId, sGoalTaskId} = req.params;
+
+        // Verify goal exists and is active
+        const myGoal = await GoalQueries.verifyGoalExists(sGoalId);
+        if (!myGoal) {
+            return next(new MyError(404, ErrorMessages.Goals.notFound[sLang]));
+        }
 
         // Verify task exists
         const myGoalTask = await GoalTaskQueries.verifyGoalTaskExists(sGoalTaskId);

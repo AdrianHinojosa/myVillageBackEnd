@@ -226,15 +226,15 @@ class Controllers {
 
 
     // Get school analytics
-     async getSchoolsAnalytics(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
+    async getSchoolsAnalytics(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
         const {sLang} = res.locals;
 
         // GET school analytics
-        const iActiveSchools = await SchoolQueries.findCountOfActiveSchools();
+        const oAnalytics = await SchoolQueries.findSchoolsAnalytics();
 
         return res.status(201).json({
             message: SuccessMessages.Schools.getAnalytics[sLang],
-            countActiveSchools: iActiveSchools,
+            ...oAnalytics,
             success: true
         })
     }

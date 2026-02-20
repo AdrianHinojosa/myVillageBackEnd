@@ -7,6 +7,12 @@ import { verifySchoolUserPermissions } from '../../../Middlewares/001_Permission
 
 const router = Router({mergeParams: true});
 
+// Create GoalTask
+router.post('/',
+    aH(verifySchoolUserPermissions([{sModuleName: 'General', sActionCode: 'WRITE'}])),
+    celebrate({ params: GoalTaskValidations.CreateGoalTaskParams, body: GoalTaskValidations.CreateGoalTaskBody }),
+    aH(GoalTaskController.createGoalTask));
+
 // Get all GoalTasks by Goal
 router.get('/',
     aH(verifySchoolUserPermissions([{sModuleName: 'General', sActionCode: 'READ'}])),

@@ -226,6 +226,10 @@ export default {
 
     // ========  GoalTasks  ==================
     GoalTasks: {
+        createGoalTask: {
+            sp: 'Se creó la tarea de la meta exitosamente!',
+            en: "The goal task was created successfully."
+        },
         getAllGoalTasks: {
             sp: 'Se han encontrado las tareas de la meta!',
             en: "The goal tasks were successfully found."

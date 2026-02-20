@@ -24,6 +24,7 @@ export interface IGoals {
     dAverageValue?: number;
     iRecordsCount?: number;
     tLastRecord?: string;
+    sCompletionNotes?: string;
     sCreatedBy?: string;
     sLastUpdatedBy?: string;
     sLastDeletedBy?: string;
@@ -49,6 +50,7 @@ export class GoalsModel extends Model {
     public dAverageValue?: number;
     public iRecordsCount?: number;
     public tLastRecord?: string;
+    public sCompletionNotes?: string;
     public sCreatedBy?: string;
     public sLastUpdatedBy?: string;
     public sLastDeletedBy?: string;
@@ -67,7 +69,7 @@ export class GoalsModel extends Model {
             }
         },
 
-        GoalTask: {
+        GoalTasks: {
             relation: Model.HasManyRelation,
             modelClass: GoalTasksModel,
             join: {

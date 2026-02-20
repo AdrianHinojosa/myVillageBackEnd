@@ -59,6 +59,7 @@ export const CompleteGoalParams = Validations.JoiObjectKeys({
 
 export const CompleteGoalBody = Validations.JoiObjectKeys({
     sStatus: Joi.string().valid('COMPLETED', 'NOT_ACHIEVED').required().error(new Error("Goals sStatus")),
+    sCompletionNotes: Validations.String("Goals sCompletionNotes"),
 });
 
 export const DeleteGoalParams = Validations.JoiObjectKeys({

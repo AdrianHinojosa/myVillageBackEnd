@@ -141,7 +141,7 @@ class Controllers {
     async completeGoal(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
         const {sLang, sSchoolId, sUserId} = res.locals;
         const {sGoalId} = req.params;
-        const {sStatus} = req.body;
+        const {sStatus, sCompletionNotes} = req.body;
 
         // Verify goal exists
         const myGoal = await GoalQueries.verifyGoalExists(sGoalId);
@@ -156,7 +156,7 @@ class Controllers {
         }
 
         // Complete goal
-        const completedGoal = await GoalQueries.completeGoal(sGoalId, sStatus, sUserId);
+        const completedGoal = await GoalQueries.completeGoal(sGoalId, sStatus, sUserId, sCompletionNotes);
 
         return res.status(201).json({
             message: SuccessMessages.Goals.completeGoal[sLang],

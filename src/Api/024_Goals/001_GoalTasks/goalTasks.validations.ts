@@ -1,6 +1,16 @@
 import { Joi } from 'celebrate';
 import * as Validations from '../../../Middlewares/Validations.mw';
 
+export const CreateGoalTaskParams = Validations.JoiObjectKeys({
+    sGoalId: Validations.RequiredUUID("GoalTasks sGoalId"),
+});
+
+export const CreateGoalTaskBody = Validations.JoiObjectKeys({
+    sTitle: Validations.RequiredString("GoalTasks sTitle"),
+    bCompleted: Validations.Boolean("GoalTasks bCompleted"),
+    iOrder: Validations.PositiveInteger("GoalTasks iOrder"),
+});
+
 export const GetGoalTasksParams = Validations.JoiObjectKeys({
     sGoalId: Validations.RequiredUUID("GoalTasks sGoalId"),
 });

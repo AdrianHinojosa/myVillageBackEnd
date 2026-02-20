@@ -233,6 +233,124 @@ class Queries {
     }
 
 
+    // Get comprehensive schools analytics data
+    static async findSchoolsAnalytics() {
+        const [schoolsResult, studentsResult, goalsResult, usersResult, recentSchoolsResult] = await Promise.all([
+
+            // 1. School counts: total, non-blocked (active), blocked (inactive)
+            db.raw(`
+                SELECT
+                    COUNT(*)                                          ::integer AS "iTotalSchools",
+                    COUNT(*) FILTER (WHERE "bBlocked" = false)       ::integer AS "iActiveSchools",
+                    COUNT(*) FILTER (WHERE "bBlocked" = true)        ::integer AS "iInactiveSchools"
+                FROM "Schools"
+                WHERE "bActive" = true
+            `),
+
+            // 2. Total students and average per active school
+            db.raw(`
+                SELECT
+                    COALESCE(SUM(sc_cnt.cnt), 0)                                     ::integer AS "iTotalStudents",
+                    COALESCE(ROUND(AVG(COALESCE(sc_cnt.cnt, 0))::numeric, 1), 0)     ::float8  AS "dAvgStudents"
+                FROM "Schools" sc
+                LEFT JOIN (
+                    SELECT "sSchoolId", COUNT("sStudentId") AS cnt
+                    FROM "Students"
+                    WHERE "bActive" = true
+                    GROUP BY "sSchoolId"
+                ) AS sc_cnt ON sc_cnt."sSchoolId" = sc."sSchoolId"
+                WHERE sc."bActive" = true
+            `),
+
+            // 3. Goal completion rate (goals linked to active schools only)
+            db.raw(`
+                SELECT
+                    COUNT(g.*)                                                    ::integer AS "iTotalGoals",
+                    COUNT(g.*) FILTER (WHERE g."sStatus" = 'completed')          ::integer AS "iCompletedGoals"
+                FROM "Goals" g
+                WHERE g."bActive" = true
+            `),
+
+            // 4. Average teachers (sCreatedBy NOT NULL) and admin (sCreatedBy IS NULL) per active school
+            db.raw(`
+                SELECT
+                    COALESCE(ROUND(AVG(COALESCE(t_cnt.cnt, 0))::numeric, 1), 0)  ::float8 AS "dAvgTeachers",
+                    COALESCE(ROUND(AVG(COALESCE(a_cnt.cnt, 0))::numeric, 1), 0)  ::float8 AS "dAvgAdminStaff"
+                FROM "Schools" sc
+                LEFT JOIN (
+                    SELECT su."sSchoolId", COUNT(su."sSchoolUserId") AS cnt
+                    FROM "SchoolUsers" su
+                    JOIN "Users" u ON u."sUserId" = su."sSchoolUserId"
+                        AND u."bActive" = true AND u."sCreatedBy" IS NOT NULL
+                    GROUP BY su."sSchoolId"
+                ) AS t_cnt ON t_cnt."sSchoolId" = sc."sSchoolId"
+                LEFT JOIN (
+                    SELECT su."sSchoolId", COUNT(su."sSchoolUserId") AS cnt
+                    FROM "SchoolUsers" su
+                    JOIN "Users" u ON u."sUserId" = su."sSchoolUserId"
+                        AND u."bActive" = true AND u."sCreatedBy" IS NULL
+                    GROUP BY su."sSchoolId"
+                ) AS a_cnt ON a_cnt."sSchoolId" = sc."sSchoolId"
+                WHERE sc."bActive" = true
+            `),
+
+            // 5. 5 most recently created active schools with student and teacher counts
+            db.raw(`
+                SELECT
+                    sc."sSchoolId",
+                    sc."sName",
+                    (NOT sc."bBlocked")                                 AS "bActive",
+                    sc."created_at"                                     AS "dtCreatedAt",
+                    COALESCE(s_cnt.cnt, 0)                              ::integer AS "iStudents",
+                    COALESCE(t_cnt.cnt, 0)                              ::integer AS "iTeachers"
+                FROM "Schools" sc
+                LEFT JOIN (
+                    SELECT "sSchoolId", COUNT("sStudentId") AS cnt
+                    FROM "Students"
+                    WHERE "bActive" = true
+                    GROUP BY "sSchoolId"
+                ) AS s_cnt ON s_cnt."sSchoolId" = sc."sSchoolId"
+                LEFT JOIN (
+                    SELECT su."sSchoolId", COUNT(su."sSchoolUserId") AS cnt
+                    FROM "SchoolUsers" su
+                    JOIN "Users" u ON u."sUserId" = su."sSchoolUserId"
+                        AND u."bActive" = true AND u."sCreatedBy" IS NOT NULL
+                    GROUP BY su."sSchoolId"
+                ) AS t_cnt ON t_cnt."sSchoolId" = sc."sSchoolId"
+                WHERE sc."bActive" = true
+                ORDER BY sc."created_at" DESC
+                LIMIT 5
+            `),
+        ]);
+
+        // Parse and structure results
+        const schools  = schoolsResult.rows[0];
+        const students = studentsResult.rows[0];
+        const goals    = goalsResult.rows[0];
+        const users    = usersResult.rows[0];
+
+        const iTotalGoals     = parseInt(goals?.iTotalGoals     ?? '0');
+        const iCompletedGoals = parseInt(goals?.iCompletedGoals ?? '0');
+        const iGoalProgress   = iTotalGoals > 0
+            ? Math.round((iCompletedGoals / iTotalGoals) * 100)
+            : 0;
+
+        return {
+            iTotalSchools:    parseInt(schools?.iTotalSchools    ?? '0'),
+            iActiveSchools:   parseInt(schools?.iActiveSchools   ?? '0'),
+            iInactiveSchools: parseInt(schools?.iInactiveSchools ?? '0'),
+            iTotalStudents:   parseInt(students?.iTotalStudents  ?? '0'),
+            dAvgStudents:     parseFloat(students?.dAvgStudents  ?? '0'),
+            iTotalGoals,
+            iCompletedGoals,
+            iGoalProgress,
+            dAvgTeachers:     parseFloat(users?.dAvgTeachers   ?? '0'),
+            dAvgAdminStaff:   parseFloat(users?.dAvgAdminStaff ?? '0'),
+            aRecentSchools:   recentSchoolsResult.rows,
+        };
+    }
+
+
     // Update School Image
     static async updateSchoolImage(sSchoolId: string, sImageKey: string) {
         return await SchoolsModel.query().patchAndFetchById(sSchoolId, {

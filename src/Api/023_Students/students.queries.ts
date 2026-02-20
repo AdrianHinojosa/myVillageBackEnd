@@ -1,4 +1,5 @@
 import { StudentsModel, IStudents } from './students.model';
+import { db } from '../../Config/Db.config';
 
 class Queries {
     constructor() {
@@ -57,6 +58,38 @@ class Queries {
      */
     static async findAllStudents(sSchoolId, iPageNumber, iItemsPerPage, sSearch, sGrade) {
         return await StudentsModel.query().modify(function (queryBuilder : any) {
+            queryBuilder.select('Students.*')
+
+            // Computed: full name
+            queryBuilder.select(db.raw(`
+                TRIM(CONCAT_WS(' ', "Students"."sName", "Students"."sLastName", "Students"."sSecondLastName")) AS "sFullName"
+            `))
+
+            // Computed: age from birth year
+            queryBuilder.select(db.raw(`
+                (EXTRACT(YEAR FROM NOW()) - "Students"."iBirthYear")::integer AS "iAge"
+            `))
+
+            // Subquery: count of active goals
+            queryBuilder.select(db.raw(`
+                (
+                    SELECT COUNT(*)::integer
+                    FROM "Goals" g
+                    WHERE g."sStudentId" = "Students"."sStudentId"
+                      AND g."bActive" = true
+                ) AS "iGoalsCount"
+            `))
+
+            // Subquery: average progress across all active goals (rounded to integer %)
+            queryBuilder.select(db.raw(`
+                (
+                    SELECT COALESCE(ROUND(AVG(g."dProgress")::numeric, 0), 0)::integer
+                    FROM "Goals" g
+                    WHERE g."sStudentId" = "Students"."sStudentId"
+                      AND g."bActive" = true
+                ) AS "dGoalsProgress"
+            `))
+
             queryBuilder.where('Students.sSchoolId', sSchoolId)
             queryBuilder.where('Students.bActive', true)
 
@@ -77,8 +110,31 @@ class Queries {
     // Get ONE Student
     static async findOneStudent(sSchoolId, sStudentId) {
         return await StudentsModel.query().findById(sStudentId)
-                                    .where('Students.sSchoolId', sSchoolId)
-                                    .where('Students.bActive', true)
+            .select('Students.*')
+            .select(db.raw(`
+                TRIM(CONCAT_WS(' ', "Students"."sName", "Students"."sLastName", "Students"."sSecondLastName")) AS "sFullName"
+            `))
+            .select(db.raw(`
+                (EXTRACT(YEAR FROM NOW()) - "Students"."iBirthYear")::integer AS "iAge"
+            `))
+            .select(db.raw(`
+                (
+                    SELECT COUNT(*)::integer
+                    FROM "Goals" g
+                    WHERE g."sStudentId" = "Students"."sStudentId"
+                      AND g."bActive" = true
+                ) AS "iGoalsCount"
+            `))
+            .select(db.raw(`
+                (
+                    SELECT COALESCE(ROUND(AVG(g."dProgress")::numeric, 0), 0)::integer
+                    FROM "Goals" g
+                    WHERE g."sStudentId" = "Students"."sStudentId"
+                      AND g."bActive" = true
+                ) AS "dGoalsProgress"
+            `))
+            .where('Students.sSchoolId', sSchoolId)
+            .where('Students.bActive', true)
     }
 
     // Soft delete student

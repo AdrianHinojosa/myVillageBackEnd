@@ -55,7 +55,7 @@ class Queries {
                 }
             }
 
-            return { ...newGoal, GoalTask: goalTasks };
+            return { ...newGoal, GoalTasks: goalTasks };
         });
     }
 
@@ -101,7 +101,7 @@ class Queries {
                     .orderBy('iOrder', 'asc');
             }
 
-            return { ...updatedGoal, GoalTask: goalTasks };
+            return { ...updatedGoal, GoalTasks: goalTasks };
         });
     }
 
@@ -111,8 +111,8 @@ class Queries {
             queryBuilder.where('Goals.bActive', true)
             queryBuilder.where('Goals.sStudentId', sStudentId)
 
-            queryBuilder.withGraphFetched('GoalTask')
-            queryBuilder.modifyGraph('GoalTask', builder => {
+            queryBuilder.withGraphFetched('GoalTasks')
+            queryBuilder.modifyGraph('GoalTasks', builder => {
                 builder.orderBy('iOrder', 'asc');
             })
 
@@ -133,17 +133,18 @@ class Queries {
         return await GoalsModel.query()
             .findById(sGoalId)
             .where('bActive', true)
-            .withGraphFetched('GoalTask')
-            .modifyGraph('GoalTask', builder => {
+            .withGraphFetched('GoalTasks')
+            .modifyGraph('GoalTasks', builder => {
                 builder.orderBy('iOrder', 'asc');
             });
     }
 
-    // Complete a goal (set status and completed date)
-    static async completeGoal(sGoalId, sStatus, sLastUpdatedBy) {
+    // Complete a goal (set status, completed date, and optional notes)
+    static async completeGoal(sGoalId, sStatus, sLastUpdatedBy, sCompletionNotes?) {
         return await GoalsModel.query().patchAndFetchById(sGoalId, {
             sStatus,
             tCompletedDate: new Date().toISOString(),
+            sCompletionNotes: sCompletionNotes || null,
             sLastUpdatedBy
         }).where('bActive', true);
     }

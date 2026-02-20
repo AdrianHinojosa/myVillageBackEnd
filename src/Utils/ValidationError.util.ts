@@ -373,6 +373,10 @@ export default {
                 sp: "Por favor, ingresa un estado correcto (COMPLETED, NOT_ACHIEVED).",
                 en: "Please, enter a valid status (COMPLETED, NOT_ACHIEVED)."
             },
+            sCompletionNotes: {
+                sp: "Por favor, ingresa notas de cierre correctas.",
+                en: "Please, enter valid completion notes."
+            },
         },
 
         // ========== GoalTasks ==========

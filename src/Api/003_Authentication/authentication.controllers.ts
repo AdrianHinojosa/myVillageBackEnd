@@ -11,6 +11,8 @@ import AuthServices from './authentication.services'
 
 import { SchoolUsersModel } from '../022_Schools/001_SchoolUsers/schoolUsers.model';
 import SchoolQueries from '../022_Schools/schools.queries';
+import SchoolUserQueries from '../022_Schools/001_SchoolUsers/schoolUsers.queries';
+import { SchoolPermissionsModel } from '../022_Schools/001_SchoolUsers/schoolPermissions.model';
 
 import ErrorMessages from '../../Utils/ErrorMessages.util'
 import SuccessMessages from '../../Utils/SuccessMessage.util'
@@ -95,13 +97,37 @@ class Controllers {
             sSessionId: newSession.sSessionId
         })
 
+        // Build permissions array for school users
+        let aPermissions: any[] = [];
+        if (sUserType === 'SchoolAdmin') {
+            // If super school admin (sCreatedBy IS NULL), grant all permissions
+            if (User.sCreatedBy === null) {
+                aPermissions = [
+                    { sModuleId: 'all', sModuleName: 'Students', sAction: 'DELETE' },
+                    { sModuleId: 'all', sModuleName: 'Goals', sAction: 'DELETE' },
+                    { sModuleId: 'all', sModuleName: 'Users', sAction: 'DELETE' },
+                    { sModuleId: 'all', sModuleName: 'Reports', sAction: 'READ' },
+                ];
+            } else {
+                // Get permissions from SchoolPermissions joined with SchoolModules
+                const permissions = await SchoolPermissionsModel.query()
+                    .select('SchoolPermissions.sSchoolPermissionId AS sModuleId', 'SchoolModules.sUniqueName AS sModuleName', 'SchoolPermissions.sActionCode AS sAction')
+                    .join('SchoolModules', 'SchoolModules.sSchoolModuleId', '=', 'SchoolPermissions.sSchoolModuleId')
+                    .where('SchoolPermissions.sSchoolUserId', User.sUserId)
+                    .andWhere('SchoolPermissions.sActionCode', '!=', 'FORBIDDEN');
+                aPermissions = permissions;
+            }
+        }
+
         // Build response
         const results: any = {
             sUserId: User.sUserId,
             sToken: newToken,
             sEmail: User.sEmail,
             sFullName: `${User.sName} ${User.sLastName}`,
-            sUserType
+            sPhone: User.sPhoneNumber || '',
+            sUserType,
+            aPermissions
         };
 
         if (oSchool) {

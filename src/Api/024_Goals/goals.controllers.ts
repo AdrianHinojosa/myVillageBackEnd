@@ -18,7 +18,7 @@ class Controllers {
     // Create a new goal
     async createGoal(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
         const {sLang, sSchoolId, sUserId} = res.locals;
-        const {sStudentId, sTitle, sDescription, sMeasurementType, tStartDate, tTargetDate, iTargetValue, iTargetDuration, iScaleMin, iScaleMax, sFrequencyUnit, aTasks} = req.body;
+        const {sStudentId, sTitle, sDescription, sMeasurementType, tStartDate, tTargetDate, iTargetValue, iTargetDuration, iScaleMin, iScaleMax, sFrequencyUnit, iBaselineValue, aTasks} = req.body;
 
         // Verify student exists and belongs to school
         const myStudent = await StudentQueries.verifyStudentExistsBySchool(sSchoolId, sStudentId);
@@ -39,6 +39,7 @@ class Controllers {
             iScaleMin,
             iScaleMax,
             sFrequencyUnit,
+            iBaselineValue,
             sCreatedBy: sUserId
         }, aTasks);
 
@@ -102,7 +103,7 @@ class Controllers {
     async updateGoal(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
         const {sLang, sSchoolId, sUserId} = res.locals;
         const {sGoalId} = req.params;
-        const {sTitle, sDescription, tStartDate, tTargetDate, iTargetValue, iTargetDuration, iScaleMin, iScaleMax, sFrequencyUnit, aTasks} = req.body;
+        const {sTitle, sDescription, tStartDate, tTargetDate, iTargetValue, iTargetDuration, iScaleMin, iScaleMax, sFrequencyUnit, iBaselineValue, aTasks} = req.body;
 
         // Verify goal exists
         const myGoal = await GoalQueries.verifyGoalExists(sGoalId);
@@ -127,6 +128,7 @@ class Controllers {
             iScaleMin,
             iScaleMax,
             sFrequencyUnit,
+            iBaselineValue,
             sLastUpdatedBy: sUserId
         }, aTasks);
 

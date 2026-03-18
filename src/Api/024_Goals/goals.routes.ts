@@ -6,6 +6,8 @@ import * as GoalValidations from './goals.validations';
 import { verifySchoolUserPermissions } from '../../Middlewares/001_Permissions.mw.ts/schools.permissions';
 import GoalTaskRoutes from './001_GoalTasks/goalTasks.routes';
 import GoalFileRoutes from './002_GoalFiles/goalFiles.routes';
+import TrackingRecordController from './003_TrackingRecords/trackingRecords.controllers';
+import * as TrackingRecordValidations from './003_TrackingRecords/trackingRecords.validations';
 
 const router = Router();
 
@@ -14,6 +16,12 @@ router.use('/:sGoalId/goalTasks', aH(GoalTaskRoutes));
 
 // GoalFile sub-routes
 router.use('/:sGoalId/goalFiles', aH(GoalFileRoutes));
+
+// GET /goals/:sGoalId/trackingRecords — Get tracking records for a goal
+router.get('/:sGoalId/trackingRecords',
+    aH(verifySchoolUserPermissions([{sModuleName: 'General', sActionCode: 'READ'}])),
+    celebrate({ params: TrackingRecordValidations.GetTrackingRecordsByGoalParams, query: TrackingRecordValidations.GetTrackingRecordsByGoalQuery }),
+    aH(TrackingRecordController.getTrackingRecordsByGoal));
 
 // Create Goal
 router.post('/',

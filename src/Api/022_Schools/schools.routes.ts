@@ -11,6 +11,7 @@ const router = Router();
 
 // Analytics
 router.get('/analytics',
+        celebrate({ query: SchoolValidations.GetAnalyticsQuery }),
         aH(verifyAdminPermissions(  [  {sModuleName: 'General', sActionCode: 'READ' }  ])),
         aH(SchoolController.getSchoolsAnalytics));
 

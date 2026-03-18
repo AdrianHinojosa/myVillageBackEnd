@@ -104,6 +104,22 @@ class Queries {
             queryBuilder.select('City.sName AS sCityName', 'City.sCityId')
             queryBuilder.select('City:State.sName AS sStateName', 'City:State.sStateId')
             queryBuilder.select('City:State:Country.sName AS sCountryName', 'City:State:Country.sCountryId')
+
+            // Computed: iUsers count
+            queryBuilder.select(db.raw(`
+                (SELECT COUNT(*)::integer FROM "SchoolUsers" su
+                 JOIN "Users" u ON u."sUserId" = su."sSchoolUserId" AND u."bActive" = true
+                 WHERE su."sSchoolId" = "Schools"."sSchoolId"
+                ) AS "iUsers"
+            `))
+
+            // Computed: iStudents count
+            queryBuilder.select(db.raw(`
+                (SELECT COUNT(*)::integer FROM "Students" st
+                 WHERE st."sSchoolId" = "Schools"."sSchoolId" AND st."bActive" = true
+                ) AS "iStudents"
+            `))
+
             queryBuilder.where('Schools.bActive', true)
             queryBuilder.leftJoinRelated('City')
             queryBuilder.leftJoinRelated('City.State')
@@ -111,7 +127,7 @@ class Queries {
             queryBuilder.withGraphFetched('SchoolUser')
             queryBuilder.modifyGraph('SchoolUser', builder => {
                 builder.joinRelated('User')
-                builder.select('User.sName', 'User.sLastName',  'User.sSecondLastName', 'User.sEmail', 'User.sPhoneNumber');
+                builder.select('SchoolUsers.sSchoolUserId AS sUserId', 'User.sName', 'User.sLastName',  'User.sSecondLastName', 'User.sEmail', 'User.sPhoneNumber');
                 builder.where('User.sCreatedBy', null)
                 builder.where('User.bActive', true)
             })
@@ -141,6 +157,33 @@ class Queries {
                                     .select('City.sName AS sCityName', 'City.sCityId')
                                     .select('City:State.sName AS sStateName', 'City:State.sStateId')
                                     .select('City:State:Country.sName AS sCountryName', 'City:State:Country.sCountryId')
+                                    // Computed: iUsers count
+                                    .select(db.raw(`
+                                        (SELECT COUNT(*)::integer FROM "SchoolUsers" su
+                                         JOIN "Users" u ON u."sUserId" = su."sSchoolUserId" AND u."bActive" = true
+                                         WHERE su."sSchoolId" = "Schools"."sSchoolId"
+                                        ) AS "iUsers"
+                                    `))
+                                    // Computed: iStudents count
+                                    .select(db.raw(`
+                                        (SELECT COUNT(*)::integer FROM "Students" st
+                                         WHERE st."sSchoolId" = "Schools"."sSchoolId" AND st."bActive" = true
+                                        ) AS "iStudents"
+                                    `))
+                                    // Computed: iGoals (active goals for students of this school)
+                                    .select(db.raw(`
+                                        (SELECT COUNT(*)::integer FROM "Goals" g
+                                         JOIN "Students" s ON s."sStudentId" = g."sStudentId" AND s."bActive" = true
+                                         WHERE s."sSchoolId" = "Schools"."sSchoolId" AND g."bActive" = true AND g."sStatus" = 'ACTIVE'
+                                        ) AS "iGoals"
+                                    `))
+                                    // Computed: sGoalsProgress (AVG of active goals dProgress)
+                                    .select(db.raw(`
+                                        (SELECT COALESCE(ROUND(AVG(g."dProgress")::numeric, 0), 0)::text FROM "Goals" g
+                                         JOIN "Students" s ON s."sStudentId" = g."sStudentId" AND s."bActive" = true
+                                         WHERE s."sSchoolId" = "Schools"."sSchoolId" AND g."bActive" = true AND g."sStatus" = 'ACTIVE'
+                                        ) AS "sGoalsProgress"
+                                    `))
                                     .where('Schools.bActive', true)
                                     .leftJoinRelated('City')
                                     .leftJoinRelated('City.State')
@@ -148,7 +191,7 @@ class Queries {
                                     .withGraphFetched('SchoolUser')
                                     .modifyGraph('SchoolUser', builder => {
                                         builder.joinRelated('User')
-                                        builder.select('User.sName', 'User.sLastName',  'User.sSecondLastName', 'User.sEmail', 'User.sPhoneNumber');
+                                        builder.select('SchoolUsers.sSchoolUserId AS sUserId', 'User.sName', 'User.sLastName',  'User.sSecondLastName', 'User.sEmail', 'User.sPhoneNumber');
                                         builder.where('User.sCreatedBy', null)
                                         builder.where('User.bActive', true)
                                     })
@@ -233,11 +276,26 @@ class Queries {
     }
 
 
-    // Get comprehensive schools analytics data
-    static async findSchoolsAnalytics() {
-        const [schoolsResult, studentsResult, goalsResult, usersResult, recentSchoolsResult] = await Promise.all([
+    // Get comprehensive schools analytics data with date filtering
+    static async findSchoolsAnalytics(tStartDate?, tEndDate?) {
+        // Default date range: current month if not provided
+        const now = new Date();
+        const sStart = tStartDate ? String(tStartDate) : new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+        const sEnd = tEndDate ? String(tEndDate) : now.toISOString().split('T')[0];
 
-            // 1. School counts: total, non-blocked (active), blocked (inactive)
+        // Calculate previous period for trend comparison (same-length period immediately before)
+        const startMs = new Date(sStart).getTime();
+        const endMs = new Date(sEnd).getTime();
+        const periodLength = endMs - startMs;
+        const sPrevStart = new Date(startMs - periodLength).toISOString().split('T')[0];
+        const sPrevEnd = new Date(startMs - 1).toISOString().split('T')[0]; // day before current start
+
+        // Spanish month abbreviations
+        const aMonthNames = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+
+        const [schoolsResult, studentsResult, goalProgressResult, usersResult, recentSchoolsResult, trendStudentsResult, trendGoalsResult, chartResult] = await Promise.all([
+
+            // 1. School counts
             db.raw(`
                 SELECT
                     COUNT(*)                                          ::integer AS "iTotalSchools",
@@ -259,19 +317,20 @@ class Queries {
                     WHERE "bActive" = true
                     GROUP BY "sSchoolId"
                 ) AS sc_cnt ON sc_cnt."sSchoolId" = sc."sSchoolId"
-                WHERE sc."bActive" = true
+                WHERE sc."bActive" = true AND sc."bBlocked" = false
             `),
 
-            // 3. Goal completion rate (goals linked to active schools only)
+            // 3. Goal progress: AVG(dProgress) across all active goals
             db.raw(`
                 SELECT
-                    COUNT(g.*)                                                    ::integer AS "iTotalGoals",
-                    COUNT(g.*) FILTER (WHERE g."sStatus" = 'completed')          ::integer AS "iCompletedGoals"
+                    COALESCE(ROUND(AVG(g."dProgress")::numeric, 0), 0) ::integer AS "iGoalProgress"
                 FROM "Goals" g
-                WHERE g."bActive" = true
+                JOIN "Students" s ON s."sStudentId" = g."sStudentId" AND s."bActive" = true
+                JOIN "Schools" sc ON sc."sSchoolId" = s."sSchoolId" AND sc."bActive" = true
+                WHERE g."bActive" = true AND g."sStatus" = 'ACTIVE'
             `),
 
-            // 4. Average teachers (sCreatedBy NOT NULL) and admin (sCreatedBy IS NULL) per active school
+            // 4. Average teachers and admin staff per active school
             db.raw(`
                 SELECT
                     COALESCE(ROUND(AVG(COALESCE(t_cnt.cnt, 0))::numeric, 1), 0)  ::float8 AS "dAvgTeachers",
@@ -294,12 +353,12 @@ class Queries {
                 WHERE sc."bActive" = true
             `),
 
-            // 5. 5 most recently created active schools with student and teacher counts
+            // 5. 5 most recently created active schools
             db.raw(`
                 SELECT
                     sc."sSchoolId",
                     sc."sName",
-                    (NOT sc."bBlocked")                                 AS "bActive",
+                    sc."bBlocked",
                     sc."created_at"                                     AS "dtCreatedAt",
                     COALESCE(s_cnt.cnt, 0)                              ::integer AS "iStudents",
                     COALESCE(t_cnt.cnt, 0)                              ::integer AS "iTeachers"
@@ -321,31 +380,99 @@ class Queries {
                 ORDER BY sc."created_at" DESC
                 LIMIT 5
             `),
+
+            // 6. Student trend: current period count vs previous period count
+            db.raw(`
+                SELECT
+                    COALESCE((SELECT COUNT(*)::integer FROM "Students" WHERE "bActive" = true AND "created_at"::date BETWEEN ? AND ?), 0) AS "iCurrentStudents",
+                    COALESCE((SELECT COUNT(*)::integer FROM "Students" WHERE "bActive" = true AND "created_at"::date BETWEEN ? AND ?), 0) AS "iPrevStudents"
+            `, [sStart, sEnd, sPrevStart, sPrevEnd]),
+
+            // 7. Goals trend: current period completion rate vs previous
+            db.raw(`
+                SELECT
+                    COALESCE((SELECT ROUND(AVG("dProgress")::numeric, 1) FROM "Goals" WHERE "bActive" = true AND "sStatus" = 'ACTIVE'), 0) ::float8 AS "dCurrentGoalProgress",
+                    COALESCE((
+                        SELECT COUNT(*)::integer FROM "Goals"
+                        WHERE "bActive" = true AND "sStatus" = 'COMPLETED' AND "tCompletedDate"::date BETWEEN ? AND ?
+                    ), 0) AS "iCurrentCompleted",
+                    COALESCE((
+                        SELECT COUNT(*)::integer FROM "Goals"
+                        WHERE "bActive" = true AND "sStatus" = 'COMPLETED' AND "tCompletedDate"::date BETWEEN ? AND ?
+                    ), 0) AS "iPrevCompleted"
+            `, [sStart, sEnd, sPrevStart, sPrevEnd]),
+
+            // 8. Chart data: goals created and completed by month within date range
+            db.raw(`
+                SELECT
+                    EXTRACT(MONTH FROM gs.month)::integer AS "iMonth",
+                    COALESCE(created_cnt.cnt, 0)::integer AS "iCreated",
+                    COALESCE(completed_cnt.cnt, 0)::integer AS "iCompleted"
+                FROM generate_series(
+                    date_trunc('month', ?::date),
+                    date_trunc('month', ?::date),
+                    '1 month'
+                ) AS gs(month)
+                LEFT JOIN (
+                    SELECT date_trunc('month', "created_at") AS month, COUNT(*) AS cnt
+                    FROM "Goals" WHERE "bActive" = true AND "created_at"::date BETWEEN ? AND ?
+                    GROUP BY date_trunc('month', "created_at")
+                ) AS created_cnt ON created_cnt.month = gs.month
+                LEFT JOIN (
+                    SELECT date_trunc('month', "tCompletedDate") AS month, COUNT(*) AS cnt
+                    FROM "Goals" WHERE "bActive" = true AND "sStatus" = 'COMPLETED' AND "tCompletedDate"::date BETWEEN ? AND ?
+                    GROUP BY date_trunc('month', "tCompletedDate")
+                ) AS completed_cnt ON completed_cnt.month = gs.month
+                ORDER BY gs.month ASC
+            `, [sStart, sEnd, sStart, sEnd, sStart, sEnd]),
         ]);
 
-        // Parse and structure results
+        // Parse results
         const schools  = schoolsResult.rows[0];
         const students = studentsResult.rows[0];
-        const goals    = goalsResult.rows[0];
+        const goalProgress = goalProgressResult.rows[0];
         const users    = usersResult.rows[0];
+        const trendStudents = trendStudentsResult.rows[0];
+        const trendGoals = trendGoalsResult.rows[0];
 
-        const iTotalGoals     = parseInt(goals?.iTotalGoals     ?? '0');
-        const iCompletedGoals = parseInt(goals?.iCompletedGoals ?? '0');
-        const iGoalProgress   = iTotalGoals > 0
-            ? Math.round((iCompletedGoals / iTotalGoals) * 100)
-            : 0;
+        // Calculate student trend
+        const iCurrentStudents = parseInt(trendStudents?.iCurrentStudents ?? '0');
+        const iPrevStudents = parseInt(trendStudents?.iPrevStudents ?? '0');
+        let sStudentsTrend = '';
+        if (iPrevStudents > 0) {
+            const pct = ((iCurrentStudents - iPrevStudents) / iPrevStudents) * 100;
+            sStudentsTrend = pct >= 0 ? `+${pct.toFixed(1)}%` : `${pct.toFixed(1)}%`;
+        }
+
+        // Calculate goals trend
+        const iCurrentCompleted = parseInt(trendGoals?.iCurrentCompleted ?? '0');
+        const iPrevCompleted = parseInt(trendGoals?.iPrevCompleted ?? '0');
+        let sGoalsTrend = '';
+        if (iPrevCompleted > 0) {
+            const pct = ((iCurrentCompleted - iPrevCompleted) / iPrevCompleted) * 100;
+            sGoalsTrend = pct >= 0 ? `+${pct.toFixed(1)}%` : `${pct.toFixed(1)}%`;
+        }
+
+        // Build chart data
+        const chartRows = chartResult.rows;
+        const aChartLabels = chartRows.map(r => aMonthNames[r.iMonth - 1]);
+        const aGoalsTotalByMonth = chartRows.map(r => r.iCreated);
+        const aGoalsCompletedByMonth = chartRows.map(r => r.iCompleted);
 
         return {
             iTotalSchools:    parseInt(schools?.iTotalSchools    ?? '0'),
             iActiveSchools:   parseInt(schools?.iActiveSchools   ?? '0'),
             iInactiveSchools: parseInt(schools?.iInactiveSchools ?? '0'),
             iTotalStudents:   parseInt(students?.iTotalStudents  ?? '0'),
+            sStudentsTrend,
+            iGoalProgress:    parseInt(goalProgress?.iGoalProgress ?? '0'),
+            sGoalsTrend,
             dAvgStudents:     parseFloat(students?.dAvgStudents  ?? '0'),
-            iTotalGoals,
-            iCompletedGoals,
-            iGoalProgress,
             dAvgTeachers:     parseFloat(users?.dAvgTeachers   ?? '0'),
             dAvgAdminStaff:   parseFloat(users?.dAvgAdminStaff ?? '0'),
+            aChartLabels,
+            aGoalsTotalByMonth,
+            aGoalsCompletedByMonth,
             aRecentSchools:   recentSchoolsResult.rows,
         };
     }

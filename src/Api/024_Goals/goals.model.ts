@@ -20,6 +20,7 @@ export interface IGoals {
     iScaleMin?: number;
     iScaleMax?: number;
     sFrequencyUnit?: string;
+    iBaselineValue?: number;
     dProgress?: number;
     dAverageValue?: number;
     iRecordsCount?: number;
@@ -46,6 +47,7 @@ export class GoalsModel extends Model {
     public iScaleMin?: number;
     public iScaleMax?: number;
     public sFrequencyUnit?: string;
+    public iBaselineValue?: number;
     public dProgress?: number;
     public dAverageValue?: number;
     public iRecordsCount?: number;

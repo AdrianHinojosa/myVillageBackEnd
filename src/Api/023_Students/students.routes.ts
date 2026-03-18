@@ -37,4 +37,10 @@ router.delete('/:sStudentId',
     aH(verifySchoolUserPermissions(  [  {sModuleName: 'General', sActionCode: 'WRITE' }  ])),
     aH(StudentController.deleteStudent));
 
+// GET /:sStudentId/report — Student progress report
+router.get('/:sStudentId/report',
+    celebrate({ params: StudentValidations.GetStudentParams }),
+    aH(verifySchoolUserPermissions(  [  {sModuleName: 'General', sActionCode: 'READ' }  ])),
+    aH(StudentController.getStudentReport));
+
 export default router;

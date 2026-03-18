@@ -224,6 +224,78 @@ export default {
         }
     },
 
+    // ========  TrackingRecords  ==================
+    TrackingRecords: {
+        createRecord: {
+            sp: 'Registro guardado exitosamente.',
+            en: "The tracking record was created successfully."
+        },
+        getAllRecords: {
+            sp: 'Se han encontrado los registros!',
+            en: "The tracking records were successfully found."
+        },
+        toggleExclusion: {
+            sp: 'Se actualizó la exclusión del registro exitosamente.',
+            en: "The record exclusion was updated successfully."
+        },
+        deleteRecord: {
+            sp: 'Registro eliminado.',
+            en: "The tracking record was successfully deleted."
+        },
+        uploadFiles: {
+            sp: 'Archivos subidos exitosamente.',
+            en: "The files were uploaded successfully."
+        }
+    },
+
+    // ========  IEPs  ==================
+    IEPs: {
+        upsertIep: {
+            sp: 'IEP guardado exitosamente.',
+            en: "The IEP was saved successfully."
+        },
+        getIep: {
+            sp: 'Se ha encontrado la información del IEP.',
+            en: "The IEP was successfully found."
+        }
+    },
+
+    // ========  SchoolUsers CRUD  ==================
+    SchoolUsersCrud: {
+        createUser: {
+            sp: 'Usuario creado exitosamente. Se ha enviado un correo de invitación.',
+            en: "The user was created successfully. An invitation email has been sent."
+        },
+        getAllUsers: {
+            sp: 'Se han encontrado los usuarios!',
+            en: "The users were successfully found."
+        },
+        getOneUser: {
+            sp: 'Se ha encontrado la información del usuario.',
+            en: "The user was successfully found."
+        },
+        updateUser: {
+            sp: 'Usuario actualizado exitosamente.',
+            en: "The user was updated successfully."
+        },
+        resetPassword: {
+            sp: 'Se ha enviado un correo para restablecer la contraseña.',
+            en: "A password reset email has been sent."
+        }
+    },
+
+    // ========  Profile  ==================
+    Profile: {
+        updateProfile: {
+            sp: 'Perfil actualizado exitosamente.',
+            en: "Profile updated successfully."
+        },
+        changePassword: {
+            sp: 'Contraseña actualizada exitosamente.',
+            en: "Password updated successfully."
+        }
+    },
+
     // ========  GoalTasks  ==================
     GoalTasks: {
         createGoalTask: {

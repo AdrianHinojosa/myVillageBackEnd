@@ -15,6 +15,10 @@ import AdministratorRoutes from '../005_Administrators/administrators.routes';
 import SchoolRoutes from '../022_Schools/schools.routes';
 import StudentRoutes from '../023_Students/students.routes';
 import GoalRoutes from '../024_Goals/goals.routes';
+import TrackingRecordRoutes from '../024_Goals/003_TrackingRecords/trackingRecords.routes';
+import IepRoutes from '../025_Ieps/ieps.routes';
+import SchoolUserRoutes from '../026_SchoolUsers/schoolUsers.routes';
+import ProfileRoutes from '../027_Profile/profile.routes';
 
 
 function BaseRoute(env: string, module: string): string {
@@ -29,6 +33,10 @@ export default (app: Application, env: string) : void => {
     app.use(BaseRoute(env, 'schools'), celebrate({ params: LanguageParams }), aH(Language()), aH(SchoolRoutes));
     app.use(BaseRoute(env, 'students'), celebrate({ params: LanguageParams }), aH(Language()), aH(StudentRoutes));
     app.use(BaseRoute(env, 'goals'), celebrate({ params: LanguageParams }), aH(Language()), aH(GoalRoutes));
+    app.use(BaseRoute(env, 'trackingRecords'), celebrate({ params: LanguageParams }), aH(Language()), aH(TrackingRecordRoutes));
+    app.use(BaseRoute(env, 'iep'), celebrate({ params: LanguageParams }), aH(Language()), aH(IepRoutes));
+    app.use(BaseRoute(env, 'schoolUsers'), celebrate({ params: LanguageParams }), aH(Language()), aH(SchoolUserRoutes));
+    app.use(BaseRoute(env, 'profile'), celebrate({ params: LanguageParams }), aH(Language()), aH(ProfileRoutes));
 
 
     app.all(`*`, (req: Request, res: Response, next: NextFunction): object => {

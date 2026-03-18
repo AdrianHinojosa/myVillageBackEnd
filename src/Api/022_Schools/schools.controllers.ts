@@ -228,9 +228,10 @@ class Controllers {
     // Get school analytics
     async getSchoolsAnalytics(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
         const {sLang} = res.locals;
+        const {tStartDate, tEndDate} = req.query;
 
         // GET school analytics
-        const oAnalytics = await SchoolQueries.findSchoolsAnalytics();
+        const oAnalytics = await SchoolQueries.findSchoolsAnalytics(tStartDate, tEndDate);
 
         return res.status(201).json({
             message: SuccessMessages.Schools.getAnalytics[sLang],

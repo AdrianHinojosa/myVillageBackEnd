@@ -20,7 +20,7 @@ class Queries {
     }
 
     // Insert a new goal with optional tasks
-    static async insertGoal({sStudentId, sTitle, sDescription, sMeasurementType, tStartDate, tTargetDate, iTargetValue, iTargetDuration, iScaleMin, iScaleMax, sFrequencyUnit, sCreatedBy}, aTasks) {
+    static async insertGoal({sStudentId, sTitle, sDescription, sMeasurementType, tStartDate, tTargetDate, iTargetValue, iTargetDuration, iScaleMin, iScaleMax, sFrequencyUnit, iBaselineValue, sCreatedBy}, aTasks) {
         return await GoalsModel.transaction(async (trx) => {
             // Insert goal
             const newGoal = await GoalsModel.query(trx).insert({
@@ -36,6 +36,7 @@ class Queries {
                 iScaleMin,
                 iScaleMax,
                 sFrequencyUnit,
+                iBaselineValue,
                 sCreatedBy,
                 sLastUpdatedBy: sCreatedBy,
                 bActive: true
@@ -60,7 +61,7 @@ class Queries {
     }
 
     // Update a goal with optional task replacement
-    static async updateGoal(sGoalId, {sTitle, sDescription, tStartDate, tTargetDate, iTargetValue, iTargetDuration, iScaleMin, iScaleMax, sFrequencyUnit, sLastUpdatedBy}, aTasks) {
+    static async updateGoal(sGoalId, {sTitle, sDescription, tStartDate, tTargetDate, iTargetValue, iTargetDuration, iScaleMin, iScaleMax, sFrequencyUnit, iBaselineValue, sLastUpdatedBy}, aTasks) {
         return await GoalsModel.transaction(async (trx) => {
             // Update goal
             const updatedGoal = await GoalsModel.query(trx).patchAndFetchById(sGoalId, {
@@ -73,6 +74,7 @@ class Queries {
                 iScaleMin,
                 iScaleMax,
                 sFrequencyUnit,
+                iBaselineValue,
                 sLastUpdatedBy
             }).where('bActive', true);
 

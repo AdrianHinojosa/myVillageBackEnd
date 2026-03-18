@@ -188,6 +188,10 @@ export default {
             sp: "El correo electrónico especificado ya se encuentra utilizado, por favor intenta probar con otro.",
             en: "The specified email address is already in use. Please try another."
         },
+        limitReached: {
+            sp: "Se ha alcanzado el límite de usuarios para este colegio.",
+            en: "The user limit for this school has been reached."
+        },
     },
 
     // ==== Students: =======
@@ -215,6 +219,42 @@ export default {
         notFound: {
             sp: "El archivo de la meta especificado no existe.",
             en: "The specified goal file does not exist."
+        },
+    },
+
+    // ==== TrackingRecords: =======
+    TrackingRecords: {
+        notFound: {
+            sp: "El registro especificado no existe.",
+            en: "The specified tracking record does not exist."
+        },
+        goalNotActive: {
+            sp: "No se pueden agregar registros a metas que no están activas.",
+            en: "Cannot add records to goals that are not active."
+        },
+    },
+
+    // ==== IEPs: =======
+    IEPs: {
+        notFound: {
+            sp: "El IEP especificado no existe.",
+            en: "The specified IEP does not exist."
+        },
+    },
+
+    // ==== Profile: =======
+    Profile: {
+        userNotFound: {
+            sp: "No se encontró el usuario.",
+            en: "User not found."
+        },
+        wrongPassword: {
+            sp: "La contraseña actual es incorrecta.",
+            en: "The current password is incorrect."
+        },
+        passwordsDontMatch: {
+            sp: "Las contraseñas no coinciden.",
+            en: "The passwords do not match."
         },
     },
 

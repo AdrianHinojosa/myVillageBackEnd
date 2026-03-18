@@ -51,4 +51,9 @@ export const PostSchoolImage = Validations.JoiObjectKeys({
     bDeleteImage: Validations.RequiredBoolean('Schools bDeleteImage'),
 });
 
+export const GetAnalyticsQuery = Validations.JoiObjectKeys({
+    tStartDate: Validations.Date("Analytics tStartDate"),
+    tEndDate: Validations.Date("Analytics tEndDate"),
+});
+
 export const Filters = Validations.Filters;

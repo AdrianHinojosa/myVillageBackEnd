@@ -377,6 +377,10 @@ export default {
                 sp: "Por favor, ingresa notas de cierre correctas.",
                 en: "Please, enter valid completion notes."
             },
+            iBaselineValue: {
+                sp: "Por favor, ingresa un valor de línea base correcto.",
+                en: "Please, enter a valid baseline value."
+            },
         },
 
         // ========== GoalTasks ==========
@@ -416,6 +420,234 @@ export default {
             sArrGoalFileNames: {
                 sp: "Por favor, ingresa los nombres de archivos correctamente.",
                 en: "Please, enter the file names correctly."
+            },
+        },
+
+        // ========== Analytics ==========
+        Analytics: {
+            tStartDate: {
+                sp: "Por favor, ingresa una fecha de inicio válida.",
+                en: "Please, enter a valid start date."
+            },
+            tEndDate: {
+                sp: "Por favor, ingresa una fecha de fin válida.",
+                en: "Please, enter a valid end date."
+            },
+        },
+
+        // ========== TrackingRecords ==========
+        TrackingRecords: {
+            sTrackingRecordId: {
+                sp: "Por favor, ingresa un identificador de registro correcto.",
+                en: "Please, enter a valid tracking record id."
+            },
+            sGoalId: {
+                sp: "Por favor, ingresa un identificador de meta correcto.",
+                en: "Please, enter a valid goal id."
+            },
+            dtDate: {
+                sp: "Por favor, ingresa una fecha de registro válida.",
+                en: "Please, enter a valid record date."
+            },
+            sNotes: {
+                sp: "Por favor, ingresa observaciones válidas.",
+                en: "Please, enter valid notes."
+            },
+            iCorrect: {
+                sp: "Por favor, ingresa un valor de aciertos correcto.",
+                en: "Please, enter a valid correct count."
+            },
+            iTotal: {
+                sp: "Por favor, ingresa un valor total correcto.",
+                en: "Please, enter a valid total count."
+            },
+            iScaleValue: {
+                sp: "Por favor, ingresa un valor de escala correcto.",
+                en: "Please, enter a valid scale value."
+            },
+            iFrequencyCount: {
+                sp: "Por favor, ingresa un conteo de frecuencia correcto.",
+                en: "Please, enter a valid frequency count."
+            },
+            iDurationMinutes: {
+                sp: "Por favor, ingresa una duración en minutos correcta.",
+                en: "Please, enter a valid duration in minutes."
+            },
+            iSuccessful: {
+                sp: "Por favor, ingresa un valor de éxitos correcto.",
+                en: "Please, enter a valid successful count."
+            },
+            iOpportunities: {
+                sp: "Por favor, ingresa un valor de oportunidades correcto.",
+                en: "Please, enter a valid opportunities count."
+            },
+            aTasksCompleted: {
+                sp: "Por favor, ingresa las tareas completadas correctamente.",
+                en: "Please, enter the completed tasks correctly."
+            },
+            bExcludedFromAverage: {
+                sp: "Por favor, ingresa un valor verdadero o falso para la exclusión del promedio.",
+                en: "Please, enter a true or false value for average exclusion."
+            },
+            tStartDate: {
+                sp: "Por favor, ingresa una fecha de inicio válida.",
+                en: "Please, enter a valid start date."
+            },
+            tEndDate: {
+                sp: "Por favor, ingresa una fecha de fin válida.",
+                en: "Please, enter a valid end date."
+            },
+        },
+
+        // ========== IEPs ==========
+        IEPs: {
+            sStudentId: {
+                sp: "Por favor, ingresa un identificador de estudiante correcto.",
+                en: "Please, enter a valid student id."
+            },
+            sStatus: {
+                sp: "Por favor, ingresa un estado correcto (DRAFT, ACTIVE, ARCHIVED).",
+                en: "Please, enter a valid status (DRAFT, ACTIVE, ARCHIVED)."
+            },
+            aExternalServices: {
+                sp: "Por favor, ingresa los servicios externos correctamente.",
+                en: "Please, enter the external services correctly."
+            },
+            sParentNames: {
+                sp: "Por favor, ingresa los nombres de los padres correctamente.",
+                en: "Please, enter the parent names correctly."
+            },
+            sParentConcerns: {
+                sp: "Por favor, ingresa las preocupaciones de los padres correctamente.",
+                en: "Please, enter the parent concerns correctly."
+            },
+            sSchoolAssignment: {
+                sp: "Por favor, ingresa la asignación escolar correctamente.",
+                en: "Please, enter the school assignment correctly."
+            },
+            sSchoolAssignmentOther: {
+                sp: "Por favor, ingresa la asignación escolar alternativa correctamente.",
+                en: "Please, enter the other school assignment correctly."
+            },
+            sStrengths: {
+                sp: "Por favor, ingresa las fortalezas correctamente.",
+                en: "Please, enter the strengths correctly."
+            },
+            sAreasOfOpportunity: {
+                sp: "Por favor, ingresa las áreas de oportunidad correctamente.",
+                en: "Please, enter the areas of opportunity correctly."
+            },
+            sCognitiveEvaluations: {
+                sp: "Por favor, ingresa las evaluaciones cognitivas correctamente.",
+                en: "Please, enter the cognitive evaluations correctly."
+            },
+            sSubjectGrades: {
+                sp: "Por favor, ingresa las calificaciones por materia correctamente.",
+                en: "Please, enter the subject grades correctly."
+            },
+            sEvaluationResults: {
+                sp: "Por favor, ingresa los resultados de evaluación correctamente.",
+                en: "Please, enter the evaluation results correctly."
+            },
+            sCommunicationComments: {
+                sp: "Por favor, ingresa los comentarios de comunicación correctamente.",
+                en: "Please, enter the communication comments correctly."
+            },
+            sMotorComments: {
+                sp: "Por favor, ingresa los comentarios motores correctamente.",
+                en: "Please, enter the motor comments correctly."
+            },
+            sSocioemotionalComments: {
+                sp: "Por favor, ingresa los comentarios socioemocionales correctamente.",
+                en: "Please, enter the socioemotional comments correctly."
+            },
+            sIndependenceComments: {
+                sp: "Por favor, ingresa los comentarios de independencia correctamente.",
+                en: "Please, enter the independence comments correctly."
+            },
+            aFocusAreas: {
+                sp: "Por favor, ingresa las áreas de enfoque correctamente.",
+                en: "Please, enter the focus areas correctly."
+            },
+            sFocusAreasSubjects: {
+                sp: "Por favor, ingresa las materias de áreas de enfoque correctamente.",
+                en: "Please, enter the focus area subjects correctly."
+            },
+            aAccommodations: {
+                sp: "Por favor, ingresa las adecuaciones correctamente.",
+                en: "Please, enter the accommodations correctly."
+            },
+            sOtherAccommodations: {
+                sp: "Por favor, ingresa las otras adecuaciones correctamente.",
+                en: "Please, enter the other accommodations correctly."
+            },
+            bRequiresModifications: {
+                sp: "Por favor, ingresa si requiere modificaciones.",
+                en: "Please, specify if modifications are required."
+            },
+            aModifications: {
+                sp: "Por favor, ingresa las modificaciones correctamente.",
+                en: "Please, enter the modifications correctly."
+            },
+            aObjectives: {
+                sp: "Por favor, ingresa los objetivos correctamente.",
+                en: "Please, enter the objectives correctly."
+            },
+        },
+
+        // ========== SchoolUsersCrud ==========
+        SchoolUsersCrud: {
+            sSchoolUserId: {
+                sp: "Por favor, ingresa un identificador de usuario correcto.",
+                en: "Please, enter a valid school user id."
+            },
+            sName: {
+                sp: "Por favor, ingresa un nombre correcto.",
+                en: "Please, enter a valid name."
+            },
+            sLastName: {
+                sp: "Por favor, ingresa un apellido correcto.",
+                en: "Please, enter a valid last name."
+            },
+            sSecondLastName: {
+                sp: "Por favor, ingresa un apellido materno correcto.",
+                en: "Please, enter a valid second last name."
+            },
+            sEmail: {
+                sp: "Por favor, ingresa una dirección de correo válida.",
+                en: "Please, enter a valid email."
+            },
+            sType: {
+                sp: "Por favor, ingresa un tipo de usuario correcto (FACULTY, ADMINISTRATION).",
+                en: "Please, enter a valid user type (FACULTY, ADMINISTRATION)."
+            },
+            bActive: {
+                sp: "Por favor, ingresa un valor verdadero o falso para el estado activo.",
+                en: "Please, enter a true or false value for active status."
+            },
+        },
+
+        // ========== Profile ==========
+        Profile: {
+            sName: {
+                sp: "Por favor, ingresa un nombre correcto.",
+                en: "Please, enter a valid name."
+            },
+            sPhone: {
+                sp: "Por favor, ingresa un número de teléfono correcto.",
+                en: "Please, enter a valid phone number."
+            },
+            sCurrentPassword: {
+                sp: "Por favor, ingresa tu contraseña actual.",
+                en: "Please, enter your current password."
+            },
+            sNewPassword: {
+                sp: "Por favor, ingresa una nueva contraseña válida. Debe tener mínimo 8 caracteres, una mayúscula, una minúscula, un número y un carácter especial.",
+                en: "Please, enter a valid new password. Must be at least 8 characters with one uppercase, one lowercase, one number, and one special character."
+            },
+            sConfirmPassword: {
+                sp: "Por favor, confirma tu nueva contraseña.",
+                en: "Please, confirm your new password."
             },
         },
 

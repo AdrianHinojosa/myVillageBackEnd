@@ -177,53 +177,77 @@ class StorageMethods {
     
     public UploadFile (sLang, fileData, sPath, sFileName) : Promise<any> {
         const fileType : string = this.CheckFormat({ sType: fileData.mimetype, sFormat: fileData.name });
+        if (!fileType) {
+            console.error('Unsupported MIME type:', fileData.mimetype, 'File:', fileData.name);
+            throw new MyError(400, ErrorMessages.UploadImages.invalidFile[sLang]);
+        }
         const Key: string = `${sPath}/${Crypto.pseudoRandomBytes(16).toString('hex')}.${fileType}`;
         const encodedFileName = encodeURIComponent(`${sFileName}.${fileType}`);
         const Params = {
             Bucket: process.env.AWS_BUCKET_NAME,
             Key,
             Body: fileData.data,
-            ContentType: fileData.mimetype ? fileData.mimetype : 'application/pdf', //fileData.name != null ? fileData.name : fileData.mimetype  // Assuming fileData contains mimetype
-            ContentDisposition: `inline; filename="${encodedFileName}"` // This sets the filename for download
+            ContentType: fileData.mimetype ? fileData.mimetype : 'application/pdf',
+            ContentDisposition: `inline; filename="${encodedFileName}"`
         };
         return s3.upload(Params).promise()
             .then(resp => {
                 return {
-                    sFileKey: Key,      // The S3 key of the file
-                    sFileType: fileType // The determined file type
+                    sFileKey: Key,
+                    sFileType: fileType
                 }
             })
             .catch(err => {
-                console.log(err)
-                throw new MyError(400, ErrorMessages.UploadImages.invalidFile[sLang] );
+                console.error('S3 upload error:', err.message || err);
+                throw new MyError(400, ErrorMessages.UploadImages.s3UploadError[sLang]);
             });
     };
 
     public CheckFormat({ sType, sFormat }: { sType?: string; sFormat: string }): string {
-        let Response: string = null;
-        if (sType === 'application/pdf') return 'pdf';
-        if (sType === 'image/jpeg') return 'jpeg';
-        if (sType === 'image/jpg') return 'jpg';
-        if (sType === 'image/png') return 'png';
-        if (sType === 'text/xml') return 'xml';
-        if (sType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') return 'xlsx';
-        if (sType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') return 'pptx';
-        if (sType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return 'docx';
+        const mimeMap: Record<string, string> = {
+            // PDF
+            'application/pdf': 'pdf',
+            // Images
+            'image/jpeg': 'jpeg',
+            'image/jpg': 'jpg',
+            'image/png': 'png',
+            'image/gif': 'gif',
+            'image/bmp': 'bmp',
+            'image/webp': 'webp',
+            'image/svg+xml': 'svg',
+            'image/tiff': 'tiff',
+            'image/x-icon': 'ico',
+            'image/vnd.microsoft.icon': 'ico',
+            'image/heic': 'heic',
+            'image/heif': 'heif',
+            'image/avif': 'avif',
+            // Word
+            'application/msword': 'doc',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+            // Excel
+            'application/vnd.ms-excel': 'xls',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+            'text/csv': 'csv',
+            // PowerPoint
+            'application/vnd.ms-powerpoint': 'ppt',
+            'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
+            // Text
+            'text/plain': 'txt',
+            'application/rtf': 'rtf',
+            'text/xml': 'xml',
+            // Archives
+            'application/zip': 'zip',
+            'application/x-7z-compressed': '7z',
+            // CAD
+            'application/acad': 'dwg',
+            'application/x-autocad': 'dxf',
+            'application/dxf': 'dxf',
+            'application/skp': 'skp',
+        };
+
+        if (sType && mimeMap[sType]) return mimeMap[sType];
         if (sType === 'application/octet-stream') return this.getFileEnding({ sFormat });
-        if (sType === 'application/msword') return 'doc';
-        if (sType === 'text/plain') return 'txt';
-        if (sType === 'application/rtf') return 'rtf';
-        if (sType === 'application/zip') return 'zip';
-        if (sType === 'application/x-7z-compressed') return '7z';
-        // CAD Files
-        if (sType === 'application/acad') return 'dwg'; // AutoCAD
-        if (sType === 'application/x-autocad') return 'dxf'; // AutoCAD
-        if (sType === 'application/dxf') return 'dxf'; // AutoCAD
-        // Revit Files - There's no official MIME type, but these are common practices.
-        if (sType === 'application/octet-stream' && sFormat.toLowerCase().endsWith('.rvt')) return 'rvt'; // Revit
-        // Other architecture files
-        if (sType === 'application/skp') return 'skp'; // SketchUp
-        return Response;
+        return null;
     }
 
     public getFileEnding({sFormat}: { sFormat: string}): string {

@@ -42,26 +42,18 @@ export default () => async (err: IErrHandler, req: Request, res: Response, next:
         return next(err);
     }
     if (err instanceof ValidationError) {
-        console.log("this is a validation error.");
-        switch (err.type) {
-            case "ModelValidation":
-                next(new MyError(400, "Verifique que los campos ingresados sean correctos."));
-                break;
-            case "RelationExpression":
-                next(new MyError(400, "Verifique que los campos ingresados sean correctos."));
-                break;
-            case "UnallowedRelation":
-                next(new MyError(400, "Verifique que los campos ingresados sean correctos."));
-                break;
-            case "InvalidGraph":
-                next(new MyError(400, "Verifique que los campos ingresados sean correctos."));
-                break;
-            default:
-                next(new MyError(400, "Verifique que los campos ingresados sean correctos."));
-                break;
-        }
+        console.log("Objection ValidationError:", err.type, JSON.stringify(err.data));
+        const sErrLang = sLang || 'sp';
+        const sMsg = sErrLang === 'en'
+            ? "Please verify that the entered fields are correct."
+            : "Verifique que los campos ingresados sean correctos.";
+        return next(new MyError(400, sMsg));
     } else if (err instanceof NotFoundError) {
-        return next(new MyError(404, "Verifique que los campos ingresados sean correctos."));
+        const sErrLang = sLang || 'sp';
+        const sMsg = sErrLang === 'en'
+            ? "The requested resource was not found."
+            : "El recurso solicitado no fue encontrado.";
+        return next(new MyError(404, sMsg));
     } else if (err instanceof UniqueViolationError) {
         if (err.columns.includes("sEmail")) {
             return next(
@@ -72,29 +64,42 @@ export default () => async (err: IErrHandler, req: Request, res: Response, next:
             return next(new MyError(409,  "Verifique que los campos ingresados sean correctos."));
         }
     } else if (err instanceof NotNullViolationError) {
-        return next(
-            new MyError(400, "Es necesario llenar todos los datos requeridos")
-        );
+        console.log("NotNullViolationError:", err.column);
+        const sErrLang = sLang || 'sp';
+        const sMsg = sErrLang === 'en'
+            ? "Please fill in all required fields."
+            : "Es necesario llenar todos los datos requeridos.";
+        return next(new MyError(400, sMsg));
     } else if (err instanceof ForeignKeyViolationError) {
-        return next(new MyError(409, "Verifique que los campos ingresados sean correctos."));
+        console.log("ForeignKeyViolationError:", err.constraint);
+        const sErrLang = sLang || 'sp';
+        const sMsg = sErrLang === 'en'
+            ? "Please verify that the entered fields are correct."
+            : "Verifique que los campos ingresados sean correctos.";
+        return next(new MyError(409, sMsg));
     } else if (err instanceof CheckViolationError) {
-        return next(new MyError(400, "Verifique que los campos ingresados sean correctos."));
+        console.log("CheckViolationError:", err.constraint);
+        const sErrLang = sLang || 'sp';
+        const sMsg = sErrLang === 'en'
+            ? "Please verify that the entered fields are correct."
+            : "Verifique que los campos ingresados sean correctos.";
+        return next(new MyError(400, sMsg));
     } else if (err instanceof DataError) {
-        console.log(err);
-        console.log("DATA ERROR");
-        return next(
-            new MyError(400, "Verifique que los campos ingresados sean correctos.")
-        );
+        console.log("DataError:", err.message);
+        const sErrLang = sLang || 'sp';
+        const sMsg = sErrLang === 'en'
+            ? "Please verify that the entered fields are correct."
+            : "Verifique que los campos ingresados sean correctos.";
+        return next(new MyError(400, sMsg));
     } else if (err instanceof DBError) {
-        return next(new MyError(500, "Verifique que los campos ingresados sean correctos."));
+        console.log("DBError:", err.message);
+        const sErrLang = sLang || 'sp';
+        const sMsg = sErrLang === 'en'
+            ? "A database error occurred."
+            : "Ocurrió un error de base de datos.";
+        return next(new MyError(500, sMsg));
     } else if (err instanceof URIError) {
-        return next(
-            new MyError(400, 'Bad request.')
-        )
-    } 
-    else if (err instanceof DBError) {
-        // Check if it's a check constraint violation for sActionCode
-        return next(new MyError(409, 'Verifique que los campos ingresados sean correctos.'));
+        return next(new MyError(400, 'Bad request.'));
     }
     
     else if (err.name === "JsonWebTokenError") {

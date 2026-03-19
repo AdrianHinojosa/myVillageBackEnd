@@ -230,14 +230,18 @@ class Controllers {
         const {sLang} = res.locals;
         const {tStartDate, tEndDate} = req.query;
 
-        // GET school analytics
-        const oAnalytics = await SchoolQueries.findSchoolsAnalytics(tStartDate, tEndDate);
+        try {
+            const oAnalytics = await SchoolQueries.findSchoolsAnalytics(tStartDate, tEndDate);
 
-        return res.status(201).json({
-            message: SuccessMessages.Schools.getAnalytics[sLang],
-            ...oAnalytics,
-            success: true
-        })
+            return res.status(200).json({
+                message: SuccessMessages.Schools.getAnalytics[sLang],
+                ...oAnalytics,
+                success: true
+            })
+        } catch (err) {
+            console.error('Analytics query error:', err);
+            return next(new MyError(500, ErrorMessages.Schools.analyticsError[sLang]));
+        }
     }
 
 }

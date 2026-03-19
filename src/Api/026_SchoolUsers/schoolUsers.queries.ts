@@ -23,12 +23,7 @@ class Queries {
                 TRIM(CONCAT_WS(' ', "Users"."sName", "Users"."sLastName", "Users"."sSecondLastName")) AS "sFullName"
             `));
 
-            // Determine type: sCreatedBy IS NULL = admin created with school, IS NOT NULL = created user (faculty/staff)
-            // For now we store sType info in a note: super school user vs regular
-            // Since there's no sType column on Users, we derive it from sCreatedBy
-            queryBuilder.select(db.raw(`
-                CASE WHEN "Users"."sCreatedBy" IS NULL THEN 'ADMINISTRATION' ELSE 'FACULTY' END AS "sType"
-            `));
+            queryBuilder.select('Users.sType');
 
             queryBuilder.innerJoin('SchoolUsers', 'SchoolUsers.sSchoolUserId', '=', 'Users.sUserId');
             queryBuilder.where('SchoolUsers.sSchoolId', sSchoolId);
@@ -44,11 +39,7 @@ class Queries {
             }
 
             if (sType) {
-                if (sType === 'ADMINISTRATION') {
-                    queryBuilder.whereNull('Users.sCreatedBy');
-                } else if (sType === 'FACULTY') {
-                    queryBuilder.whereNotNull('Users.sCreatedBy');
-                }
+                queryBuilder.where('Users.sType', sType);
             }
 
             if (bActive === true || bActive === false) {
@@ -79,6 +70,7 @@ class Queries {
                 'Users.sLastName',
                 'Users.sSecondLastName',
                 'Users.sEmail',
+                'Users.sCreatedBy',
                 'Users.bVerified',
                 'Users.bActive',
                 'Users.created_at'
@@ -86,9 +78,7 @@ class Queries {
             .select(db.raw(`
                 TRIM(CONCAT_WS(' ', "Users"."sName", "Users"."sLastName", "Users"."sSecondLastName")) AS "sFullName"
             `))
-            .select(db.raw(`
-                CASE WHEN "Users"."sCreatedBy" IS NULL THEN 'ADMINISTRATION' ELSE 'FACULTY' END AS "sType"
-            `))
+            .select('Users.sType')
             .innerJoin('SchoolUsers', 'SchoolUsers.sSchoolUserId', '=', 'Users.sUserId')
             .where('SchoolUsers.sSchoolId', sSchoolId)
             .where('Users.sUserId', sSchoolUserId)
@@ -116,6 +106,7 @@ class Queries {
                 sSecondLastName,
                 sEmail: sEmail.toLowerCase(),
                 sImageKey: '',
+                sType: 'FACULTY',
                 sCreatedBy,
                 bPlatformAccess: false,
                 bVerified: false,
@@ -133,8 +124,9 @@ class Queries {
     }
 
     // Update school user (update Users table)
-    static async updateSchoolUser(sSchoolUserId, { sName, sLastName, sSecondLastName, bActive, sLastUpdatedBy }) {
+    static async updateSchoolUser(sSchoolUserId, { sName, sLastName, sSecondLastName, sType, bActive, sLastUpdatedBy }) {
         const patchData: any = { sName, sLastName, sSecondLastName, sLastUpdatedBy };
+        if (sType) patchData.sType = sType;
         if (bActive !== undefined && bActive !== null) {
             patchData.bActive = bActive;
             if (bActive === false) {

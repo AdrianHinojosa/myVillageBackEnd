@@ -22,7 +22,7 @@ class Controllers {
     // Create a student
     async createStudent(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
         const {sLang, sSchoolId, sUserId} = res.locals;
-        const {sName, sLastName, sSecondLastName, iBirthYear, sGrade, sGroup, sDiagnosis, sNotes} = req.body;
+        const {sName, sLastName, sSecondLastName, sCustomStudentId, iBirthYear, sGrade, sGroup, sDiagnosis, sNotes} = req.body;
 
         // Validate student limit
         const mySchool = await SchoolQueries.verifySchoolExists(sSchoolId);
@@ -41,6 +41,7 @@ class Controllers {
             sName,
             sLastName,
             sSecondLastName,
+            sCustomStudentId,
             iBirthYear,
             sGrade,
             sGroup,
@@ -101,7 +102,7 @@ class Controllers {
     async updateStudent(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
         const {sLang, sSchoolId, sUserId} = res.locals;
         const {sStudentId} = req.params;
-        const {sName, sLastName, sSecondLastName, iBirthYear, sGrade, sGroup, sDiagnosis, sNotes} = req.body;
+        const {sName, sLastName, sSecondLastName, sCustomStudentId, iBirthYear, sGrade, sGroup, sDiagnosis, sNotes} = req.body;
 
         // Verify student exists and belongs to school
         const myStudent = await StudentQueries.verifyStudentExistsBySchool(sSchoolId, sStudentId);
@@ -114,6 +115,7 @@ class Controllers {
             sName,
             sLastName,
             sSecondLastName,
+            sCustomStudentId,
             iBirthYear,
             sGrade,
             sGroup,
@@ -161,10 +163,10 @@ class Controllers {
             return next(new MyError(404, ErrorMessages.Students.notFound[sLang]));
         }
 
-        // Default date range: current month
+        // Default date range: current month (use local date, not UTC)
         const now = new Date();
-        const sStart = tStartDate ? String(tStartDate) : new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-        const sEnd = tEndDate ? String(tEndDate) : now.toISOString().split('T')[0];
+        const sStart = tStartDate ? String(tStartDate) : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+        const sEnd = tEndDate ? String(tEndDate) : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
         // Get all goals for student with their tasks
         const goalsResult = await GoalQueries.findGoalsByStudent(sStudentId, 1, 1000, null, null);
@@ -185,13 +187,14 @@ class Controllers {
                 .orderBy('tRecordDate', 'desc');
         }
 
-        // Calculate summary
+        // Calculate summary (scoped to goals with records in date range)
+        const goalIdsWithRecords = new Set(allRecords.map((r: any) => r.sGoalId));
         const iActiveGoals = aGoals.filter((g: any) => g.sStatus === 'ACTIVE').length;
         const iCompletedGoals = aGoals.filter((g: any) => g.sStatus === 'COMPLETED').length;
         const iNotAchievedGoals = aGoals.filter((g: any) => g.sStatus === 'NOT_ACHIEVED').length;
-        const activeGoals = aGoals.filter((g: any) => g.sStatus === 'ACTIVE');
-        const dAverageProgress = activeGoals.length > 0
-            ? activeGoals.reduce((sum: number, g: any) => sum + (parseFloat(g.dProgress) || 0), 0) / activeGoals.length
+        const activeGoalsWithRecords = aGoals.filter((g: any) => g.sStatus === 'ACTIVE' && goalIdsWithRecords.has(g.sGoalId));
+        const dAverageProgress = activeGoalsWithRecords.length > 0
+            ? activeGoalsWithRecords.reduce((sum: number, g: any) => sum + (parseFloat(g.dProgress) || 0), 0) / activeGoalsWithRecords.length
             : 0;
         const iOverdueGoals = aGoals.filter((g: any) => g.sStatus === 'ACTIVE' && g.tTargetDate && new Date(g.tTargetDate) < now).length;
 

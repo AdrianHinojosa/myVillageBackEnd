@@ -8,6 +8,28 @@ import ErrorMessages from '../../Utils/ErrorMessages.util';
 class Controllers {
     constructor() {};
 
+    // GET /profile — Get own profile
+    async getProfile(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
+        const {sLang, sUserId} = res.locals;
+
+        const user = await UsersModel.query().findById(sUserId).where('bActive', true);
+        if (!user) {
+            return next(new MyError(404, ErrorMessages.Profile.userNotFound[sLang]));
+        }
+
+        return res.status(200).json({
+            message: SuccessMessages.Profile.getProfile[sLang],
+            oData: {
+                sName: user.sName,
+                sLastName: user.sLastName,
+                sSecondLastName: user.sSecondLastName,
+                sEmail: user.sEmail,
+                sPhone: user.sPhoneNumber || ''
+            },
+            success: true
+        });
+    }
+
     // PUT /profile — Update own profile
     async updateProfile(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
         const {sLang, sUserId} = res.locals;

@@ -293,6 +293,10 @@ export default {
                 sp: "Por favor, ingresa un apellido materno correcto.",
                 en: "Please, enter a valid second last name."
             },
+            sCustomStudentId: {
+                sp: "Por favor, ingresa un ID de alumno correcto.",
+                en: "Please, enter a valid student ID."
+            },
             iBirthYear: {
                 sp: "Por favor, ingresa un año de nacimiento correcto.",
                 en: "Please, enter a valid birth year."

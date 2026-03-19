@@ -16,12 +16,13 @@ class Queries {
     }
 
     // Insert student
-    static async insertStudent({sSchoolId, sName, sLastName, sSecondLastName, iBirthYear, sGrade, sGroup, sDiagnosis, sNotes, sCreatedBy}) {
+    static async insertStudent({sSchoolId, sName, sLastName, sSecondLastName, sCustomStudentId, iBirthYear, sGrade, sGroup, sDiagnosis, sNotes, sCreatedBy}) {
         return await StudentsModel.query().insert({
             sSchoolId,
             sName,
             sLastName,
             sSecondLastName,
+            sCustomStudentId,
             iBirthYear,
             sGrade,
             sGroup,
@@ -34,11 +35,12 @@ class Queries {
     }
 
     // Update student
-    static async updateStudent(sStudentId, {sName, sLastName, sSecondLastName, iBirthYear, sGrade, sGroup, sDiagnosis, sNotes, sLastUpdatedBy}) {
+    static async updateStudent(sStudentId, {sName, sLastName, sSecondLastName, sCustomStudentId, iBirthYear, sGrade, sGroup, sDiagnosis, sNotes, sLastUpdatedBy}) {
         return await StudentsModel.query().patchAndFetchById(sStudentId, {
             sName,
             sLastName,
             sSecondLastName,
+            sCustomStudentId,
             iBirthYear,
             sGrade,
             sGroup,

@@ -286,6 +286,10 @@ export default {
 
     // ========  Profile  ==================
     Profile: {
+        getProfile: {
+            sp: 'Perfil obtenido exitosamente.',
+            en: "Profile retrieved successfully."
+        },
         updateProfile: {
             sp: 'Perfil actualizado exitosamente.',
             en: "Profile updated successfully."

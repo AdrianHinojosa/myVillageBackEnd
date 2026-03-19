@@ -16,6 +16,7 @@ export interface IUsers {
     sEmail?: string;
     sPassword?: string;
     sImageKey?: string;
+    sType?: string;
     sCreatedBy?: string;
     sLastUpdatedBy?: string;
     sPhoneNumber?: string;
@@ -35,6 +36,7 @@ export class UsersModel extends Model {
     public sEmail?: string;
     public sPassword?: string;
     public sImageKey?: string;
+    public sType?: string;
     public sCreatedBy?: string;
     public sLastUpdatedBy?: string;
     public sPhoneNumber?: string;

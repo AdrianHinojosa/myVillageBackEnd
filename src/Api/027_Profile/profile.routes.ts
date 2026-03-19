@@ -7,6 +7,12 @@ import { verifySchoolUserPermissions } from '../../Middlewares/001_Permissions.m
 
 const router = Router();
 
+// GET /profile — Get own profile
+router.get('/',
+    aH(verifySchoolUserPermissions([{ sModuleName: 'General', sActionCode: 'READ' }])),
+    aH(ProfileController.getProfile)
+);
+
 // PUT /profile — Update own profile
 router.put('/',
     celebrate({ body: ProfileValidations.UpdateProfileBody }),

@@ -10,6 +10,7 @@ export interface IStudents {
     sName?: string;
     sLastName?: string;
     sSecondLastName?: string;
+    sCustomStudentId?: string;
     iBirthYear?: number;
     sGrade?: string;
     sGroup?: string;
@@ -27,6 +28,7 @@ export class StudentsModel extends Model {
     public sName?: string;
     public sLastName?: string;
     public sSecondLastName?: string;
+    public sCustomStudentId?: string;
     public iBirthYear?: number;
     public sGrade?: string;
     public sGroup?: string;

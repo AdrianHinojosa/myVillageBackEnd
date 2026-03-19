@@ -26,6 +26,10 @@ export default {
             sp: "Formato de documento no soportado.",
             en: "File format not supported.",
         },
+        s3UploadError: {
+            sp: "Error al subir el archivo. Verifique la configuración del servidor.",
+            en: "Error uploading file. Please check server configuration."
+        },
         moreThanAllowedImages: {
             sp: "Por favor, ingresa solamente una imagen.",
             en: "Please enter only one image.",
@@ -173,6 +177,11 @@ export default {
             en: "Your school does not have access to the platform."
         },
 
+        analyticsError: {
+            sp: "Error al obtener las analíticas de escuelas.",
+            en: "Error fetching school analytics."
+        },
+
     },
 
     SchoolUsers: {
@@ -191,6 +200,14 @@ export default {
         limitReached: {
             sp: "Se ha alcanzado el límite de usuarios para este colegio.",
             en: "The user limit for this school has been reached."
+        },
+        cannotDeleteMainAdmin: {
+            sp: "No se puede eliminar al administrador principal de la escuela.",
+            en: "Cannot delete the main school administrator."
+        },
+        cannotChangeMainAdminType: {
+            sp: "No se puede cambiar el tipo del administrador principal de la escuela.",
+            en: "Cannot change the type of the main school administrator."
         },
     },
 

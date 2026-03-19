@@ -123,8 +123,18 @@ class Controllers {
             return next(new MyError(404, ErrorMessages.SchoolUsers.notFound[sLang]));
         }
 
+        // Guard: main admin (sCreatedBy IS NULL) cannot have sType changed
+        if (myUser.sCreatedBy === null || myUser.sCreatedBy === undefined) {
+            if (sType && sType !== 'ADMINISTRATION') {
+                return next(new MyError(403, ErrorMessages.SchoolUsers.cannotChangeMainAdminType[sLang]));
+            }
+            if (bActive === false) {
+                return next(new MyError(403, ErrorMessages.SchoolUsers.cannotDeleteMainAdmin[sLang]));
+            }
+        }
+
         await SchoolUserCrudQueries.updateSchoolUser(sSchoolUserId, {
-            sName, sLastName, sSecondLastName, bActive, sLastUpdatedBy: sUserId
+            sName, sLastName, sSecondLastName, sType, bActive, sLastUpdatedBy: sUserId
         });
 
         // If deactivating, kill all sessions for this user

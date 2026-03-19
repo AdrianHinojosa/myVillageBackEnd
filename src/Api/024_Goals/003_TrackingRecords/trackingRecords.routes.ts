@@ -6,7 +6,7 @@ import * as TrackingRecordValidations from './trackingRecords.validations';
 import { verifySchoolUserPermissions } from '../../../Middlewares/001_Permissions.mw.ts/schools.permissions';
 import upload from 'express-fileupload';
 
-const router = Router({ mergeParams: true });
+const router = Router();
 
 // POST /trackingRecords — Create a tracking record
 router.post('/',

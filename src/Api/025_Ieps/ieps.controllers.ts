@@ -19,18 +19,25 @@ class Controllers {
             return next(new MyError(404, ErrorMessages.Students.notFound[sLang]));
         }
 
-        const iep = await IepQueries.upsertIep(sStudentId, oIepData, sUserId);
+        try {
+            const iep = await IepQueries.upsertIep(sStudentId, oIepData, sUserId);
 
-        return res.status(201).json({
-            message: SuccessMessages.IEPs.upsertIep[sLang],
-            oData: {
-                sIepId: iep.sIepId,
-                sStudentId: iep.sStudentId,
-                sStatus: iep.sStatus,
-                dtUpdatedAt: iep.updated_at
-            },
-            success: true
-        });
+            return res.status(201).json({
+                message: SuccessMessages.IEPs.upsertIep[sLang],
+                oData: {
+                    sIepId: iep.sIepId,
+                    sStudentId: iep.sStudentId,
+                    sStatus: iep.sStatus,
+                    dtUpdatedAt: iep.updated_at
+                },
+                success: true
+            });
+        } catch (err) {
+            console.error('IEP upsert error:', err.message || err);
+            console.error('IEP upsert nativeError:', err.nativeError?.message || 'none');
+            console.error('IEP upsert data keys:', Object.keys(oIepData));
+            return next(err);
+        }
     }
 
     // GET /iep?sStudentId=xxx — Get Student's IEP

@@ -279,9 +279,14 @@ class Queries {
     // Get comprehensive schools analytics data with date filtering
     static async findSchoolsAnalytics(tStartDate?, tEndDate?) {
         // Default date range: current month if not provided
+        // Note: Joi.date() converts query params to JS Date objects, so we must convert back to YYYY-MM-DD strings
         const now = new Date();
-        const sStart = tStartDate ? String(tStartDate) : new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-        const sEnd = tEndDate ? String(tEndDate) : now.toISOString().split('T')[0];
+        const sStart = tStartDate
+            ? (tStartDate instanceof Date ? tStartDate.toISOString().split('T')[0] : String(tStartDate))
+            : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+        const sEnd = tEndDate
+            ? (tEndDate instanceof Date ? tEndDate.toISOString().split('T')[0] : String(tEndDate))
+            : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
         // Calculate previous period for trend comparison (same-length period immediately before)
         const startMs = new Date(sStart).getTime();

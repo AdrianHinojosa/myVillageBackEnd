@@ -53,9 +53,20 @@ class Controllers {
 
         const iep = await IepQueries.findIepByStudent(String(sStudentId));
 
+        // Map DB column names to frontend field names so frontend can strip them before POST
+        let oData = null;
+        if (iep) {
+            const { created_at, updated_at, bActive, tDeletedAt, sCreatedBy, sLastUpdatedBy, ...oIepFields } = iep as any;
+            oData = {
+                ...oIepFields,
+                dtCreatedAt: created_at,
+                dtUpdatedAt: updated_at,
+            };
+        }
+
         return res.status(200).json({
             message: SuccessMessages.IEPs.getIep[sLang],
-            oData: iep || null,
+            oData,
             success: true
         });
     }

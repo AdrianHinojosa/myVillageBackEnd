@@ -281,7 +281,7 @@ class Queries {
                 case 'DURACION': {
                     const durDirection = goal.sDirection || 'INCREASE';
                     if (durDirection === 'DECREASE') {
-                        const baseline = goal.iBaselineValue || 0;
+                        const baseline = goal.iBaselineValue || 60;
                         const target = goal.iTargetDuration || 0;
                         if (baseline !== target && record.iDurationMinutes !== null) {
                             pct = ((baseline - record.iDurationMinutes) / (baseline - target)) * 100;

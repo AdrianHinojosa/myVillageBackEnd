@@ -46,7 +46,7 @@ router.post('/:sStudentId/image',
 
 // GET /:sStudentId/report — Student progress report
 router.get('/:sStudentId/report',
-    celebrate({ params: StudentValidations.GetStudentParams }),
+    celebrate({ params: StudentValidations.GetStudentParams, query: StudentValidations.GetStudentReportQuery }),
     aH(verifySchoolUserPermissions(  [  {sModuleName: 'General', sActionCode: 'READ' }  ])),
     aH(StudentController.getStudentReport));
 

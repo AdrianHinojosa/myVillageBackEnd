@@ -97,7 +97,7 @@ class Queries {
     }
 
     // Create school user (insert into Users + SchoolUsers)
-    static async insertSchoolUser(sSchoolId, { sName, sLastName, sSecondLastName, sEmail, sCreatedBy }) {
+    static async insertSchoolUser(sSchoolId, { sName, sLastName, sSecondLastName, sEmail, sType, sCreatedBy }) {
         return await UsersModel.transaction(async (trx) => {
             // Insert into Users table
             const newUser = await UsersModel.query(trx).insert({
@@ -106,7 +106,7 @@ class Queries {
                 sSecondLastName,
                 sEmail: sEmail.toLowerCase(),
                 sImageKey: '',
-                sType: 'FACULTY',
+                sType: sType || 'FACULTY',
                 sCreatedBy,
                 bPlatformAccess: false,
                 bVerified: false,

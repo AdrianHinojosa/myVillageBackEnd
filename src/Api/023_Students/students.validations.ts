@@ -54,4 +54,9 @@ export const UploadStudentImageBody = Validations.JoiObjectKeys({
     bDeleteImage: Validations.RequiredBoolean('Students bDeleteImage'),
 });
 
+export const GetStudentReportQuery = Validations.JoiObjectKeys({
+    tStartDate: Validations.Date("Students tStartDate"),
+    tEndDate: Validations.Date("Students tEndDate"),
+});
+
 export const Filters = Validations.Filters;

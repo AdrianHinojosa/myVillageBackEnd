@@ -175,14 +175,24 @@ class Queries {
             });
     }
 
-    // Complete a goal (set status, completed date, and optional notes)
+    // Complete or reopen a goal (set status, completed date, and optional notes)
     static async completeGoal(sGoalId, sStatus, sLastUpdatedBy, sCompletionNotes?) {
-        return await GoalsModel.query().patchAndFetchById(sGoalId, {
+        const patchData: any = {
             sStatus,
-            tCompletedDate: new Date().toISOString(),
-            sCompletionNotes: sCompletionNotes || null,
             sLastUpdatedBy
-        }).where('bActive', true);
+        };
+
+        if (sStatus === 'ACTIVE') {
+            // Reopen: clear completion fields
+            patchData.tCompletedDate = null;
+            patchData.sCompletionNotes = null;
+        } else {
+            // Complete or mark not achieved
+            patchData.tCompletedDate = new Date().toISOString();
+            patchData.sCompletionNotes = sCompletionNotes || null;
+        }
+
+        return await GoalsModel.query().patchAndFetchById(sGoalId, patchData).where('bActive', true);
     }
 
     // Soft delete a goal

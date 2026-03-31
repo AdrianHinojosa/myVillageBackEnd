@@ -222,9 +222,14 @@ class Controllers {
         }
 
         // Default date range: current month (use local date, not UTC)
+        // Note: Joi.date() converts query params to JS Date objects, so we must convert back to YYYY-MM-DD strings
         const now = new Date();
-        const sStart = tStartDate ? String(tStartDate) : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-        const sEnd = tEndDate ? String(tEndDate) : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        const sStart = tStartDate
+            ? (tStartDate instanceof Date ? tStartDate.toISOString().split('T')[0] : String(tStartDate))
+            : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+        const sEnd = tEndDate
+            ? (tEndDate instanceof Date ? tEndDate.toISOString().split('T')[0] : String(tEndDate))
+            : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
         // Get all goals for student with their tasks
         const goalsResult = await GoalQueries.findGoalsByStudent(sStudentId, 1, 1000, null, null);

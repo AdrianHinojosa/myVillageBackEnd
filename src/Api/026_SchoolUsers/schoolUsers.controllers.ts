@@ -54,7 +54,7 @@ class Controllers {
 
         // Create user
         const newUser = await SchoolUserCrudQueries.insertSchoolUser(sSchoolId, {
-            sName, sLastName, sSecondLastName, sEmail, sCreatedBy: sUserId
+            sName, sLastName, sSecondLastName, sEmail, sType, sCreatedBy: sUserId
         });
 
         // Generate recovery token for initial setup

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import aH from "express-async-handler";
 import { celebrate } from "celebrate";
+import upload from 'express-fileupload';
 import StudentController from './students.controllers';
 import * as StudentValidations from './students.validations';
 import { verifySchoolUserPermissions } from '../../Middlewares/001_Permissions.mw.ts/schools.permissions';
@@ -36,6 +37,12 @@ router.delete('/:sStudentId',
     celebrate({ params: StudentValidations.DeleteStudentParams }),
     aH(verifySchoolUserPermissions(  [  {sModuleName: 'General', sActionCode: 'WRITE' }  ])),
     aH(StudentController.deleteStudent));
+
+// POST /:sStudentId/image — Upload student image
+router.post('/:sStudentId/image',
+    aH(upload()),
+    aH(verifySchoolUserPermissions(  [  {sModuleName: 'General', sActionCode: 'WRITE' }  ])),
+    aH(StudentController.uploadStudentImage));
 
 // GET /:sStudentId/report — Student progress report
 router.get('/:sStudentId/report',

@@ -6,7 +6,9 @@ export const CreateStudentBody = Validations.JoiObjectKeys({
     sLastName: Validations.RequiredString("Students sLastName"),
     sSecondLastName: Validations.String("Students sSecondLastName"),
     sCustomStudentId: Validations.String("Students sCustomStudentId"),
-    iBirthYear: Validations.RequiredPositiveInteger("Students iBirthYear"),
+    iBirthYear: Validations.PositiveInteger("Students iBirthYear"),
+    tBirthDate: Validations.Date("Students tBirthDate"),
+    sGender: Validations.String("Students sGender"),
     sGrade: Validations.RequiredString("Students sGrade"),
     sGroup: Validations.String("Students sGroup"),
     sDiagnosis: Validations.String("Students sDiagnosis"),
@@ -27,7 +29,9 @@ export const UpdateStudentBody = Validations.JoiObjectKeys({
     sLastName: Validations.RequiredString("Students sLastName"),
     sSecondLastName: Validations.String("Students sSecondLastName"),
     sCustomStudentId: Validations.String("Students sCustomStudentId"),
-    iBirthYear: Validations.RequiredPositiveInteger("Students iBirthYear"),
+    iBirthYear: Validations.PositiveInteger("Students iBirthYear"),
+    tBirthDate: Validations.Date("Students tBirthDate"),
+    sGender: Validations.String("Students sGender"),
     sGrade: Validations.RequiredString("Students sGrade"),
     sGroup: Validations.String("Students sGroup"),
     sDiagnosis: Validations.String("Students sDiagnosis"),
@@ -40,6 +44,14 @@ export const UpdateStudentParams = Validations.JoiObjectKeys({
 
 export const DeleteStudentParams = Validations.JoiObjectKeys({
     sStudentId: Validations.RequiredUUID("Students sStudentId"),
+});
+
+export const UploadStudentImageParams = Validations.JoiObjectKeys({
+    sStudentId: Validations.RequiredUUID("Students sStudentId"),
+});
+
+export const UploadStudentImageBody = Validations.JoiObjectKeys({
+    bDeleteImage: Validations.RequiredBoolean('Students bDeleteImage'),
 });
 
 export const Filters = Validations.Filters;

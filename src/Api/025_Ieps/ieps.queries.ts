@@ -1,7 +1,7 @@
 import { IepsModel } from './ieps.model';
 
 // JSONB fields that need explicit JSON.stringify for PostgreSQL
-const JSONB_FIELDS = ['aExternalServices', 'aFocusAreas', 'aAccommodations', 'aModifications', 'aObjectives'];
+const JSONB_FIELDS = ['aExternalServices', 'aFocusAreas', 'aAccommodations', 'aModifications', 'aObjectives', 'aTeamMembers'];
 
 function stringifyJsonbFields(oData: any): any {
     const result = { ...oData };

@@ -16,7 +16,7 @@ class Queries {
     }
 
     // Insert student
-    static async insertStudent({sSchoolId, sName, sLastName, sSecondLastName, sCustomStudentId, iBirthYear, sGrade, sGroup, sDiagnosis, sNotes, sCreatedBy}) {
+    static async insertStudent({sSchoolId, sName, sLastName, sSecondLastName, sCustomStudentId, iBirthYear, tBirthDate, sGender, sGrade, sGroup, sDiagnosis, sNotes, sCreatedBy}) {
         return await StudentsModel.query().insert({
             sSchoolId,
             sName,
@@ -24,6 +24,8 @@ class Queries {
             sSecondLastName,
             sCustomStudentId,
             iBirthYear,
+            tBirthDate,
+            sGender,
             sGrade,
             sGroup,
             sDiagnosis,
@@ -35,13 +37,15 @@ class Queries {
     }
 
     // Update student
-    static async updateStudent(sStudentId, {sName, sLastName, sSecondLastName, sCustomStudentId, iBirthYear, sGrade, sGroup, sDiagnosis, sNotes, sLastUpdatedBy}) {
+    static async updateStudent(sStudentId, {sName, sLastName, sSecondLastName, sCustomStudentId, iBirthYear, tBirthDate, sGender, sGrade, sGroup, sDiagnosis, sNotes, sLastUpdatedBy}) {
         return await StudentsModel.query().patchAndFetchById(sStudentId, {
             sName,
             sLastName,
             sSecondLastName,
             sCustomStudentId,
             iBirthYear,
+            tBirthDate,
+            sGender,
             sGrade,
             sGroup,
             sDiagnosis,
@@ -58,7 +62,7 @@ class Queries {
      * @param sGrade (optional filter by grade)
      * @returns
      */
-    static async findAllStudents(sSchoolId, iPageNumber, iItemsPerPage, sSearch, sGrade) {
+    static async findAllStudents(sSchoolId, iPageNumber, iItemsPerPage, sSearch, sGrade, aAssignedStudentIds?: string[]) {
         return await StudentsModel.query().modify(function (queryBuilder : any) {
             queryBuilder.select('Students.*')
 
@@ -67,9 +71,13 @@ class Queries {
                 TRIM(CONCAT_WS(' ', "Students"."sName", "Students"."sLastName", "Students"."sSecondLastName")) AS "sFullName"
             `))
 
-            // Computed: age from birth year
+            // Computed: age from tBirthDate (preferred) or iBirthYear (fallback)
             queryBuilder.select(db.raw(`
-                (EXTRACT(YEAR FROM NOW()) - "Students"."iBirthYear")::integer AS "iAge"
+                CASE
+                    WHEN "Students"."tBirthDate" IS NOT NULL THEN EXTRACT(YEAR FROM AGE(NOW(), "Students"."tBirthDate"))::integer
+                    WHEN "Students"."iBirthYear" IS NOT NULL THEN (EXTRACT(YEAR FROM NOW()) - "Students"."iBirthYear")::integer
+                    ELSE NULL
+                END AS "iAge"
             `))
 
             // Subquery: count of active goals
@@ -105,6 +113,11 @@ class Queries {
 
             if (sGrade) {
                 queryBuilder.where('Students.sGrade', sGrade)
+            }
+
+            // FACULTY filtering: only show assigned students
+            if (aAssignedStudentIds !== null && aAssignedStudentIds !== undefined) {
+                queryBuilder.whereIn('Students.sStudentId', aAssignedStudentIds)
             }
         }).orderBy('Students.updated_at', 'desc').page((iPageNumber - 1), iItemsPerPage)
     }
@@ -144,6 +157,13 @@ class Queries {
         return await StudentsModel.query().patchAndFetchById(sStudentId, {
             bActive: false,
             sLastDeletedBy: sLastDeletedBy
+        }).where('bActive', true);
+    }
+
+    // Update student image key
+    static async updateStudentImage(sStudentId: string, sImageKey: string) {
+        return await StudentsModel.query().patchAndFetchById(sStudentId, {
+            sImageKey: sImageKey
         }).where('bActive', true);
     }
 

@@ -26,6 +26,8 @@ export interface IGoals {
     iRecordsCount?: number;
     tLastRecord?: string;
     sCompletionNotes?: string;
+    sDirection?: string;
+    iTargetOpportunities?: number;
     sCreatedBy?: string;
     sLastUpdatedBy?: string;
     sLastDeletedBy?: string;
@@ -53,6 +55,8 @@ export class GoalsModel extends Model {
     public iRecordsCount?: number;
     public tLastRecord?: string;
     public sCompletionNotes?: string;
+    public sDirection?: string;
+    public iTargetOpportunities?: number;
     public sCreatedBy?: string;
     public sLastUpdatedBy?: string;
     public sLastDeletedBy?: string;

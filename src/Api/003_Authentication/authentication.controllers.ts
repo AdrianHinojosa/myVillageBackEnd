@@ -74,7 +74,7 @@ class Controllers {
                 oSchool = {
                     sSchoolId: school.sSchoolId,
                     sSchoolName: school.sName,
-                    sSchoolLogo: school.sImageKey || '',
+                    sSchoolLogo: school.oImages?.md || '',
                     oImages: school.oImages || null
                 };
             } else {

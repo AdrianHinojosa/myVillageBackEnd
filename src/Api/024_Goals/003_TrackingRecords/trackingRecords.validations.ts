@@ -33,10 +33,12 @@ export const GetTrackingRecordsByGoalQuery = Validations.JoiObjectKeys({
 
 export const GetTrackingRecordParams = Validations.JoiObjectKeys({
     sTrackingRecordId: Validations.RequiredUUID("TrackingRecords sTrackingRecordId"),
+    sLang: Joi.string(),
 });
 
 export const ToggleExclusionParams = Validations.JoiObjectKeys({
     sTrackingRecordId: Validations.RequiredUUID("TrackingRecords sTrackingRecordId"),
+    sLang: Joi.string(),
 });
 
 export const ToggleExclusionBody = Validations.JoiObjectKeys({
@@ -45,4 +47,5 @@ export const ToggleExclusionBody = Validations.JoiObjectKeys({
 
 export const DeleteTrackingRecordParams = Validations.JoiObjectKeys({
     sTrackingRecordId: Validations.RequiredUUID("TrackingRecords sTrackingRecordId"),
+    sLang: Joi.string(),
 });

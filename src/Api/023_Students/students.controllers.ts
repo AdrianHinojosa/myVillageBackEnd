@@ -7,9 +7,12 @@ import MyError from '../../Middlewares/Error.mw';
 import StudentQueries from './students.queries';
 import SchoolQueries from '../022_Schools/schools.queries';
 import GoalQueries from '../024_Goals/goals.queries';
+import StudentAssignmentQueries from '../028_StudentAssignments/studentAssignments.queries';
 import { TrackingRecordsModel } from '../024_Goals/003_TrackingRecords/trackingRecords.model';
 import { TrackingRecordTasksModel } from '../024_Goals/003_TrackingRecords/trackingRecordTasks.model';
+import { UsersModel } from '../004_Users/users.model';
 import { db } from '../../Config/Db.config';
+import StorageServices from '../../Services/Storage.services';
 
 // Messages
 import SuccessMessages from '../../Utils/SuccessMessage.util';
@@ -22,7 +25,7 @@ class Controllers {
     // Create a student
     async createStudent(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
         const {sLang, sSchoolId, sUserId} = res.locals;
-        const {sName, sLastName, sSecondLastName, sCustomStudentId, iBirthYear, sGrade, sGroup, sDiagnosis, sNotes} = req.body;
+        const {sName, sLastName, sSecondLastName, sCustomStudentId, iBirthYear, tBirthDate, sGender, sGrade, sGroup, sDiagnosis, sNotes} = req.body;
 
         // Validate student limit
         const mySchool = await SchoolQueries.verifySchoolExists(sSchoolId);
@@ -43,6 +46,8 @@ class Controllers {
             sSecondLastName,
             sCustomStudentId,
             iBirthYear,
+            tBirthDate,
+            sGender,
             sGrade,
             sGroup,
             sDiagnosis,
@@ -59,10 +64,17 @@ class Controllers {
 
     // Get ALL Students (paginated)
     async getAllStudents(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
-        const {sLang, sSchoolId} = res.locals;
+        const {sLang, sSchoolId, sUserId} = res.locals;
         const {iPageNumber, iItemsPerPage, sSearch, sGrade} = req.query;
 
-        const myStudents = await StudentQueries.findAllStudents(sSchoolId, iPageNumber, iItemsPerPage, sSearch, sGrade);
+        // Check if user is FACULTY — if so, only show assigned students
+        let aAssignedStudentIds: string[] = null;
+        const currentUser = await UsersModel.query().findById(sUserId).select('sType');
+        if (currentUser && currentUser.sType === 'FACULTY') {
+            aAssignedStudentIds = await StudentAssignmentQueries.findAssignedStudentIds(sUserId);
+        }
+
+        const myStudents = await StudentQueries.findAllStudents(sSchoolId, iPageNumber, iItemsPerPage, sSearch, sGrade, aAssignedStudentIds);
         const iNumPages = Math.ceil(myStudents.total / Number(iItemsPerPage));
 
         // Get school's student limit
@@ -102,7 +114,7 @@ class Controllers {
     async updateStudent(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
         const {sLang, sSchoolId, sUserId} = res.locals;
         const {sStudentId} = req.params;
-        const {sName, sLastName, sSecondLastName, sCustomStudentId, iBirthYear, sGrade, sGroup, sDiagnosis, sNotes} = req.body;
+        const {sName, sLastName, sSecondLastName, sCustomStudentId, iBirthYear, tBirthDate, sGender, sGrade, sGroup, sDiagnosis, sNotes} = req.body;
 
         // Verify student exists and belongs to school
         const myStudent = await StudentQueries.verifyStudentExistsBySchool(sSchoolId, sStudentId);
@@ -117,6 +129,8 @@ class Controllers {
             sSecondLastName,
             sCustomStudentId,
             iBirthYear,
+            tBirthDate,
+            sGender,
             sGrade,
             sGroup,
             sDiagnosis,
@@ -151,6 +165,50 @@ class Controllers {
         });
     }
 
+    // POST /students/:sStudentId/image — Upload student image
+    async uploadStudentImage(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
+        const {sLang, sSchoolId} = res.locals;
+        const {sStudentId} = req.params;
+        var {bDeleteImage} = req.body;
+
+        bDeleteImage = Boolean(bDeleteImage);
+
+        // Validate that the student exists and belongs to school
+        const myStudent = await StudentQueries.verifyStudentExistsBySchool(sSchoolId, sStudentId);
+        if (!myStudent) {
+            return next(new MyError(404, ErrorMessages.Students.notFound[sLang]));
+        }
+
+        var sImageKey = '';
+
+        // Delete current image
+        await StorageServices.DeleteFromImageKey(myStudent.sImageKey);
+
+        // If we want to add or replace an image:
+        if (bDeleteImage == false) {
+            const arrFiles = req.files;
+            if (!arrFiles) return next(new MyError(400, ErrorMessages.UploadImages.FileNotFound[sLang]));
+
+            const Upload: any = arrFiles.oImage;
+
+            if (Array.isArray(Upload)) {
+                return next(new MyError(400, ErrorMessages.UploadImages.moreThanAllowedImages[sLang]));
+            }
+            else {
+                sImageKey = await StorageServices.UploadManyImages(Upload.data, 'studentImages');
+            }
+        }
+
+        // Update Student with Image
+        const updatedStudent = await StudentQueries.updateStudentImage(sStudentId, sImageKey);
+
+        return res.status(201).json({
+            message: SuccessMessages.Students.uploadStudentImage[sLang],
+            student: updatedStudent,
+            success: true
+        });
+    }
+
     // GET /students/:sStudentId/report — Student progress report
     async getStudentReport(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
         const {sLang, sSchoolId} = res.locals;
@@ -181,35 +239,55 @@ class Controllers {
                 .where('bActive', true)
                 .whereNull('tDeletedAt')
                 .modify(function(qb: any) {
-                    if (sStart) qb.where('tRecordDate', '>=', sStart);
-                    if (sEnd) qb.where('tRecordDate', '<=', sEnd);
+                    if (sStart) qb.whereRaw('"tRecordDate"::date >= ?', [sStart]);
+                    if (sEnd) qb.whereRaw('"tRecordDate"::date <= ?', [sEnd]);
                 })
                 .orderBy('tRecordDate', 'desc');
         }
 
-        // Calculate summary (scoped to goals with records in date range)
-        const goalIdsWithRecords = new Set(allRecords.map((r: any) => r.sGoalId));
+        // Calculate summary
         const iActiveGoals = aGoals.filter((g: any) => g.sStatus === 'ACTIVE').length;
-        const iCompletedGoals = aGoals.filter((g: any) => g.sStatus === 'COMPLETED').length;
-        const iNotAchievedGoals = aGoals.filter((g: any) => g.sStatus === 'NOT_ACHIEVED').length;
-        const activeGoalsWithRecords = aGoals.filter((g: any) => g.sStatus === 'ACTIVE' && goalIdsWithRecords.has(g.sGoalId));
-        const dAverageProgress = activeGoalsWithRecords.length > 0
-            ? activeGoalsWithRecords.reduce((sum: number, g: any) => sum + (parseFloat(g.dProgress) || 0), 0) / activeGoalsWithRecords.length
+        // Filter completed/not-achieved by tCompletedDate in date range
+        const iCompletedGoals = aGoals.filter((g: any) => {
+            if (g.sStatus !== 'COMPLETED' || !g.tCompletedDate) return false;
+            const completedDate = new Date(g.tCompletedDate).toISOString().split('T')[0];
+            return completedDate >= sStart && completedDate <= sEnd;
+        }).length;
+        const iNotAchievedGoals = aGoals.filter((g: any) => {
+            if (g.sStatus !== 'NOT_ACHIEVED' || !g.tCompletedDate) return false;
+            const completedDate = new Date(g.tCompletedDate).toISOString().split('T')[0];
+            return completedDate >= sStart && completedDate <= sEnd;
+        }).length;
+        // dAverageProgress: current progress across ALL active goals (not date-filtered)
+        const activeGoals = aGoals.filter((g: any) => g.sStatus === 'ACTIVE');
+        const dAverageProgress = activeGoals.length > 0
+            ? activeGoals.reduce((sum: number, g: any) => sum + (parseFloat(g.dProgress) || 0), 0) / activeGoals.length
             : 0;
         const iOverdueGoals = aGoals.filter((g: any) => g.sStatus === 'ACTIVE' && g.tTargetDate && new Date(g.tTargetDate) < now).length;
 
-        // Format records with frontend field names
-        const formattedRecords = allRecords.map((r: any) => ({
-            ...r,
-            sRecordId: r.sTrackingRecordId,
-            dtDate: r.tRecordDate,
-            sNotes: r.sObservations,
-            iCorrect: r.iHits,
-            iTotal: (r.iHits !== null && r.iErrors !== null) ? r.iHits + r.iErrors : r.iTotal,
-            iFrequencyCount: r.iOccurrences,
-            iSuccessful: r.iAchieved,
-            iOpportunities: r.iTotal,
-        }));
+        // Format records with frontend field names + aTasksCompleted for TAREAS goals
+        const formattedRecords = [];
+        for (const r of allRecords) {
+            // Fetch task completions from junction table
+            let aTasksCompleted = [];
+            const taskCompletions = await TrackingRecordTasksModel.query()
+                .select('sGoalTaskId')
+                .where('sTrackingRecordId', r.sTrackingRecordId);
+            aTasksCompleted = taskCompletions.map((t: any) => t.sGoalTaskId);
+
+            formattedRecords.push({
+                ...r,
+                sRecordId: r.sTrackingRecordId,
+                dtDate: r.tRecordDate,
+                sNotes: r.sObservations,
+                iCorrect: r.iHits,
+                iTotal: (r.iHits !== null && r.iErrors !== null) ? r.iHits + r.iErrors : r.iTotal,
+                iFrequencyCount: r.iOccurrences,
+                iSuccessful: r.iAchieved,
+                iOpportunities: r.iTotal,
+                aTasksCompleted,
+            });
+        }
 
         // Group records by goalId
         const recordsByGoal = {};

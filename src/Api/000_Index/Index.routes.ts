@@ -19,6 +19,7 @@ import TrackingRecordRoutes from '../024_Goals/003_TrackingRecords/trackingRecor
 import IepRoutes from '../025_Ieps/ieps.routes';
 import SchoolUserRoutes from '../026_SchoolUsers/schoolUsers.routes';
 import ProfileRoutes from '../027_Profile/profile.routes';
+import StudentAssignmentRoutes from '../028_StudentAssignments/studentAssignments.routes';
 
 
 function BaseRoute(env: string, module: string): string {
@@ -37,6 +38,7 @@ export default (app: Application, env: string) : void => {
     app.use(BaseRoute(env, 'iep'), celebrate({ params: LanguageParams }), aH(Language()), aH(IepRoutes));
     app.use(BaseRoute(env, 'schoolUsers'), celebrate({ params: LanguageParams }), aH(Language()), aH(SchoolUserRoutes));
     app.use(BaseRoute(env, 'profile'), celebrate({ params: LanguageParams }), aH(Language()), aH(ProfileRoutes));
+    app.use(BaseRoute(env, 'studentAssignments'), celebrate({ params: LanguageParams }), aH(Language()), aH(StudentAssignmentRoutes));
 
 
     app.all(`*`, (req: Request, res: Response, next: NextFunction): object => {

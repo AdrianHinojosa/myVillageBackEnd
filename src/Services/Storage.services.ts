@@ -246,7 +246,9 @@ class StorageMethods {
         };
 
         if (sType && mimeMap[sType]) return mimeMap[sType];
-        if (sType === 'application/octet-stream') return this.getFileEnding({ sFormat });
+        // Fallback: extract extension from filename for any unrecognized mime type
+        const sExtension = this.getFileEnding({ sFormat });
+        if (sExtension) return sExtension;
         return null;
     }
 

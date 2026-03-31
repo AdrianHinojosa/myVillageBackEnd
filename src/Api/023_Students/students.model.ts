@@ -1,6 +1,7 @@
 import { Model, QueryContext, RelationMappings, RelationMappingsThunk } from 'objection';
 import { db } from '../../Config/Db.config';
 import { SchoolsModel } from '../022_Schools/schools.model';
+import StorageServices from '../../Services/Storage.services';
 
 Model.knex(db);
 
@@ -12,10 +13,13 @@ export interface IStudents {
     sSecondLastName?: string;
     sCustomStudentId?: string;
     iBirthYear?: number;
+    tBirthDate?: string;
+    sGender?: string;
     sGrade?: string;
     sGroup?: string;
     sDiagnosis?: string;
     sNotes?: string;
+    sImageKey?: string;
     sCreatedBy?: string;
     sLastUpdatedBy?: string;
     sLastDeletedBy?: string;
@@ -30,10 +34,14 @@ export class StudentsModel extends Model {
     public sSecondLastName?: string;
     public sCustomStudentId?: string;
     public iBirthYear?: number;
+    public tBirthDate?: string;
+    public sGender?: string;
     public sGrade?: string;
     public sGroup?: string;
     public sDiagnosis?: string;
     public sNotes?: string;
+    public sImageKey?: string;
+    public oImages?: any;
     public sCreatedBy?: string;
     public sLastUpdatedBy?: string;
     public sLastDeletedBy?: string;
@@ -55,5 +63,13 @@ export class StudentsModel extends Model {
 
     async $beforeUpdate() {
         this.updated_at = new Date();
+    }
+
+    async $afterFind() {
+        if (this.sImageKey) {
+            this.oImages = await StorageServices.GetManyImages(this.sImageKey, ['xs', 'sm', 'md', 'lg', 'xlg']);
+        } else {
+            this.oImages = null;
+        }
     }
 }

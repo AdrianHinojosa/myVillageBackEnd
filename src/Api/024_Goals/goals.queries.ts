@@ -20,7 +20,7 @@ class Queries {
     }
 
     // Insert a new goal with optional tasks
-    static async insertGoal({sStudentId, sTitle, sDescription, sMeasurementType, tStartDate, tTargetDate, iTargetValue, iTargetDuration, iScaleMin, iScaleMax, sFrequencyUnit, iBaselineValue, sCreatedBy}, aTasks) {
+    static async insertGoal({sStudentId, sTitle, sDescription, sMeasurementType, tStartDate, tTargetDate, iTargetValue, iTargetDuration, iScaleMin, iScaleMax, sFrequencyUnit, iBaselineValue, sDirection, iTargetOpportunities, sCreatedBy}, aTasks) {
         return await GoalsModel.transaction(async (trx) => {
             // Insert goal
             const newGoal = await GoalsModel.query(trx).insert({
@@ -37,6 +37,8 @@ class Queries {
                 iScaleMax,
                 sFrequencyUnit,
                 iBaselineValue,
+                sDirection,
+                iTargetOpportunities,
                 sCreatedBy,
                 sLastUpdatedBy: sCreatedBy,
                 bActive: true
@@ -61,7 +63,7 @@ class Queries {
     }
 
     // Update a goal with optional task replacement
-    static async updateGoal(sGoalId, {sTitle, sDescription, tStartDate, tTargetDate, iTargetValue, iTargetDuration, iScaleMin, iScaleMax, sFrequencyUnit, iBaselineValue, sLastUpdatedBy}, aTasks) {
+    static async updateGoal(sGoalId, {sTitle, sDescription, tStartDate, tTargetDate, iTargetValue, iTargetDuration, iScaleMin, iScaleMax, sFrequencyUnit, iBaselineValue, sDirection, iTargetOpportunities, sLastUpdatedBy}, aTasks) {
         return await GoalsModel.transaction(async (trx) => {
             // Update goal
             const updatedGoal = await GoalsModel.query(trx).patchAndFetchById(sGoalId, {
@@ -75,6 +77,8 @@ class Queries {
                 iScaleMax,
                 sFrequencyUnit,
                 iBaselineValue,
+                sDirection,
+                iTargetOpportunities,
                 sLastUpdatedBy
             }).where('bActive', true);
 
@@ -107,8 +111,32 @@ class Queries {
         });
     }
 
+    // Compute folio code from a goal ID (deterministic 6-digit hash)
+    static computeFolio(sGoalId: string): string {
+        let iHash = 0;
+        for (let i = 0; i < sGoalId.length; i++) {
+            iHash = ((iHash << 5) - iHash) + sGoalId.charCodeAt(i);
+            iHash = iHash & iHash;
+        }
+        const sCode = Math.abs(iHash).toString().padStart(6, '0').slice(-6);
+        return 'MYV-' + sCode;
+    }
+
     // Find paginated goals by student with search and status filter
     static async findGoalsByStudent(sStudentId, iPageNumber, iItemsPerPage, sSearch, sStatus) {
+        // Pre-compute folio matches if searching by folio
+        let aFolioMatchIds: string[] = null;
+        if (sSearch && String(sSearch).toUpperCase().startsWith('MYV-')) {
+            const allGoalIds = await GoalsModel.query()
+                .select('sGoalId')
+                .where('sStudentId', sStudentId)
+                .where('bActive', true);
+            const sFolioSearch = String(sSearch).toUpperCase();
+            aFolioMatchIds = allGoalIds
+                .filter((g: any) => Queries.computeFolio(g.sGoalId).includes(sFolioSearch))
+                .map((g: any) => g.sGoalId);
+        }
+
         return await GoalsModel.query().modify(function (queryBuilder: any) {
             queryBuilder.where('Goals.bActive', true)
             queryBuilder.where('Goals.sStudentId', sStudentId)
@@ -119,8 +147,14 @@ class Queries {
             })
 
             if (sSearch) {
+                const searchStr = String(sSearch);
                 queryBuilder.where(function () {
-                    this.whereRaw(`unaccent("Goals"."sTitle") ILIKE unaccent(?)`, ['%' + String(sSearch) + '%'])
+                    this.whereRaw(`unaccent("Goals"."sTitle") ILIKE unaccent(?)`, ['%' + searchStr + '%'])
+                        .orWhereRaw(`unaccent("Goals"."sDescription") ILIKE unaccent(?)`, ['%' + searchStr + '%'])
+                    // Folio search: if search looks like MYV-XXXXXX, match by computed folio
+                    if (searchStr.toUpperCase().startsWith('MYV-') && aFolioMatchIds && aFolioMatchIds.length > 0) {
+                        this.orWhereIn('Goals.sGoalId', aFolioMatchIds)
+                    }
                 })
             }
 

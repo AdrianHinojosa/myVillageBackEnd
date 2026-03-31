@@ -275,6 +275,18 @@ export default {
         },
     },
 
+    // ==== StudentAssignments: =======
+    StudentAssignments: {
+        notFound: {
+            sp: "La asignación especificada no existe.",
+            en: "The specified assignment does not exist."
+        },
+        alreadyAssigned: {
+            sp: "Este docente ya está asignado a este estudiante.",
+            en: "This teacher is already assigned to this student."
+        },
+    },
+
     // ==== GoalTasks: =======
     GoalTasks: {
         notFound: {

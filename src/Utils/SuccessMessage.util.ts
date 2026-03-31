@@ -173,6 +173,22 @@ export default {
         deleteStudent: {
             sp: 'Se eliminó el estudiante exitosamente!',
             en: "The student was successfully deleted."
+        },
+        uploadStudentImage: {
+            sp: 'Se actualizó la imagen del estudiante exitosamente!',
+            en: "The student image was successfully updated!"
+        }
+    },
+
+    // ========  StudentAssignments  ==================
+    StudentAssignments: {
+        assignTeacher: {
+            sp: 'Docente asignado exitosamente.',
+            en: "Teacher assigned successfully."
+        },
+        unassignTeacher: {
+            sp: 'Docente desasignado exitosamente.',
+            en: "Teacher unassigned successfully."
         }
     },
 

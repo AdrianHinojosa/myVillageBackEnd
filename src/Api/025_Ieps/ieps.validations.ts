@@ -25,6 +25,14 @@ export const UpsertIepBody = Validations.JoiObjectKeys({
     bRequiresModifications: Validations.Boolean("IEPs bRequiresModifications"),
     aModifications: Joi.array().allow(null).error(new Error("IEPs aModifications")),
     aObjectives: Joi.array().allow(null).error(new Error("IEPs aObjectives")),
+    dtIepStartDate: Validations.Date("IEPs dtIepStartDate"),
+    dtIepReviewDate: Validations.Date("IEPs dtIepReviewDate"),
+    sNotes: Validations.String("IEPs sNotes"),
+    aTeamMembers: Joi.array().items(Joi.object({
+        sTeamMemberId: Joi.string(),
+        sName: Joi.string(),
+        sRole: Joi.string()
+    })).allow(null).error(new Error("IEPs aTeamMembers")),
 });
 
 export const GetIepQuery = Validations.JoiObjectKeys({

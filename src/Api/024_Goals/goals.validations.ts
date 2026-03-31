@@ -14,6 +14,8 @@ export const CreateGoalBody = Validations.JoiObjectKeys({
     iScaleMax: Validations.PositiveInteger("Goals iScaleMax"),
     sFrequencyUnit: Validations.String("Goals sFrequencyUnit"),
     iBaselineValue: Validations.PositiveInteger("Goals iBaselineValue"),
+    sDirection: Validations.String("Goals sDirection"),
+    iTargetOpportunities: Validations.PositiveInteger("Goals iTargetOpportunities"),
     aTasks: Joi.array().items(Joi.object({
         sTitle: Joi.string().required(),
         iOrder: Joi.number().integer().min(0)
@@ -48,6 +50,8 @@ export const UpdateGoalBody = Validations.JoiObjectKeys({
     iScaleMax: Validations.PositiveInteger("Goals iScaleMax"),
     sFrequencyUnit: Validations.String("Goals sFrequencyUnit"),
     iBaselineValue: Validations.PositiveInteger("Goals iBaselineValue"),
+    sDirection: Validations.String("Goals sDirection"),
+    iTargetOpportunities: Validations.PositiveInteger("Goals iTargetOpportunities"),
     aTasks: Joi.array().items(Joi.object({
         sTitle: Joi.string().required(),
         bCompleted: Joi.boolean(),

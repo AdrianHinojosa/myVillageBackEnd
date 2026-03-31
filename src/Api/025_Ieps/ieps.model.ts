@@ -29,6 +29,10 @@ export interface IIep {
     bRequiresModifications?: boolean;
     aModifications?: any;
     aObjectives?: any;
+    dtIepStartDate?: string;
+    dtIepReviewDate?: string;
+    sNotes?: string;
+    aTeamMembers?: any;
     sCreatedBy?: string;
     sLastUpdatedBy?: string;
     bActive?: boolean;
@@ -60,6 +64,10 @@ export class IepsModel extends Model {
     public bRequiresModifications?: boolean;
     public aModifications?: any;
     public aObjectives?: any;
+    public dtIepStartDate?: string;
+    public dtIepReviewDate?: string;
+    public sNotes?: string;
+    public aTeamMembers?: any;
     public sCreatedBy?: string;
     public sLastUpdatedBy?: string;
     public bActive?: boolean;

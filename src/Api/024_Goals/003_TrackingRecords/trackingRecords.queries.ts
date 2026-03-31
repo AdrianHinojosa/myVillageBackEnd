@@ -222,7 +222,17 @@ class Queries {
                     const errors = record.iErrors || 0;
                     const total = hits + errors;
                     if (total > 0) {
-                        pct = (hits / total) * 100;
+                        const exDirection = goal.sDirection || 'INCREASE';
+                        if (exDirection === 'DECREASE') {
+                            const baseline = goal.iBaselineValue || 100;
+                            const target = goal.iTargetValue || 0;
+                            const actualPct = (hits / total) * 100;
+                            if (baseline !== target) {
+                                pct = ((baseline - actualPct) / (baseline - target)) * 100;
+                            }
+                        } else {
+                            pct = (hits / total) * 100;
+                        }
                     }
                     break;
                 }
@@ -231,12 +241,15 @@ class Queries {
                     const taskCompletions = await TrackingRecordTasksModel.query(trx)
                         .where('sTrackingRecordId', record.sTrackingRecordId);
                     const completedCount = taskCompletions.length;
-                    // Get total goal tasks
-                    const totalTasks = await GoalTasksModel.query(trx)
-                        .where('sGoalId', sGoalId)
-                        .resultSize();
-                    if (totalTasks > 0) {
-                        pct = (completedCount / totalTasks) * 100;
+                    // Use iTargetValue as denominator if available, otherwise fallback to total tasks count
+                    let denominator = goal.iTargetValue;
+                    if (!denominator) {
+                        denominator = await GoalTasksModel.query(trx)
+                            .where('sGoalId', sGoalId)
+                            .resultSize();
+                    }
+                    if (denominator > 0) {
+                        pct = (completedCount / denominator) * 100;
                     }
                     break;
                 }
@@ -248,18 +261,36 @@ class Queries {
                     break;
                 }
                 case 'FRECUENCIA': {
-                    // Reduction goal: lower is better
-                    const baseline = goal.iBaselineValue || 10;
-                    const target = goal.iTargetValue || 0;
-                    if (baseline !== target && record.iOccurrences !== null) {
-                        pct = ((baseline - record.iOccurrences) / (baseline - target)) * 100;
+                    // Determine direction: null/undefined defaults to DECREASE for backwards compat
+                    const freqDirection = goal.sDirection || 'DECREASE';
+                    if (freqDirection === 'DECREASE') {
+                        const baseline = goal.iBaselineValue || 10;
+                        const target = goal.iTargetValue || 0;
+                        if (baseline !== target && record.iOccurrences !== null) {
+                            pct = ((baseline - record.iOccurrences) / (baseline - target)) * 100;
+                        }
+                    } else {
+                        // INCREASE: higher count is better
+                        const target = goal.iTargetValue || 1;
+                        if (target > 0 && record.iOccurrences !== null) {
+                            pct = (record.iOccurrences / target) * 100;
+                        }
                     }
                     break;
                 }
                 case 'DURACION': {
-                    const targetDuration = goal.iTargetDuration || 1;
-                    if (targetDuration > 0 && record.iDurationMinutes !== null) {
-                        pct = (record.iDurationMinutes / targetDuration) * 100;
+                    const durDirection = goal.sDirection || 'INCREASE';
+                    if (durDirection === 'DECREASE') {
+                        const baseline = goal.iBaselineValue || 0;
+                        const target = goal.iTargetDuration || 0;
+                        if (baseline !== target && record.iDurationMinutes !== null) {
+                            pct = ((baseline - record.iDurationMinutes) / (baseline - target)) * 100;
+                        }
+                    } else {
+                        const targetDuration = goal.iTargetDuration || 1;
+                        if (targetDuration > 0 && record.iDurationMinutes !== null) {
+                            pct = (record.iDurationMinutes / targetDuration) * 100;
+                        }
                     }
                     break;
                 }
@@ -267,7 +298,17 @@ class Queries {
                     const achieved = record.iAchieved || 0;
                     const total = record.iTotal || 0;
                     if (total > 0) {
-                        pct = (achieved / total) * 100;
+                        const oppDirection = goal.sDirection || 'INCREASE';
+                        if (oppDirection === 'DECREASE') {
+                            const baseline = goal.iBaselineValue || 100;
+                            const target = goal.iTargetValue || 0;
+                            const actualPct = (achieved / total) * 100;
+                            if (baseline !== target) {
+                                pct = ((baseline - actualPct) / (baseline - target)) * 100;
+                            }
+                        } else {
+                            pct = (achieved / total) * 100;
+                        }
                     }
                     break;
                 }

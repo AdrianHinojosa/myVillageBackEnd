@@ -171,7 +171,7 @@ class Controllers {
         const {sStudentId} = req.params;
         var {bDeleteImage} = req.body;
 
-        bDeleteImage = Boolean(bDeleteImage);
+        bDeleteImage = (String(bDeleteImage).toLowerCase() === 'true');
 
         // Validate that the student exists and belongs to school
         const myStudent = await StudentQueries.verifyStudentExistsBySchool(sSchoolId, sStudentId);

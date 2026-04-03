@@ -13,7 +13,7 @@ export const CreateTrackingRecordBody = Joi.object({
     // FRECUENCIA
     iFrequencyCount: Validations.PositiveInteger("TrackingRecords iFrequencyCount"),
     // DURACION
-    iDurationMinutes: Validations.PositiveInteger("TrackingRecords iDurationMinutes"),
+    iDurationMinutes: Validations.PositiveNumber("TrackingRecords iDurationMinutes"),
     // OPORTUNIDAD
     iSuccessful: Validations.PositiveInteger("TrackingRecords iSuccessful"),
     iOpportunities: Validations.PositiveInteger("TrackingRecords iOpportunities"),

@@ -234,17 +234,12 @@ class Controllers {
         // Get all goals for student with their tasks
         const goalsResult = await GoalQueries.findGoalsByStudent(sStudentId, 1, 1000, null, null);
 
-        // Filter goals to those relevant in the date range:
-        // - Created on or before end date (existed during the period)
-        // - Still active, OR completed/not-achieved on or after start date
+        // Filter goals by target date: only include goals whose tTargetDate falls within the date range
+        // Goals without a target date are always included (open-ended goals)
         const aGoals = goalsResult.results.filter((g: any) => {
-            if (g.created_at) {
-                const createdDate = new Date(g.created_at).toISOString().split('T')[0];
-                if (createdDate > sEnd) return false;
-            }
-            if ((g.sStatus === 'COMPLETED' || g.sStatus === 'NOT_ACHIEVED') && g.tCompletedDate) {
-                const completedDate = new Date(g.tCompletedDate).toISOString().split('T')[0];
-                if (completedDate < sStart) return false;
+            if (g.tTargetDate) {
+                const targetDate = new Date(g.tTargetDate).toISOString().split('T')[0];
+                if (targetDate < sStart || targetDate > sEnd) return false;
             }
             return true;
         });

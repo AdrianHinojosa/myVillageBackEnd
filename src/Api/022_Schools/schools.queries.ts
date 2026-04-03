@@ -310,7 +310,7 @@ class Queries {
                 WHERE "bActive" = true
             `),
 
-            // 2. Total students and average per active school
+            // 2. Total students and average per active school (filtered by date range)
             db.raw(`
                 SELECT
                     COALESCE(SUM(sc_cnt.cnt), 0)                                     ::integer AS "iTotalStudents",
@@ -320,12 +320,13 @@ class Queries {
                     SELECT "sSchoolId", COUNT("sStudentId") AS cnt
                     FROM "Students"
                     WHERE "bActive" = true
+                      AND "created_at"::date BETWEEN ?::date AND ?::date
                     GROUP BY "sSchoolId"
                 ) AS sc_cnt ON sc_cnt."sSchoolId" = sc."sSchoolId"
                 WHERE sc."bActive" = true AND sc."bBlocked" = false
-            `),
+            `, [sStart, sEnd]),
 
-            // 3. Goal progress: AVG(dProgress) across all active goals
+            // 3. Goal progress: AVG(dProgress) across active goals created within date range
             db.raw(`
                 SELECT
                     COALESCE(ROUND(AVG(g."dProgress")::numeric, 0), 0) ::integer AS "iGoalProgress"
@@ -333,7 +334,8 @@ class Queries {
                 JOIN "Students" s ON s."sStudentId" = g."sStudentId" AND s."bActive" = true
                 JOIN "Schools" sc ON sc."sSchoolId" = s."sSchoolId" AND sc."bActive" = true
                 WHERE g."bActive" = true AND g."sStatus" = 'ACTIVE'
-            `),
+                  AND g."created_at"::date BETWEEN ?::date AND ?::date
+            `, [sStart, sEnd]),
 
             // 4. Average teachers and admin staff per active school
             db.raw(`
@@ -396,7 +398,7 @@ class Queries {
             // 7. Goals trend: current period completion rate vs previous
             db.raw(`
                 SELECT
-                    COALESCE((SELECT ROUND(AVG("dProgress")::numeric, 1) FROM "Goals" WHERE "bActive" = true AND "sStatus" = 'ACTIVE'), 0) ::float8 AS "dCurrentGoalProgress",
+                    COALESCE((SELECT ROUND(AVG("dProgress")::numeric, 1) FROM "Goals" WHERE "bActive" = true AND "sStatus" = 'ACTIVE' AND "created_at"::date BETWEEN ?::date AND ?::date), 0) ::float8 AS "dCurrentGoalProgress",
                     COALESCE((
                         SELECT COUNT(*)::integer FROM "Goals"
                         WHERE "bActive" = true AND "sStatus" = 'COMPLETED' AND "tCompletedDate" IS NOT NULL AND "tCompletedDate" BETWEEN ?::date AND ?::date
@@ -405,7 +407,7 @@ class Queries {
                         SELECT COUNT(*)::integer FROM "Goals"
                         WHERE "bActive" = true AND "sStatus" = 'COMPLETED' AND "tCompletedDate" IS NOT NULL AND "tCompletedDate" BETWEEN ?::date AND ?::date
                     ), 0) AS "iPrevCompleted"
-            `, [sStart, sEnd, sPrevStart, sPrevEnd]),
+            `, [sStart, sEnd, sStart, sEnd, sPrevStart, sPrevEnd]),
 
             // 8. Chart data: goals created and completed by month within date range
             db.raw(`

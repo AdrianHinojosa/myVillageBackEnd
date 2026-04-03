@@ -233,9 +233,23 @@ class Controllers {
 
         // Get all goals for student with their tasks
         const goalsResult = await GoalQueries.findGoalsByStudent(sStudentId, 1, 1000, null, null);
-        const aGoals = goalsResult.results;
 
-        // Get all records for all goals filtered by date range
+        // Filter goals to those relevant in the date range:
+        // - Created on or before end date (existed during the period)
+        // - Still active, OR completed/not-achieved on or after start date
+        const aGoals = goalsResult.results.filter((g: any) => {
+            if (g.created_at) {
+                const createdDate = new Date(g.created_at).toISOString().split('T')[0];
+                if (createdDate > sEnd) return false;
+            }
+            if ((g.sStatus === 'COMPLETED' || g.sStatus === 'NOT_ACHIEVED') && g.tCompletedDate) {
+                const completedDate = new Date(g.tCompletedDate).toISOString().split('T')[0];
+                if (completedDate < sStart) return false;
+            }
+            return true;
+        });
+
+        // Get all records for date-filtered goals within date range
         const aGoalIds = aGoals.map((g: any) => g.sGoalId);
         let allRecords: any[] = [];
         if (aGoalIds.length > 0) {
@@ -250,9 +264,8 @@ class Controllers {
                 .orderBy('tRecordDate', 'desc');
         }
 
-        // Calculate summary
+        // Calculate summary — all stats scoped to the date range
         const iActiveGoals = aGoals.filter((g: any) => g.sStatus === 'ACTIVE').length;
-        // Filter completed/not-achieved by tCompletedDate in date range
         const iCompletedGoals = aGoals.filter((g: any) => {
             if (g.sStatus !== 'COMPLETED' || !g.tCompletedDate) return false;
             const completedDate = new Date(g.tCompletedDate).toISOString().split('T')[0];
@@ -263,7 +276,6 @@ class Controllers {
             const completedDate = new Date(g.tCompletedDate).toISOString().split('T')[0];
             return completedDate >= sStart && completedDate <= sEnd;
         }).length;
-        // dAverageProgress: current progress across ALL active goals (not date-filtered)
         const activeGoals = aGoals.filter((g: any) => g.sStatus === 'ACTIVE');
         const dAverageProgress = activeGoals.length > 0
             ? activeGoals.reduce((sum: number, g: any) => sum + (parseFloat(g.dProgress) || 0), 0) / activeGoals.length

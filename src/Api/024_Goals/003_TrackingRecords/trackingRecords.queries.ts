@@ -101,10 +101,12 @@ class Queries {
             queryBuilder.whereNull('TrackingRecords.tDeletedAt');
 
             if (tStartDate) {
-                queryBuilder.where('TrackingRecords.tRecordDate', '>=', tStartDate);
+                const sStart = tStartDate instanceof Date ? tStartDate.toISOString().split('T')[0] : String(tStartDate);
+                queryBuilder.whereRaw('"TrackingRecords"."tRecordDate"::date >= ?', [sStart]);
             }
             if (tEndDate) {
-                queryBuilder.where('TrackingRecords.tRecordDate', '<=', tEndDate);
+                const sEnd = tEndDate instanceof Date ? tEndDate.toISOString().split('T')[0] : String(tEndDate);
+                queryBuilder.whereRaw('"TrackingRecords"."tRecordDate"::date <= ?', [sEnd]);
             }
         }).orderBy('TrackingRecords.tRecordDate', 'desc').page((iPageNumber - 1), iItemsPerPage);
     }

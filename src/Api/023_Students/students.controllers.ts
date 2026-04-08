@@ -10,7 +10,6 @@ import GoalQueries from '../024_Goals/goals.queries';
 import StudentAssignmentQueries from '../028_StudentAssignments/studentAssignments.queries';
 import { TrackingRecordsModel } from '../024_Goals/003_TrackingRecords/trackingRecords.model';
 import { TrackingRecordTasksModel } from '../024_Goals/003_TrackingRecords/trackingRecordTasks.model';
-import { UsersModel } from '../004_Users/users.model';
 import { db } from '../../Config/Db.config';
 import StorageServices from '../../Services/Storage.services';
 
@@ -69,8 +68,7 @@ class Controllers {
 
         // Check if user is FACULTY — if so, only show assigned students
         let aAssignedStudentIds: string[] = null;
-        const currentUser = await UsersModel.query().findById(sUserId).select('sType');
-        if (currentUser && currentUser.sType === 'FACULTY') {
+        if (res.locals.sType === 'FACULTY') {
             aAssignedStudentIds = await StudentAssignmentQueries.findAssignedStudentIds(sUserId);
         }
 
@@ -95,8 +93,14 @@ class Controllers {
 
     // Get ONE Student
     async getOneStudent(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
-        const {sLang, sSchoolId} = res.locals;
+        const {sLang, sSchoolId, sUserId} = res.locals;
         const {sStudentId} = req.params;
+
+        // FACULTY can only view assigned students
+        if (res.locals.sType === 'FACULTY') {
+            const bAllowed = await StudentAssignmentQueries.isStudentAssignedToUser(sStudentId, sUserId);
+            if (!bAllowed) return next(new MyError(403, ErrorMessages.Authentication.accessDenied[sLang]));
+        }
 
         const myStudent = await StudentQueries.findOneStudent(sSchoolId, sStudentId);
         if (!myStudent) {
@@ -211,9 +215,15 @@ class Controllers {
 
     // GET /students/:sStudentId/report — Student progress report
     async getStudentReport(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
-        const {sLang, sSchoolId} = res.locals;
+        const {sLang, sSchoolId, sUserId} = res.locals;
         const {sStudentId} = req.params;
         const {tStartDate, tEndDate} = req.query;
+
+        // FACULTY can only view reports for assigned students
+        if (res.locals.sType === 'FACULTY') {
+            const bAllowed = await StudentAssignmentQueries.isStudentAssignedToUser(sStudentId, sUserId);
+            if (!bAllowed) return next(new MyError(403, ErrorMessages.Authentication.accessDenied[sLang]));
+        }
 
         // Verify student belongs to school
         const myStudent = await StudentQueries.findOneStudent(sSchoolId, sStudentId);

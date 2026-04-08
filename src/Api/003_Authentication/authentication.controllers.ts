@@ -47,8 +47,8 @@ class Controllers {
             return next(new MyError(401, ErrorMessages.Authentication.login.notActivatedAccount[sLang]));
         }
 
-        // Determine user type: SuperAdmin or SchoolAdmin
-        let sUserType: 'SuperAdmin' | 'SchoolAdmin';
+        // Determine user type: SuperAdmin, SchoolAdmin, or FACULTY
+        let sUserType: 'SuperAdmin' | 'SchoolAdmin' | 'FACULTY';
         let oSchool: any = null;
         let iTokenExpiryMinutes: number;
 
@@ -63,7 +63,7 @@ class Controllers {
             const mySchoolUser = await SchoolUsersModel.query().findById(User.sUserId);
 
             if (mySchoolUser) {
-                sUserType = 'SchoolAdmin';
+                sUserType = User.sType === 'FACULTY' ? 'FACULTY' : 'SchoolAdmin';
                 iTokenExpiryMinutes = 7200; // 120 hours
 
                 // Get school info (verifySchoolExists checks bActive=true AND bBlocked=false)
@@ -99,7 +99,12 @@ class Controllers {
 
         // Build permissions array for school users
         let aPermissions: any[] = [];
-        if (sUserType === 'SchoolAdmin') {
+        if (sUserType === 'FACULTY') {
+            aPermissions = [
+                { sModuleId: 'all', sModuleName: 'Goals', sAction: 'WRITE' },
+                { sModuleId: 'all', sModuleName: 'Reports', sAction: 'READ' },
+            ];
+        } else if (sUserType === 'SchoolAdmin') {
             // If super school admin (sCreatedBy IS NULL), grant all permissions
             if (User.sCreatedBy === null) {
                 aPermissions = [

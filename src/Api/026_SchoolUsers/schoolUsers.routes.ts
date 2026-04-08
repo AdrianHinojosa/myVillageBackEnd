@@ -3,7 +3,7 @@ import aH from "express-async-handler";
 import { celebrate } from "celebrate";
 import SchoolUserController from './schoolUsers.controllers';
 import * as SchoolUserValidations from './schoolUsers.validations';
-import { verifySchoolUserPermissions } from '../../Middlewares/001_Permissions.mw.ts/schools.permissions';
+import { verifySchoolUserPermissions, denyFacultyAccess } from '../../Middlewares/001_Permissions.mw.ts/schools.permissions';
 
 const router = Router();
 
@@ -11,6 +11,7 @@ const router = Router();
 router.get('/',
     celebrate({ query: SchoolUserValidations.GetSchoolUsersQuery }),
     aH(verifySchoolUserPermissions([{ sModuleName: 'General', sActionCode: 'READ' }])),
+    aH(denyFacultyAccess() as any),
     aH(SchoolUserController.getAllSchoolUsers)
 );
 
@@ -18,6 +19,7 @@ router.get('/',
 router.post('/',
     celebrate({ body: SchoolUserValidations.CreateSchoolUserBody }),
     aH(verifySchoolUserPermissions([{ sModuleName: 'General', sActionCode: 'WRITE' }])),
+    aH(denyFacultyAccess() as any),
     aH(SchoolUserController.createSchoolUser)
 );
 
@@ -25,6 +27,7 @@ router.post('/',
 router.get('/:sSchoolUserId',
     celebrate({ params: SchoolUserValidations.GetSchoolUserParams }),
     aH(verifySchoolUserPermissions([{ sModuleName: 'General', sActionCode: 'READ' }])),
+    aH(denyFacultyAccess() as any),
     aH(SchoolUserController.getOneSchoolUser)
 );
 
@@ -32,6 +35,7 @@ router.get('/:sSchoolUserId',
 router.put('/:sSchoolUserId',
     celebrate({ params: SchoolUserValidations.UpdateSchoolUserParams, body: SchoolUserValidations.UpdateSchoolUserBody }),
     aH(verifySchoolUserPermissions([{ sModuleName: 'General', sActionCode: 'WRITE' }])),
+    aH(denyFacultyAccess() as any),
     aH(SchoolUserController.updateSchoolUser)
 );
 
@@ -39,6 +43,7 @@ router.put('/:sSchoolUserId',
 router.post('/:sSchoolUserId/resetPassword',
     celebrate({ params: SchoolUserValidations.ResetPasswordParams }),
     aH(verifySchoolUserPermissions([{ sModuleName: 'General', sActionCode: 'WRITE' }])),
+    aH(denyFacultyAccess() as any),
     aH(SchoolUserController.resetPassword)
 );
 

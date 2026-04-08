@@ -3,7 +3,7 @@ import aH from "express-async-handler";
 import { celebrate } from "celebrate";
 import StudentAssignmentController from './studentAssignments.controllers';
 import * as StudentAssignmentValidations from './studentAssignments.validations';
-import { verifySchoolUserPermissions } from '../../Middlewares/001_Permissions.mw.ts/schools.permissions';
+import { verifySchoolUserPermissions, denyFacultyAccess } from '../../Middlewares/001_Permissions.mw.ts/schools.permissions';
 
 const router = Router();
 
@@ -11,12 +11,14 @@ const router = Router();
 router.post('/:sStudentId',
     celebrate({ params: StudentAssignmentValidations.AssignTeacherParams, body: StudentAssignmentValidations.AssignTeacherBody }),
     aH(verifySchoolUserPermissions([{ sModuleName: 'General', sActionCode: 'WRITE' }])),
+    aH(denyFacultyAccess() as any),
     aH(StudentAssignmentController.assignTeacher));
 
 // DELETE /:sStudentId/:sStudentAssignmentId — Unassign a teacher
 router.delete('/:sStudentId/:sStudentAssignmentId',
     celebrate({ params: StudentAssignmentValidations.UnassignTeacherParams }),
     aH(verifySchoolUserPermissions([{ sModuleName: 'General', sActionCode: 'WRITE' }])),
+    aH(denyFacultyAccess() as any),
     aH(StudentAssignmentController.unassignTeacher));
 
 // GET /:sStudentId — List assigned teachers for a student

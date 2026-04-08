@@ -70,13 +70,19 @@ class Controllers {
 
     // GET /studentAssignments/:sStudentId — List assigned teachers for a student
     async getAssignments(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
-        const {sLang, sSchoolId} = res.locals;
+        const {sLang, sSchoolId, sUserId} = res.locals;
         const {sStudentId} = req.params;
 
         // Verify student exists and belongs to school
         const myStudent = await StudentQueries.verifyStudentExistsBySchool(sSchoolId, sStudentId);
         if (!myStudent) {
             return next(new MyError(404, ErrorMessages.Students.notFound[sLang]));
+        }
+
+        // FACULTY can only view assignments for their own students
+        if (res.locals.sType === 'FACULTY') {
+            const bAllowed = await StudentAssignmentQueries.isStudentAssignedToUser(sStudentId, sUserId);
+            if (!bAllowed) return next(new MyError(403, ErrorMessages.Authentication.accessDenied[sLang]));
         }
 
         const result = await StudentAssignmentQueries.findAssignmentsByStudent(sStudentId);

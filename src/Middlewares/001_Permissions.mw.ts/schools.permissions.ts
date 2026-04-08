@@ -86,8 +86,11 @@ export const verifySchoolUserPermissions = (sArrModules: Permission[]) => async 
 
     // If NOT super school user then verify permissions.
     if (schoolUserSession.sCreatedBy !== null) {
-        const isAuthorized = await SchoolUserQueries.bIsSchoolUserAuthorizedForModules(schoolUserSession.sSchoolUserId, sArrModules);
-        if (!isAuthorized) return next(new MyError(403, ErrorMessages.Authentication.accessDenied[sLang]));
+        // FACULTY users bypass module-level permission check — access is enforced per-route and per-student
+        if (schoolUserSession.sType !== 'FACULTY') {
+            const isAuthorized = await SchoolUserQueries.bIsSchoolUserAuthorizedForModules(schoolUserSession.sSchoolUserId, sArrModules);
+            if (!isAuthorized) return next(new MyError(403, ErrorMessages.Authentication.accessDenied[sLang]));
+        }
     }
     // If Super School User just proceed.
     // Set local variables and refresh token
@@ -96,12 +99,23 @@ export const verifySchoolUserPermissions = (sArrModules: Permission[]) => async 
     res.locals.TokenData = TokenData;
     res.locals.sTypeUser = 'School';
     res.locals.sSchoolId = schoolUserSession.sSchoolId;
+    res.locals.sType = schoolUserSession.sType || 'ADMINISTRATION';
 
     // Refresh Token for 120 hours (5 days)
     await refreshTokenSchools(res.locals);
     // Proceed!
     return next();
 }
+
+
+// Deny access to FACULTY users. Place AFTER verifySchoolUserPermissions on routes that FACULTY cannot access.
+export const denyFacultyAccess = () => async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const { sLang, sType } = res.locals;
+    if (sType === 'FACULTY') {
+        return next(new MyError(403, ErrorMessages.Authentication.accessDenied[sLang]));
+    }
+    return next();
+};
 
 
 // Verify if School User has ANY of the specified permissions
@@ -136,9 +150,12 @@ export const verifySchoolUserHasAnyPermissions = (sArrModules: Permission[]) => 
 
     // If NOT super school user then verify permissions.
     if (schoolUserSession.sCreatedBy !== null) {
-        // Check if user has ANY of the required permissions (instead of ALL)
-        const hasAnyPermission = await SchoolUserQueries.bIsSchoolUserAuthorizedForAnyModules(schoolUserSession.sSchoolUserId, sArrModules);
-        if (!hasAnyPermission) return next(new MyError(403, ErrorMessages.Authentication.accessDenied[sLang]));
+        // FACULTY users bypass module-level permission check — access is enforced per-route and per-student
+        if (schoolUserSession.sType !== 'FACULTY') {
+            // Check if user has ANY of the required permissions (instead of ALL)
+            const hasAnyPermission = await SchoolUserQueries.bIsSchoolUserAuthorizedForAnyModules(schoolUserSession.sSchoolUserId, sArrModules);
+            if (!hasAnyPermission) return next(new MyError(403, ErrorMessages.Authentication.accessDenied[sLang]));
+        }
     }
     // If Super School User just proceed.
 
@@ -148,6 +165,7 @@ export const verifySchoolUserHasAnyPermissions = (sArrModules: Permission[]) => 
     res.locals.TokenData = TokenData;
     res.locals.sTypeUser = 'School';
     res.locals.sSchoolId = schoolUserSession.sSchoolId;
+    res.locals.sType = schoolUserSession.sType || 'ADMINISTRATION';
 
     // Refresh Token for 120 hours (5 days)
     await refreshTokenSchools(res.locals);

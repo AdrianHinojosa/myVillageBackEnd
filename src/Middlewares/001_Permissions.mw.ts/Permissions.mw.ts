@@ -20,6 +20,7 @@ declare module 'express' {
             sEnterpriseId?: string;
             sEmployeeId?: string;
             sSchoolId?: string;
+            sType?: 'FACULTY' | 'ADMINISTRATION';
 
         }
     }

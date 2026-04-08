@@ -6,6 +6,7 @@ import MyError from '../../../Middlewares/Error.mw';
 // Queries
 import GoalTaskQueries from './goalTasks.queries';
 import GoalQueries from '../goals.queries';
+import StudentAssignmentQueries from '../../028_StudentAssignments/studentAssignments.queries';
 
 // Messages
 import SuccessMessages from '../../../Utils/SuccessMessage.util';
@@ -17,7 +18,7 @@ class Controllers {
 
     // Create a single goal task
     async createGoalTask(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
-        const {sLang} = res.locals;
+        const {sLang, sUserId} = res.locals;
         const {sGoalId} = req.params;
         const {sTitle, bCompleted, iOrder} = req.body;
 
@@ -25,6 +26,12 @@ class Controllers {
         const myGoal = await GoalQueries.verifyGoalExists(sGoalId);
         if (!myGoal) {
             return next(new MyError(404, ErrorMessages.Goals.notFound[sLang]));
+        }
+
+        // FACULTY can only manage tasks for assigned students
+        if (res.locals.sType === 'FACULTY') {
+            const bAllowed = await StudentAssignmentQueries.isStudentAssignedToUser(myGoal.sStudentId, sUserId);
+            if (!bAllowed) return next(new MyError(403, ErrorMessages.Authentication.accessDenied[sLang]));
         }
 
         const newGoalTask = await GoalTaskQueries.insertGoalTask({
@@ -43,13 +50,18 @@ class Controllers {
 
     // Get all tasks for a goal
     async getGoalTasks(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
-        const {sLang} = res.locals;
+        const {sLang, sUserId} = res.locals;
         const {sGoalId} = req.params;
 
         // Verify goal exists and is active
         const myGoal = await GoalQueries.verifyGoalExists(sGoalId);
         if (!myGoal) {
             return next(new MyError(404, ErrorMessages.Goals.notFound[sLang]));
+        }
+
+        if (res.locals.sType === 'FACULTY') {
+            const bAllowed = await StudentAssignmentQueries.isStudentAssignedToUser(myGoal.sStudentId, sUserId);
+            if (!bAllowed) return next(new MyError(403, ErrorMessages.Authentication.accessDenied[sLang]));
         }
 
         const goalTasks = await GoalTaskQueries.findGoalTasksByGoal(sGoalId);
@@ -63,7 +75,7 @@ class Controllers {
 
     // Update a goal task
     async updateGoalTask(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
-        const {sLang} = res.locals;
+        const {sLang, sUserId} = res.locals;
         const {sGoalId, sGoalTaskId} = req.params;
         const {sTitle, bCompleted, iOrder} = req.body;
 
@@ -71,6 +83,11 @@ class Controllers {
         const myGoal = await GoalQueries.verifyGoalExists(sGoalId);
         if (!myGoal) {
             return next(new MyError(404, ErrorMessages.Goals.notFound[sLang]));
+        }
+
+        if (res.locals.sType === 'FACULTY') {
+            const bAllowed = await StudentAssignmentQueries.isStudentAssignedToUser(myGoal.sStudentId, sUserId);
+            if (!bAllowed) return next(new MyError(403, ErrorMessages.Authentication.accessDenied[sLang]));
         }
 
         // Verify task exists
@@ -95,7 +112,7 @@ class Controllers {
 
     // Toggle completed status of a goal task
     async toggleGoalTask(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
-        const {sLang} = res.locals;
+        const {sLang, sUserId} = res.locals;
         const {sGoalId, sGoalTaskId} = req.params;
         const {bCompleted} = req.body;
 
@@ -103,6 +120,11 @@ class Controllers {
         const myGoal = await GoalQueries.verifyGoalExists(sGoalId);
         if (!myGoal) {
             return next(new MyError(404, ErrorMessages.Goals.notFound[sLang]));
+        }
+
+        if (res.locals.sType === 'FACULTY') {
+            const bAllowed = await StudentAssignmentQueries.isStudentAssignedToUser(myGoal.sStudentId, sUserId);
+            if (!bAllowed) return next(new MyError(403, ErrorMessages.Authentication.accessDenied[sLang]));
         }
 
         // Verify task exists
@@ -123,13 +145,18 @@ class Controllers {
 
     // Delete a goal task (hard delete)
     async deleteGoalTask(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
-        const {sLang} = res.locals;
+        const {sLang, sUserId} = res.locals;
         const {sGoalId, sGoalTaskId} = req.params;
 
         // Verify goal exists and is active
         const myGoal = await GoalQueries.verifyGoalExists(sGoalId);
         if (!myGoal) {
             return next(new MyError(404, ErrorMessages.Goals.notFound[sLang]));
+        }
+
+        if (res.locals.sType === 'FACULTY') {
+            const bAllowed = await StudentAssignmentQueries.isStudentAssignedToUser(myGoal.sStudentId, sUserId);
+            if (!bAllowed) return next(new MyError(403, ErrorMessages.Authentication.accessDenied[sLang]));
         }
 
         // Verify task exists

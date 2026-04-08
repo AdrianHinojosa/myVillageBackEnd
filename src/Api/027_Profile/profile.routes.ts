@@ -3,7 +3,7 @@ import aH from "express-async-handler";
 import { celebrate } from "celebrate";
 import ProfileController from './profile.controllers';
 import * as ProfileValidations from './profile.validations';
-import { verifySchoolUserPermissions } from '../../Middlewares/001_Permissions.mw.ts/schools.permissions';
+import { verifySchoolUserPermissions, denyFacultyAccess } from '../../Middlewares/001_Permissions.mw.ts/schools.permissions';
 
 const router = Router();
 
@@ -17,6 +17,7 @@ router.get('/',
 router.put('/',
     celebrate({ body: ProfileValidations.UpdateProfileBody }),
     aH(verifySchoolUserPermissions([{ sModuleName: 'General', sActionCode: 'READ' }])),
+    aH(denyFacultyAccess() as any),
     aH(ProfileController.updateProfile)
 );
 
@@ -24,6 +25,7 @@ router.put('/',
 router.put('/password',
     celebrate({ body: ProfileValidations.ChangePasswordBody }),
     aH(verifySchoolUserPermissions([{ sModuleName: 'General', sActionCode: 'READ' }])),
+    aH(denyFacultyAccess() as any),
     aH(ProfileController.changePassword)
 );
 

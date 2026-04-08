@@ -4,7 +4,7 @@ import { celebrate } from "celebrate";
 import upload from 'express-fileupload';
 import StudentController from './students.controllers';
 import * as StudentValidations from './students.validations';
-import { verifySchoolUserPermissions } from '../../Middlewares/001_Permissions.mw.ts/schools.permissions';
+import { verifySchoolUserPermissions, denyFacultyAccess } from '../../Middlewares/001_Permissions.mw.ts/schools.permissions';
 
 const router = Router();
 
@@ -12,6 +12,7 @@ const router = Router();
 router.post('/',
     celebrate({ body: StudentValidations.CreateStudentBody }),
     aH(verifySchoolUserPermissions(  [  {sModuleName: 'General', sActionCode: 'WRITE' }  ])),
+    aH(denyFacultyAccess() as any),
     aH(StudentController.createStudent));
 
 // Get ALL
@@ -30,18 +31,21 @@ router.get('/:sStudentId',
 router.put('/:sStudentId',
     celebrate({ params: StudentValidations.UpdateStudentParams, body: StudentValidations.UpdateStudentBody }),
     aH(verifySchoolUserPermissions(  [  {sModuleName: 'General', sActionCode: 'WRITE' }  ])),
+    aH(denyFacultyAccess() as any),
     aH(StudentController.updateStudent));
 
 // Delete
 router.delete('/:sStudentId',
     celebrate({ params: StudentValidations.DeleteStudentParams }),
     aH(verifySchoolUserPermissions(  [  {sModuleName: 'General', sActionCode: 'WRITE' }  ])),
+    aH(denyFacultyAccess() as any),
     aH(StudentController.deleteStudent));
 
 // POST /:sStudentId/image — Upload student image
 router.post('/:sStudentId/image',
     aH(upload()),
     aH(verifySchoolUserPermissions(  [  {sModuleName: 'General', sActionCode: 'WRITE' }  ])),
+    aH(denyFacultyAccess() as any),
     aH(StudentController.uploadStudentImage));
 
 // GET /:sStudentId/report — Student progress report

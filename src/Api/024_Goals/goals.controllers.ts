@@ -6,6 +6,7 @@ import MyError from '../../Middlewares/Error.mw';
 // Queries
 import GoalQueries from './goals.queries';
 import StudentQueries from '../023_Students/students.queries';
+import StudentAssignmentQueries from '../028_StudentAssignments/studentAssignments.queries';
 
 // Messages
 import SuccessMessages from '../../Utils/SuccessMessage.util';
@@ -24,6 +25,12 @@ class Controllers {
         const myStudent = await StudentQueries.verifyStudentExistsBySchool(sSchoolId, sStudentId);
         if (!myStudent) {
             return next(new MyError(404, ErrorMessages.Students.notFound[sLang]));
+        }
+
+        // FACULTY can only create goals for assigned students
+        if (res.locals.sType === 'FACULTY') {
+            const bAllowed = await StudentAssignmentQueries.isStudentAssignedToUser(sStudentId, sUserId);
+            if (!bAllowed) return next(new MyError(403, ErrorMessages.Authentication.accessDenied[sLang]));
         }
 
         // Insert goal with tasks
@@ -54,7 +61,7 @@ class Controllers {
 
     // Get all goals by student (paginated)
     async getGoalsByStudent(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
-        const {sLang, sSchoolId} = res.locals;
+        const {sLang, sSchoolId, sUserId} = res.locals;
         const {sStudentId} = req.params;
         let {sSearch, iItemsPerPage = 20, iPageNumber = 1, sStatus} = req.query;
 
@@ -62,6 +69,12 @@ class Controllers {
         const myStudent = await StudentQueries.verifyStudentExistsBySchool(sSchoolId, sStudentId);
         if (!myStudent) {
             return next(new MyError(404, ErrorMessages.Students.notFound[sLang]));
+        }
+
+        // FACULTY can only view goals for assigned students
+        if (res.locals.sType === 'FACULTY') {
+            const bAllowed = await StudentAssignmentQueries.isStudentAssignedToUser(sStudentId, sUserId);
+            if (!bAllowed) return next(new MyError(403, ErrorMessages.Authentication.accessDenied[sLang]));
         }
 
         const arrGoals = await GoalQueries.findGoalsByStudent(sStudentId, iPageNumber, iItemsPerPage, sSearch, sStatus);
@@ -79,7 +92,7 @@ class Controllers {
 
     // Get one goal
     async getOneGoal(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
-        const {sLang, sSchoolId} = res.locals;
+        const {sLang, sSchoolId, sUserId} = res.locals;
         const {sGoalId} = req.params;
 
         // Get goal
@@ -92,6 +105,12 @@ class Controllers {
         const myStudent = await StudentQueries.verifyStudentExistsBySchool(sSchoolId, myGoal.sStudentId);
         if (!myStudent) {
             return next(new MyError(404, ErrorMessages.Goals.notFound[sLang]));
+        }
+
+        // FACULTY can only view goals for assigned students
+        if (res.locals.sType === 'FACULTY') {
+            const bAllowed = await StudentAssignmentQueries.isStudentAssignedToUser(myGoal.sStudentId, sUserId);
+            if (!bAllowed) return next(new MyError(403, ErrorMessages.Authentication.accessDenied[sLang]));
         }
 
         return res.status(201).json({
@@ -117,6 +136,12 @@ class Controllers {
         const myStudent = await StudentQueries.verifyStudentExistsBySchool(sSchoolId, myGoal.sStudentId);
         if (!myStudent) {
             return next(new MyError(404, ErrorMessages.Goals.notFound[sLang]));
+        }
+
+        // FACULTY can only update goals for assigned students
+        if (res.locals.sType === 'FACULTY') {
+            const bAllowed = await StudentAssignmentQueries.isStudentAssignedToUser(myGoal.sStudentId, sUserId);
+            if (!bAllowed) return next(new MyError(403, ErrorMessages.Authentication.accessDenied[sLang]));
         }
 
         // Update goal with tasks
@@ -161,6 +186,12 @@ class Controllers {
             return next(new MyError(404, ErrorMessages.Goals.notFound[sLang]));
         }
 
+        // FACULTY can only complete goals for assigned students
+        if (res.locals.sType === 'FACULTY') {
+            const bAllowed = await StudentAssignmentQueries.isStudentAssignedToUser(myGoal.sStudentId, sUserId);
+            if (!bAllowed) return next(new MyError(403, ErrorMessages.Authentication.accessDenied[sLang]));
+        }
+
         // Complete goal
         const completedGoal = await GoalQueries.completeGoal(sGoalId, sStatus, sUserId, sCompletionNotes);
 
@@ -186,6 +217,12 @@ class Controllers {
         const myStudent = await StudentQueries.verifyStudentExistsBySchool(sSchoolId, myGoal.sStudentId);
         if (!myStudent) {
             return next(new MyError(404, ErrorMessages.Goals.notFound[sLang]));
+        }
+
+        // FACULTY can only delete goals for assigned students
+        if (res.locals.sType === 'FACULTY') {
+            const bAllowed = await StudentAssignmentQueries.isStudentAssignedToUser(myGoal.sStudentId, sUserId);
+            if (!bAllowed) return next(new MyError(403, ErrorMessages.Authentication.accessDenied[sLang]));
         }
 
         // Soft delete goal

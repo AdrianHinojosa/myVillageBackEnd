@@ -3,6 +3,7 @@ import MyError from '../../../Middlewares/Error.mw';
 import TrackingRecordQueries from './trackingRecords.queries';
 import GoalQueries from '../goals.queries';
 import StudentQueries from '../../023_Students/students.queries';
+import StudentAssignmentQueries from '../../028_StudentAssignments/studentAssignments.queries';
 import SuccessMessages from '../../../Utils/SuccessMessage.util';
 import ErrorMessages from '../../../Utils/ErrorMessages.util';
 import StorageServices from '../../../Services/Storage.services';
@@ -35,6 +36,12 @@ class Controllers {
             return next(new MyError(404, ErrorMessages.Goals.notFound[sLang]));
         }
 
+        // FACULTY can only create records for assigned students
+        if (res.locals.sType === 'FACULTY') {
+            const bAllowed = await StudentAssignmentQueries.isStudentAssignedToUser(myGoal.sStudentId, sUserId);
+            if (!bAllowed) return next(new MyError(403, ErrorMessages.Authentication.accessDenied[sLang]));
+        }
+
         // Insert tracking record
         const { oRecord, dUpdatedProgress } = await TrackingRecordQueries.insertTrackingRecord({
             ...oBody,
@@ -51,7 +58,7 @@ class Controllers {
 
     // Get tracking records for a goal
     async getTrackingRecordsByGoal(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
-        const {sLang, sSchoolId} = res.locals;
+        const {sLang, sSchoolId, sUserId} = res.locals;
         const {sGoalId} = req.params;
         const {iPageNumber = 1, iItemsPerPage = 50, tStartDate, tEndDate} = req.query;
 
@@ -67,6 +74,11 @@ class Controllers {
             return next(new MyError(404, ErrorMessages.Goals.notFound[sLang]));
         }
 
+        if (res.locals.sType === 'FACULTY') {
+            const bAllowed = await StudentAssignmentQueries.isStudentAssignedToUser(myGoal.sStudentId, sUserId);
+            if (!bAllowed) return next(new MyError(403, ErrorMessages.Authentication.accessDenied[sLang]));
+        }
+
         const myRecords = await TrackingRecordQueries.findRecordsByGoal(sGoalId, iPageNumber, iItemsPerPage, tStartDate, tEndDate);
         const formattedRecords = await TrackingRecordQueries.formatRecordsForFrontend(myRecords.results);
 
@@ -80,7 +92,7 @@ class Controllers {
 
     // Toggle record exclusion from average
     async toggleExclusion(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
-        const {sLang, sSchoolId} = res.locals;
+        const {sLang, sSchoolId, sUserId} = res.locals;
         const {sTrackingRecordId} = req.params;
         const {bExcludedFromAverage} = req.body;
 
@@ -100,6 +112,11 @@ class Controllers {
             return next(new MyError(404, ErrorMessages.Goals.notFound[sLang]));
         }
 
+        if (res.locals.sType === 'FACULTY') {
+            const bAllowed = await StudentAssignmentQueries.isStudentAssignedToUser(myGoal.sStudentId, sUserId);
+            if (!bAllowed) return next(new MyError(403, ErrorMessages.Authentication.accessDenied[sLang]));
+        }
+
         const { dUpdatedProgress } = await TrackingRecordQueries.toggleExclusion(sTrackingRecordId, bExcludedFromAverage);
 
         return res.status(200).json({
@@ -111,7 +128,7 @@ class Controllers {
 
     // Delete a tracking record
     async deleteTrackingRecord(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
-        const {sLang, sSchoolId} = res.locals;
+        const {sLang, sSchoolId, sUserId} = res.locals;
         const {sTrackingRecordId} = req.params;
 
         // Verify record exists
@@ -128,6 +145,11 @@ class Controllers {
         const myStudent = await StudentQueries.verifyStudentExistsBySchool(sSchoolId, myGoal.sStudentId);
         if (!myStudent) {
             return next(new MyError(404, ErrorMessages.Goals.notFound[sLang]));
+        }
+
+        if (res.locals.sType === 'FACULTY') {
+            const bAllowed = await StudentAssignmentQueries.isStudentAssignedToUser(myGoal.sStudentId, sUserId);
+            if (!bAllowed) return next(new MyError(403, ErrorMessages.Authentication.accessDenied[sLang]));
         }
 
         const { dUpdatedProgress } = await TrackingRecordQueries.deleteRecord(sTrackingRecordId);
@@ -153,6 +175,14 @@ class Controllers {
         const myRecord = await TrackingRecordQueries.verifyRecordExists(sTrackingRecordId);
         if (!myRecord) {
             return next(new MyError(404, ErrorMessages.TrackingRecords.notFound[sLang]));
+        }
+
+        if (res.locals.sType === 'FACULTY') {
+            const myGoal = await GoalQueries.verifyGoalExists(myRecord.sGoalId);
+            if (myGoal) {
+                const bAllowed = await StudentAssignmentQueries.isStudentAssignedToUser(myGoal.sStudentId, sUserId);
+                if (!bAllowed) return next(new MyError(403, ErrorMessages.Authentication.accessDenied[sLang]));
+            }
         }
 
         // Normalize to arrays
@@ -199,8 +229,19 @@ class Controllers {
 
     // GET /trackingRecords/:sTrackingRecordId/files — List record files
     async getRecordFiles(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
-        const {sLang} = res.locals;
+        const {sLang, sUserId} = res.locals;
         const {sTrackingRecordId} = req.params;
+
+        if (res.locals.sType === 'FACULTY') {
+            const myRecord = await TrackingRecordQueries.verifyRecordExists(sTrackingRecordId);
+            if (myRecord) {
+                const myGoal = await GoalQueries.verifyGoalExists(myRecord.sGoalId);
+                if (myGoal) {
+                    const bAllowed = await StudentAssignmentQueries.isStudentAssignedToUser(myGoal.sStudentId, sUserId);
+                    if (!bAllowed) return next(new MyError(403, ErrorMessages.Authentication.accessDenied[sLang]));
+                }
+            }
+        }
 
         const files = await TrackingRecordFilesModel.query()
             .where('sTrackingRecordId', sTrackingRecordId)
@@ -218,8 +259,19 @@ class Controllers {
 
     // DELETE /trackingRecords/:sTrackingRecordId/files/:sFileId — Delete record file
     async deleteRecordFile(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
-        const {sLang} = res.locals;
+        const {sLang, sUserId} = res.locals;
         const {sTrackingRecordId, sFileId} = req.params;
+
+        if (res.locals.sType === 'FACULTY') {
+            const myRecord = await TrackingRecordQueries.verifyRecordExists(sTrackingRecordId);
+            if (myRecord) {
+                const myGoal = await GoalQueries.verifyGoalExists(myRecord.sGoalId);
+                if (myGoal) {
+                    const bAllowed = await StudentAssignmentQueries.isStudentAssignedToUser(myGoal.sStudentId, sUserId);
+                    if (!bAllowed) return next(new MyError(403, ErrorMessages.Authentication.accessDenied[sLang]));
+                }
+            }
+        }
 
         // Verify file belongs to record
         const recordFile = await TrackingRecordFilesModel.query()

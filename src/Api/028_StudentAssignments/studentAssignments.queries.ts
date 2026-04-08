@@ -48,6 +48,15 @@ class Queries {
         `, [sStudentId]);
     }
 
+    // Check if a specific student is assigned to a specific school user
+    static async isStudentAssignedToUser(sStudentId: string, sSchoolUserId: string): Promise<boolean> {
+        const assignment = await StudentAssignmentsModel.query()
+            .where('sStudentId', sStudentId)
+            .where('sSchoolUserId', sSchoolUserId)
+            .first();
+        return !!assignment;
+    }
+
     // Get student IDs assigned to a specific school user
     static async findAssignedStudentIds(sSchoolUserId: string): Promise<string[]> {
         const results = await StudentAssignmentsModel.query()

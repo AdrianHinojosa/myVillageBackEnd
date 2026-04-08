@@ -6,6 +6,7 @@ import MyError from '../../../Middlewares/Error.mw';
 // Queries
 import GoalFilesQueries from './goalFiles.queries';
 import GoalQueries from '../goals.queries';
+import StudentAssignmentQueries from '../../028_StudentAssignments/studentAssignments.queries';
 
 // Messages
 import SuccessMessages from '../../../Utils/SuccessMessage.util';
@@ -52,6 +53,11 @@ class Controllers {
         // Validate that the goal exists
         const myGoal = await GoalQueries.verifyGoalExists(sGoalId);
         if (!myGoal) {return next(new MyError(404, ErrorMessages.Goals.notFound[sLang]  )) }
+
+        if (res.locals.sType === 'FACULTY') {
+            const bAllowed = await StudentAssignmentQueries.isStudentAssignedToUser(myGoal.sStudentId, sUserId);
+            if (!bAllowed) return next(new MyError(403, ErrorMessages.Authentication.accessDenied[sLang]));
+        }
 
         let arrFilesObject : {
             // GoalFile Data
@@ -118,7 +124,7 @@ class Controllers {
 
     // GET ALL GoalFiles
     async getGoalFiles(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
-        const {sLang, sSchoolId} = res.locals;
+        const {sLang, sSchoolId, sUserId} = res.locals;
         const {sGoalId} = req.params;
         let {sSearch} = req.query;
 
@@ -127,6 +133,11 @@ class Controllers {
         // Validate that the Goal exists
         const myGoal = await GoalQueries.verifyGoalExists(sGoalId);
         if (!myGoal) {return next(new MyError(404, ErrorMessages.Goals.notFound[sLang]  )) }
+
+        if (res.locals.sType === 'FACULTY') {
+            const bAllowed = await StudentAssignmentQueries.isStudentAssignedToUser(myGoal.sStudentId, sUserId);
+            if (!bAllowed) return next(new MyError(403, ErrorMessages.Authentication.accessDenied[sLang]));
+        }
 
         const arrGoalFiles = await GoalFilesQueries.findAllGoalFilesByGoal(sGoalId, sSearch);
 
@@ -140,7 +151,7 @@ class Controllers {
 
     // Get ONE GoalFile.
     async getOneGoalFile(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
-        const {sLang, sSchoolId} = res.locals;
+        const {sLang, sSchoolId, sUserId} = res.locals;
         const {sGoalFileId, sGoalId} = req.params;
 
         // Note: Already validated that the school exists and is active.
@@ -148,6 +159,11 @@ class Controllers {
         // Validate that the goal exists
         const myGoal = await GoalQueries.verifyGoalExists(sGoalId);
         if (!myGoal) {return next(new MyError(404, ErrorMessages.Goals.notFound[sLang]  )) }
+
+        if (res.locals.sType === 'FACULTY') {
+            const bAllowed = await StudentAssignmentQueries.isStudentAssignedToUser(myGoal.sStudentId, sUserId);
+            if (!bAllowed) return next(new MyError(403, ErrorMessages.Authentication.accessDenied[sLang]));
+        }
 
         // GET One GoalFile of a Goal. Already validated that Goal Exists.
         const myGoalFile = await GoalFilesQueries.findOneGoalFileByGoal(sGoalFileId, sGoalId);
@@ -163,7 +179,7 @@ class Controllers {
 
     // Delete GoalFile.
     async deleteGoalFile(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
-        const {sLang, sSchoolId} = res.locals;
+        const {sLang, sSchoolId, sUserId} = res.locals;
         const {sGoalFileId, sGoalId} = req.params;
 
         // Note: Already validated that the school exists and is active.
@@ -171,6 +187,11 @@ class Controllers {
         // Validate that the goal exists
         const myGoal = await GoalQueries.verifyGoalExists(sGoalId);
         if (!myGoal) {return next(new MyError(404, ErrorMessages.Goals.notFound[sLang]  )) }
+
+        if (res.locals.sType === 'FACULTY') {
+            const bAllowed = await StudentAssignmentQueries.isStudentAssignedToUser(myGoal.sStudentId, sUserId);
+            if (!bAllowed) return next(new MyError(403, ErrorMessages.Authentication.accessDenied[sLang]));
+        }
 
         // GET One GoalFile of a Goal. Already validated that Goal Exists.
         const myGoalFile = await GoalFilesQueries.findOneGoalFileByGoal(sGoalFileId, sGoalId);

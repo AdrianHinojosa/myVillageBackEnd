@@ -38,6 +38,7 @@ class Queries {
                 sSecondLastName,
                 sEmail,
                 sImageKey: '',
+                sType: 'ADMINISTRATION',
                 bPlatformAccess: false,
                 bVerified: false,
                 bActive: true

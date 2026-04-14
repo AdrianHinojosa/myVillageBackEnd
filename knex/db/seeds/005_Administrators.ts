@@ -9,9 +9,9 @@ exports.seed = async  function (knex) {
       await knex('Users').insert([
             {
                 sUserId: myvillage_super_admin,
-                sName: 'MyVillage',
-                sLastName: 'Admin',
-                sEmail: 'admin@myvillage.com',
+                sName: 'Lucy',
+                sLastName: 'Potes',
+                sEmail: 'lucy.potes@myvillage.com.mx',
                 // Pass is: MyVillage0!
                 sPassword: '$2a$10$BsRejg/EVSfKZwBOAStfSemOz1SUdAwdNbHZ4bvFCpT1uPOZ6tDea',
                 sPhoneNumber: '+521234567890',

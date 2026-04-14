@@ -243,23 +243,13 @@ class Controllers {
 
         // Get all goals for student with their tasks
         const goalsResult = await GoalQueries.findGoalsByStudent(sStudentId, 1, 1000, null, null);
+        const allGoalIds = goalsResult.results.map((g: any) => g.sGoalId);
 
-        // Filter goals by target date: only include goals whose tTargetDate falls within the date range
-        // Goals without a target date are always included (open-ended goals)
-        const aGoals = goalsResult.results.filter((g: any) => {
-            if (g.tTargetDate) {
-                const targetDate = new Date(g.tTargetDate).toISOString().split('T')[0];
-                if (targetDate < sStart || targetDate > sEnd) return false;
-            }
-            return true;
-        });
-
-        // Get all records for date-filtered goals within date range
-        const aGoalIds = aGoals.map((g: any) => g.sGoalId);
+        // Get all records within date range, then use them to determine which goals had activity
         let allRecords: any[] = [];
-        if (aGoalIds.length > 0) {
+        if (allGoalIds.length > 0) {
             allRecords = await TrackingRecordsModel.query()
-                .whereIn('sGoalId', aGoalIds)
+                .whereIn('sGoalId', allGoalIds)
                 .where('bActive', true)
                 .whereNull('tDeletedAt')
                 .modify(function(qb: any) {
@@ -268,6 +258,10 @@ class Controllers {
                 })
                 .orderBy('tRecordDate', 'desc');
         }
+
+        // Only include goals that have at least one record in the date range
+        const sGoalIdsWithRecords = new Set(allRecords.map((r: any) => r.sGoalId));
+        const aGoals = goalsResult.results.filter((g: any) => sGoalIdsWithRecords.has(g.sGoalId));
 
         // Calculate summary — all stats scoped to the date range
         const iActiveGoals = aGoals.filter((g: any) => g.sStatus === 'ACTIVE').length;

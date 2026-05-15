@@ -155,6 +155,104 @@ class Queries {
         return formatted;
     }
 
+    // Update a tracking record (fields only — does not move goal, touch files, or change exclusion)
+    static async updateTrackingRecord(sTrackingRecordId: string, oData: any) {
+        return await TrackingRecordsModel.transaction(async (trx) => {
+            const existing = await TrackingRecordsModel.query(trx)
+                .findById(sTrackingRecordId)
+                .where('bActive', true)
+                .whereNull('tDeletedAt');
+            if (!existing) return null;
+
+            const recordData: any = {
+                sLastUpdatedBy: oData.sLastUpdatedBy
+            };
+
+            if (oData.dtDate !== undefined) {
+                recordData.tRecordDate = oData.dtDate || null;
+            }
+            if (oData.sNotes !== undefined) {
+                recordData.sObservations = oData.sNotes || '';
+            }
+            if (oData.iCorrect !== undefined && oData.iCorrect !== null) {
+                recordData.iHits = oData.iCorrect;
+                recordData.iErrors = (oData.iTotal || 0) - oData.iCorrect;
+            }
+            if (oData.iScaleValue !== undefined && oData.iScaleValue !== null) {
+                recordData.iScaleValue = oData.iScaleValue;
+            }
+            if (oData.iFrequencyCount !== undefined && oData.iFrequencyCount !== null) {
+                recordData.iOccurrences = oData.iFrequencyCount;
+            }
+            if (oData.iDurationMinutes !== undefined && oData.iDurationMinutes !== null) {
+                recordData.iDurationMinutes = oData.iDurationMinutes;
+            }
+            if (oData.iSuccessful !== undefined && oData.iSuccessful !== null) {
+                recordData.iAchieved = oData.iSuccessful;
+                recordData.iTotal = oData.iOpportunities || 0;
+            }
+
+            const updated = await TrackingRecordsModel.query(trx)
+                .patchAndFetchById(sTrackingRecordId, recordData)
+                .where('bActive', true);
+
+            // Replace TAREAS completions if provided
+            let aTasksCompleted: string[] = [];
+            if (oData.aTasksCompleted !== undefined && oData.aTasksCompleted !== null) {
+                await TrackingRecordTasksModel.query(trx)
+                    .delete()
+                    .where('sTrackingRecordId', sTrackingRecordId);
+                for (const sGoalTaskId of oData.aTasksCompleted) {
+                    await TrackingRecordTasksModel.query(trx).insert({
+                        sTrackingRecordId,
+                        sGoalTaskId
+                    });
+                }
+                aTasksCompleted = oData.aTasksCompleted;
+            } else {
+                const existingTasks = await TrackingRecordTasksModel.query(trx)
+                    .select('sGoalTaskId')
+                    .where('sTrackingRecordId', sTrackingRecordId);
+                aTasksCompleted = existingTasks.map((t: any) => t.sGoalTaskId);
+            }
+
+            const dUpdatedProgress = await Queries.recalculateGoalProgress(existing.sGoalId, trx);
+
+            // Preserve attached files in the response (not touched here)
+            const recordFiles = await TrackingRecordFilesModel.query(trx)
+                .where('sTrackingRecordId', sTrackingRecordId)
+                .withGraphFetched('File')
+                .modifyGraph('File', builder => {
+                    builder.where('bActive', true);
+                });
+            const aDocuments = recordFiles.map((rf: any) => ({
+                sFileId: rf.sTrackingRecordFileId,
+                sFileName: rf.File?.sFileName || '',
+                sFileType: rf.File?.sFileType || '',
+                File: {
+                    sKey: rf.File?.sFileUrl || rf.File?.sFileKey || ''
+                }
+            }));
+
+            const oResponse = {
+                ...updated,
+                sRecordId: updated.sTrackingRecordId,
+                dtDate: updated.tRecordDate,
+                dtCreatedAt: updated.created_at,
+                sNotes: updated.sObservations,
+                iCorrect: updated.iHits,
+                iTotal: (updated.iHits !== null && updated.iErrors !== null) ? updated.iHits + updated.iErrors : (updated.iTotal || null),
+                iFrequencyCount: updated.iOccurrences,
+                iSuccessful: updated.iAchieved,
+                iOpportunities: updated.iTotal,
+                aTasksCompleted,
+                aDocuments,
+            };
+
+            return { oRecord: oResponse, dUpdatedProgress };
+        });
+    }
+
     // Toggle exclusion from average
     static async toggleExclusion(sTrackingRecordId, bExcludedFromAverage) {
         return await TrackingRecordsModel.transaction(async (trx) => {

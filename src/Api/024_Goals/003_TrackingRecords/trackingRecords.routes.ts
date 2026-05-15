@@ -15,6 +15,16 @@ router.post('/',
     aH(TrackingRecordController.createTrackingRecord)
 );
 
+// PUT /trackingRecords/:sTrackingRecordId — Update a tracking record
+router.put('/:sTrackingRecordId',
+    celebrate({
+        params: TrackingRecordValidations.UpdateTrackingRecordParams,
+        body: TrackingRecordValidations.UpdateTrackingRecordBody
+    }),
+    aH(verifySchoolUserPermissions([{ sModuleName: 'Goals', sActionCode: 'WRITE' }])),
+    aH(TrackingRecordController.updateTrackingRecord)
+);
+
 // PATCH /trackingRecords/:sTrackingRecordId/toggleExclusion — Toggle exclusion from average
 router.patch('/:sTrackingRecordId/toggleExclusion',
     celebrate({

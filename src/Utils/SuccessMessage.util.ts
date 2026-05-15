@@ -246,6 +246,10 @@ export default {
             sp: 'Registro guardado exitosamente.',
             en: "The tracking record was created successfully."
         },
+        updateRecord: {
+            sp: 'Registro actualizado exitosamente.',
+            en: "Tracking record updated successfully."
+        },
         getAllRecords: {
             sp: 'Se han encontrado los registros!',
             en: "The tracking records were successfully found."

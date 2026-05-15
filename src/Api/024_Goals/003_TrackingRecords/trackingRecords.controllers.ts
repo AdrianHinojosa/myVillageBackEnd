@@ -90,6 +90,49 @@ class Controllers {
         });
     }
 
+    // Update a tracking record (corrections — does not move goal, touch files, or change exclusion)
+    async updateTrackingRecord(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
+        const {sLang, sSchoolId, sUserId} = res.locals;
+        const {sTrackingRecordId} = req.params;
+        const oBody = req.body;
+
+        // Verify record exists
+        const myRecord = await TrackingRecordQueries.verifyRecordExists(sTrackingRecordId);
+        if (!myRecord) {
+            return next(new MyError(404, ErrorMessages.TrackingRecords.notFound[sLang]));
+        }
+
+        // Verify goal exists
+        const myGoal = await GoalQueries.verifyGoalExists(myRecord.sGoalId);
+        if (!myGoal) {
+            return next(new MyError(404, ErrorMessages.Goals.notFound[sLang]));
+        }
+
+        // Verify goal's student belongs to school
+        const myStudent = await StudentQueries.verifyStudentExistsBySchool(sSchoolId, myGoal.sStudentId);
+        if (!myStudent) {
+            return next(new MyError(404, ErrorMessages.Goals.notFound[sLang]));
+        }
+
+        // FACULTY can only edit records for assigned students
+        if (res.locals.sType === 'FACULTY') {
+            const bAllowed = await StudentAssignmentQueries.isStudentAssignedToUser(myGoal.sStudentId, sUserId);
+            if (!bAllowed) return next(new MyError(403, ErrorMessages.Authentication.accessDenied[sLang]));
+        }
+
+        const { oRecord, dUpdatedProgress } = await TrackingRecordQueries.updateTrackingRecord(sTrackingRecordId, {
+            ...oBody,
+            sLastUpdatedBy: sUserId
+        });
+
+        return res.status(200).json({
+            message: SuccessMessages.TrackingRecords.updateRecord[sLang],
+            oData: oRecord,
+            dUpdatedProgress,
+            success: true
+        });
+    }
+
     // Toggle record exclusion from average
     async toggleExclusion(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
         const {sLang, sSchoolId, sUserId} = res.locals;

@@ -86,8 +86,10 @@ export const verifySchoolUserPermissions = (sArrModules: Permission[]) => async 
 
     // If NOT super school user then verify permissions.
     if (schoolUserSession.sCreatedBy !== null) {
-        // FACULTY users bypass module-level permission check — access is enforced per-route and per-student
-        if (schoolUserSession.sType !== 'FACULTY') {
+        // ADMINISTRATION and FACULTY bypass the module-level permission check.
+        // SchoolAdmin (sType = ADMINISTRATION) has full access by design; FACULTY access is enforced per-route and per-student in the controllers.
+        const sUserSubType = schoolUserSession.sType || 'ADMINISTRATION';
+        if (sUserSubType !== 'FACULTY' && sUserSubType !== 'ADMINISTRATION') {
             const isAuthorized = await SchoolUserQueries.bIsSchoolUserAuthorizedForModules(schoolUserSession.sSchoolUserId, sArrModules);
             if (!isAuthorized) return next(new MyError(403, ErrorMessages.Authentication.accessDenied[sLang]));
         }
@@ -150,8 +152,10 @@ export const verifySchoolUserHasAnyPermissions = (sArrModules: Permission[]) => 
 
     // If NOT super school user then verify permissions.
     if (schoolUserSession.sCreatedBy !== null) {
-        // FACULTY users bypass module-level permission check — access is enforced per-route and per-student
-        if (schoolUserSession.sType !== 'FACULTY') {
+        // ADMINISTRATION and FACULTY bypass the module-level permission check.
+        // SchoolAdmin (sType = ADMINISTRATION) has full access by design; FACULTY access is enforced per-route and per-student in the controllers.
+        const sUserSubType = schoolUserSession.sType || 'ADMINISTRATION';
+        if (sUserSubType !== 'FACULTY' && sUserSubType !== 'ADMINISTRATION') {
             // Check if user has ANY of the required permissions (instead of ALL)
             const hasAnyPermission = await SchoolUserQueries.bIsSchoolUserAuthorizedForAnyModules(schoolUserSession.sSchoolUserId, sArrModules);
             if (!hasAnyPermission) return next(new MyError(403, ErrorMessages.Authentication.accessDenied[sLang]));

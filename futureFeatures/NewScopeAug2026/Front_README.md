@@ -7,7 +7,7 @@ Documentación de la ampliación de alcance de MY VILLAGE. **7 puntos.**
 |---|---|
 | [PLAN_AMPLIACION_24JUL2026.md](PLAN_AMPLIACION_24JUL2026.md) | Plan maestro de los 7 puntos: dependencia de backend, gaps, secuencia |
 | [EJECUCION_FRONTEND_AMPLIACION.md](EJECUCION_FRONTEND_AMPLIACION.md) | Checklist vivo de ejecución del frontend (P11/P13 detallados) |
-| [GUIA_BACKEND_AMPLIACION.md](GUIA_BACKEND_AMPLIACION.md) | **Guía maestra front↔back**: contrato/endpoints por punto (P10, P8, P5, P7 cerrados; P3 borrador) |
+| [GUIA_BACKEND_AMPLIACION.md](GUIA_BACKEND_AMPLIACION.md) | **Guía maestra front↔back**: contrato/endpoints por punto (los 7 cerrados) |
 | [API_CONTRATO_TICKETS_SOPORTE.md](API_CONTRATO_TICKETS_SOPORTE.md) | Contrato del endpoint de tickets (P10) |
 
 ## Estado de los 7 puntos
@@ -19,4 +19,4 @@ Documentación de la ampliación de alcance de MY VILLAGE. **7 puntos.**
 | 8 | Tipos de ayuda | ✅ Hecho (guía cerrada) |
 | 5 | Modo terapeuta | ✅ Hecho (guía cerrada) |
 | 7 | Submetas | ✅ Hecho (guía cerrada) |
-| 3 | Cobranza (Stripe) | ⬜ Pendiente (el único que falta) |
+| 3 | Cobranza (Stripe) | ✅ Hecho (guía cerrada) |

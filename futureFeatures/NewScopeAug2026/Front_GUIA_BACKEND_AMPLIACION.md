@@ -43,7 +43,7 @@ Stack: **Express + `express-async-handler` (aH) + `celebrate`/Joi + Knex + Postg
 | 8 | Tipos de ayuda | 2 columnas en TrackingRecords | ✅ Hecho (captura, gráfica, PDFs) | ✅ Cerrado |
 | 5 | Modo terapeuta | 1 columna (`sAccountType`) + login | 🔄 En curso | ✅ Cerrado |
 | 7 | Submetas | Tabla `SubGoals` + FK `sSubGoalId` + calculados | ✅ Hecho | ✅ Cerrado |
-| 3 | Cobranza (Stripe) | Módulo completo | ⬜ Pendiente | 🔸 Borrador |
+| 3 | Cobranza (Stripe) | Módulo completo | ✅ Hecho (superadmin + colegio + suspensión) | ✅ Cerrado |
 
 ---
 
@@ -238,26 +238,124 @@ Lo calcula el **frontend** a partir de las submetas (promedio del `dProgress` de
 
 ---
 
-## 🔸 Punto 3 — Cobranza automática (Stripe)  (borrador)
+## ✅ Punto 3 — Cobranza automática (Stripe)  (CERRADO — frontend construido)
 
-Suscripciones mensuales de colegios vía Stripe. Sin CFDI (propuesta aparte). **Es lo más pesado.**
+Suscripciones mensuales de colegios vía **Stripe**. Sin CFDI (propuesta aparte). Es lo más
+pesado del backend. **El frontend ya está construido** (superadmin configura tarifa; colegio
+gestiona tarjetas, ve historial y cancela; suspensión bloquea a todos). Solo falta el servidor:
+Stripe SDK + webhooks + cobro recurrente + los endpoints de abajo.
 
-- **Stripe SDK** en backend: customers, payment methods (tokenización), subscriptions, **webhooks**.
-- **Cobro recurrente** mensual (cron/scheduler) con el método configurado.
-- **Migraciones:** columnas de tarifa en `Schools` (`sBillingType`, `dFixedAmount`,
-  `dAmountPerTeacher`, `dAmountPerStudent`, `dDiscountPct`, estado de suscripción/morosidad) +
-  tabla `Payments` (historial: monto, fecha, método, id Stripe).
-- **Tarifa variable:** calcular sobre `iUsersLimit`/`iStudentsLimit` (límites), NO sobre el
-  conteo real. **Confirmar qué modalidad eligió el cliente (fija vs variable).**
-- **Pagos fallidos:** 2 reintentos → moroso + email al usuario principal (usar `MailEvent`).
-- **Suspensión** inmediata al morosear; incluir el estado en el payload de login para gatear en
-  el middleware/`res.locals` a TODOS los usuarios del colegio. Sin borrado de datos.
-- **Requisitos del cliente:** cuenta Stripe + llaves (test/live), moneda MXN.
+> **Decisión de PO:** se soportan **AMBAS modalidades** (fija y variable), seleccionables por
+> colegio. El costo extra es mínimo — todo el flujo de Stripe es idéntico; solo cambia el cálculo
+> del monto (un `if`). El frontend ya trae el selector.
 
-*(Contrato exacto al construir el frontend.)*
+### Modalidades (el superadmin elige una por colegio)
+- **`FIXED`** — monto mensual único (`dFixedAmount`), sin relación con # de usuarios.
+- **`VARIABLE`** — `dAmountPerTeacher × iUsersLimit + dAmountPerStudent × iStudentsLimit`.
+  Se usa el **LÍMITE** configurado (`iUsersLimit`/`iStudentsLimit`), **NO** el conteo real de
+  registros — así lo pide la cotización para evitar manipulación.
+- Ambas admiten **`dDiscountPct`** (0–100) opcional, aplicado al subtotal.
+- **Cambios de tarifa/límites** aplican al **siguiente ciclo** (sin prorrateo; no afectan el
+  periodo ya facturado).
+
+> El frontend calcula un **preview** del monto con la misma fórmula (`app/utils/billing.ts` →
+> `computeMonthlyTotal`), pero el monto **oficial** que se cobra lo determina y devuelve el
+> backend en `dMonthlyTotal`.
+
+### Migraciones
+1. **`NNNN_Schools_billing.ts`** — `alterTable('Schools')`:
+   ```ts
+   table.string('sBillingMode').defaultTo('FIXED');   // 'FIXED' | 'VARIABLE'
+   table.decimal('dFixedAmount', 12, 2).nullable();
+   table.decimal('dAmountPerTeacher', 12, 2).nullable();
+   table.decimal('dAmountPerStudent', 12, 2).nullable();
+   table.decimal('dDiscountPct', 5, 2).nullable();    // 0–100
+   table.string('sBillingStatus').defaultTo('NONE');  // ver enum abajo
+   table.string('sStripeCustomerId').nullable();
+   table.string('sStripeSubscriptionId').nullable();
+   table.timestamp('tCurrentPeriodEnd').nullable();   // fecha de corte del periodo vigente
+   table.boolean('bCancelAtPeriodEnd').defaultTo(false);
+   table.integer('iFailedAttempts').defaultTo(0);     // reintentos de cobro fallido
+   ```
+2. **`NNNN_Payments.ts`** — tabla `Payments` (historial), PK `sPaymentId`, FK `sSchoolId`:
+   `dAmount` (decimal), `sCurrency` ('MXN'), `tPaidAt` (timestamp), `sStatus`
+   ('succeeded'|'failed'|'pending'), `sCardBrand`, `sLast4`, `sStripeTransactionId` + auditoría.
+
+### Enum `sBillingStatus`
+`NONE | TRIALING | ACTIVE | PAST_DUE | SUSPENDED | CANCELED`
+- `PAST_DUE` = pago fallido en reintentos (moroso, aún no bloquea).
+- `SUSPENDED` = bloqueo total (ver "Suspensión").
+- `CANCELED` = el usuario principal canceló; sigue activo hasta `tCurrentPeriodEnd`.
+
+### Config de tarifa (superadmin) — ya viaja en el payload de Schools
+El frontend ya **envía y lee** estos campos en `POST /schools` y `PUT /schools/:id`
+(mismos nombres): `sBillingMode`, `dFixedAmount`, `dAmountPerTeacher`, `dAmountPerStudent`,
+`dDiscountPct`. Aceptarlos (Joi) y devolverlos en el `GET /schools/:id`. El `GET` del colegio
+debe devolver también `sBillingStatus` (el detalle del superadmin pinta un chip de estado).
+
+### Login (clave)
+**Incluir `sBillingStatus` en el payload de `/auth/login`**, dentro de `oResults.oSchool`
+(junto a `sSchoolId`/`sAccountType`). El frontend lo guarda en el auth store y **bloquea a
+todos los usuarios del colegio** cuando es `SUSPENDED` (redirige a `/admin/suspended`).
+
+### Endpoints del panel del colegio (exactos — así los llama el frontend ya construido)
+Todos operan sobre el colegio del `res.locals.sSchoolId`. **Solo el usuario principal
+(SchoolAdmin)** debe poder mutar tarjetas / cancelar (el front ya restringe la página a
+SchoolAdmin, pero conviene endurecerlo en el backend).
+
+- `GET /billing/summary` → resumen del plan. Respuesta en `data.results`:
+  ```jsonc
+  {
+    "sBillingMode": "VARIABLE",
+    "dFixedAmount": null,
+    "dAmountPerTeacher": 500, "dAmountPerStudent": 200,
+    "dDiscountPct": 10,
+    "sBillingStatus": "ACTIVE",
+    "sCurrency": "MXN",
+    "dMonthlyTotal": 12600,            // monto oficial ya calculado (con descuento)
+    "tCurrentPeriodEnd": "2026-08-28T00:00:00.000Z",
+    "bCancelAtPeriodEnd": false,
+    "iTeachersLimit": 10, "iStudentsLimit": 40   // límites usados en el cálculo variable
+  }
+  ```
+- `GET /billing/payment-methods` → `data.aData`: `[{ sPaymentMethodId, sBrand, sLast4, iExpMonth, iExpYear, bDefault }]`.
+- `POST /billing/setup-intent` → `{ sClientSecret }` (crea un **SetupIntent** de Stripe;
+  el front hace `stripe.confirmCardSetup` con ese secret — el número de tarjeta NUNCA toca el back).
+- `POST /billing/payment-methods` body `{ sPaymentMethodId }` → adjunta el método al customer
+  (Stripe `attach`) y, si es el primero, lo marca default.
+- `PUT /billing/payment-methods/:sPaymentMethodId/default` → marca esa tarjeta como predeterminada.
+- `DELETE /billing/payment-methods/:sPaymentMethodId` → desadjunta la tarjeta.
+- `GET /billing/payments` → `data.aData`: `[{ sPaymentId, dAmount, sCurrency, tPaidAt, sStatus, sCardBrand, sLast4, sStripeTransactionId }]`.
+- `POST /billing/cancel` → cancela al final del periodo (`bCancelAtPeriodEnd = true`,
+  `sBillingStatus = CANCELED`); sigue activo hasta `tCurrentPeriodEnd`. **Sin reembolsos parciales.**
+
+### Cobro recurrente y webhooks (Stripe SDK)
+- Crear **customer + subscription** en Stripe con el precio derivado de la modalidad. El cobro
+  mensual lo maneja Stripe; **escuchar webhooks** (`invoice.paid`, `invoice.payment_failed`,
+  `customer.subscription.updated/deleted`) para:
+  - insertar cada movimiento en `Payments` (con `sStripeTransactionId`),
+  - actualizar `sBillingStatus` / `tCurrentPeriodEnd` / `iFailedAttempts`.
+- **Pagos fallidos:** hasta **2 reintentos** (dunning de Stripe) → al fallar todos:
+  `sBillingStatus = PAST_DUE`, luego `SUSPENDED`; **email** al usuario principal vía
+  `MailEvent.emit('SendEmail', { sType: 'billingPastDue', … })` (+ plantilla
+  `src/Views/billingPastDue.html`). Sin gracia: la suspensión es inmediata al agotar reintentos.
+- **Suspensión:** `SUSPENDED` conserva toda la info (NO se borra nada — la retención es
+  propuesta aparte). Reactivar a `ACTIVE` cuando un cobro vuelve a ser exitoso.
+
+### Config del cliente (pendiente, NO bloquea el frontend)
+- Cuenta **Stripe** + llaves (test/live). La **publicable** va al front por env
+  `NUXT_PUBLIC_STRIPE_PK` (ya cableada en `runtimeConfig.public.stripePublishableKey`); la
+  **secreta** al backend. Mientras esté vacía, el front muestra un placeholder en la captura de
+  tarjeta y el resto del panel funciona con los datos del backend.
+- Moneda **MXN**. **Sin CFDI** (facturación) y **sin borrado/retención** de cuentas (propuestas aparte).
+
+### Módulo
+`src/Api/0XX_Billing/` con routes/controllers/queries/validations/model + un submódulo
+`001_Webhooks/` para el endpoint de webhooks de Stripe (sin auth de usuario; validar firma Stripe).
 
 ---
 
 ## Cómo evoluciona este documento
 Conforme construimos el frontend de cada punto, su sección pasa de 🔸 borrador a ✅ cerrado, con
-el contrato exacto. Orden sugerido: 10 ✅ → 8 → 5 → 7 → 3.
+el contrato exacto. **Los 7 puntos están cerrados** (10 ✅ → 8 ✅ → 5 ✅ → 7 ✅ → 3 ✅; 11 y 13
+son 100% frontend). El backend puede tomar cada sección como especificación de implementación.

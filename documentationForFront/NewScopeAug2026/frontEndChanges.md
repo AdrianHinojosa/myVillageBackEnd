@@ -13,16 +13,15 @@ change, actionable on its own.
 
 ---
 
-## ⚠️ Blocking note (2026-08-02)
+## Reference point (2026-08-02)
 
-The frontend working copy at `root/myVillage` (branch `mainCopy`, last commit `21feafe`,
-31/mar/2026) contains **none** of the Aug-2026 features. Greps for `support/ticket`, `sHelpType`,
-`subGoals`, `sSubGoalId`, `sAccountType`, `bHasSubGoals`, `TicketModal.vue`, `capacitaciones`,
-`GoalDescriptionBuilder.vue` return zero hits.
+Verified against **`origin/mainCopy` @ `d560e21`** ("Cobranza automática con Stripe (P3)"), where
+all 7 points are implemented. Entries below were checked against **frontend source**, not only its
+docs — file and line references point into that commit.
 
-The backend is therefore coding against `futureFeatures/NewScopeAug2026/Front_*.md` only. If the
-real frontend differs from those documents, **that** is what has to change — the entries below are
-derived from the documents, so verify each against the actual implementation before acting.
+⚠️ *Note for whoever reads this next:* a local frontend clone goes stale fast. `git fetch` before
+comparing — this backend was initially reading `21feafe` (31/mar) and wrongly concluded the
+frontend work didn't exist.
 
 ---
 
@@ -47,41 +46,69 @@ Severity: 🔴 breaking (integration fails without it) · 🟡 rename/adapt · �
 These are **not yet confirmed** — they are the backend's recommendation, pending an answer to the
 matching open question in `implementationTracket.md`.
 
-### P8 — Help type: field name and enum values 🟡 *(pending Q1)*
+### P8 — Help type: storage column and enum casing 🟢 *(pending Q1 — frontend impact: none)*
 
 - **Endpoints:** `POST /trackingRecords`, `PUT /trackingRecords/:sTrackingRecordId`, and every
   GET that returns records.
-- **Frontend guide says:** send `sHelpType` with lowercase Spanish slugs
-  `independiente | ayuda_general | visual | verbal | escrita | gestual | modelacion | fisica`,
-  plus `iHelpAmount`.
-- **Backend recommendation:** send **`sSupportUsed`** with the project's UPPERCASE codes
-  `INDEPENDENT | GENERAL | VISUAL | VERBAL | WRITTEN | GESTURAL | MODELING | PHYSICAL`
-  (plus `iHelpAmount`, unchanged).
-- **Why:** the column `TrackingRecords.sSupportUsed` **already exists** (migration
-  `3021_TrackingRecords.ts:10`) and is documented with exactly these 8 values. Adding a second
-  column for the same concept would leave a permanently dead column and two sources of truth. The
-  UPPERCASE code style is also the convention across `sStatus`, `sMeasurementType`, `sDirection` —
-  lowercase Spanish slugs would be the only exception in the schema. Labels stay the frontend's
-  job via i18n, so nothing visible to the user changes.
-- **Mitigation available:** the backend can additionally **accept** `sHelpType` as an input alias
-  and **echo** `sHelpType` in responses (this codebase already does dual naming for
-  `sRecordId`/`sTrackingRecordId`, `dtDate`/`tRecordDate`, `sNotes`/`sObservations`). If the PO
-  prefers zero frontend work, say so and we alias instead of renaming.
+- **Frontend today** (`app/utils/records.ts:88-92`, `app/utils/helpTypes.ts`): sends
+  `sHelpType` + `iHelpAmount`, with lowercase Spanish slugs
+  `independiente | ayuda_general | visual | verbal | escrita | gestual | modelacion | fisica`.
+  Reads `oRecord.sHelpType || ''` (tolerant).
+- **Backend recommendation:** **keep the wire exactly as-is** — frontend sends and receives
+  `sHelpType` with its slugs, unchanged. Internally store into the **existing**
+  `TrackingRecords.sSupportUsed` column using the project's UPPERCASE codes
+  (`VISUAL`, `GENERAL`, `MODELING`, …), translating slug↔code at the API boundary.
+- **Why:** `sSupportUsed` **already exists** (migration `3021_TrackingRecords.ts:10`) documented
+  with exactly these 8 values, and is currently dead code. Adding a second `sHelpType` column
+  would leave two columns for one concept and introduce the schema's only lowercase enum
+  (`sStatus`, `sMeasurementType`, `sDirection` are all UPPERCASE). The boundary map is ~10 lines
+  and this codebase already does exactly this kind of translation
+  (`iCorrect`↔`iHits`, `dtDate`↔`tRecordDate`, `sNotes`↔`sObservations`).
+- **Frontend impact:** **none.** Listed here for transparency only.
+- **If rejected:** we add `sHelpType` as its own column with the lowercase slugs and
+  `sSupportUsed` stays dead — also zero frontend impact, just a worse schema.
 
-### P7 — Subgoal identifier field 🟡 *(pending Q2)*
+### P7 — Subgoal storage 🟢 *(pending Q2 — frontend impact: none)*
 
 - **Endpoints:** `GET/POST /goals/:sGoalId/subGoals`, `PUT/DELETE /subGoals/:sSubGoalId`,
-  `GET /subGoals/:sSubGoalId/trackingRecords`, `POST /trackingRecords`.
-- **Frontend guide says:** subgoals are a separate resource with their own id field `sSubGoalId`.
+  `GET /subGoals/:sSubGoalId/trackingRecords`, `POST /trackingRecords` with `sSubGoalId`.
+- **Frontend today** (`app/components/goals/SubGoalsManager.vue:282-361`,
+  `app/utils/subGoals.ts`): treats subgoals as their own resource keyed by `sSubGoalId`.
 - **Backend recommendation:** keep the **URLs and the `sSubGoalId` field name exactly as
-  specified** — no frontend change — while implementing subgoals internally as `Goals` rows with a
-  `sParentGoalId`. Responses would carry **both** `sGoalId` and `sSubGoalId` (same value), matching
-  the dual-naming convention already used for tracking records.
-- **Why:** it avoids duplicating `recalculateGoalProgress()` (the ~140-line measurement engine),
-  `GoalTasks`, `GoalFiles` and the records pipeline for a second entity. Every future fix to the
-  progress engine then applies to subgoals automatically.
-- **Frontend impact if approved:** **none** — this is an internal choice, listed here only for
-  transparency.
+  specified** while implementing subgoals internally as `Goals` rows with `sParentGoalId`.
+  Responses carry **both** `sGoalId` and `sSubGoalId` (same value), matching the dual-naming
+  convention already used for tracking records.
+- **Why:** avoids duplicating `recalculateGoalProgress()` (the ~140-line measurement engine that
+  branches on 6 measurement types × 2 directions), plus `GoalTasks` (needed because subgoal
+  payloads include `aTasks`) and `GoalFiles`. One engine means a fix applies to goals and
+  subgoals at once.
+- **Frontend impact:** **none.**
+
+---
+
+## Confirmed compatibility notes (no frontend action needed)
+
+Recorded so nobody "fixes" these later:
+
+1. **Subgoal list envelope must be `aData`.** `SubGoalsManager.vue:285` reads
+   `oResponse.data.aData || oResponse.data.results || oResponse.data`, then calls `.map()` on the
+   result at line 349. Returning this project's usual named key (`{ subGoals: [...] }`) would fall
+   through to the raw response object and throw. **Backend will return `aData`** for
+   `GET /goals/:sGoalId/subGoals` and `GET /subGoals/:sSubGoalId/trackingRecords` — a deliberate
+   deviation from the `{ goals: [...] }` style used elsewhere. `aData` also happens to fit the
+   Hungarian-notation convention better than the existing named keys.
+2. **`/billing/summary` envelope must be `results`** (`pages/admin/billing/index.vue:138` reads
+   `data?.results || data?.oData || data`), and `/billing/payment-methods` + `/billing/payments`
+   must return **`aData`** (lines 152, 167).
+3. **Login extras already wired.** `app/stores/auth.ts` declares `sAccountType?` and
+   `sBillingStatus?`; `login.vue:105-106` reads them from `oResults.oSchool` with safe defaults
+   (`'SCHOOL'` / `''`). Backend adding them to `oSchool` needs no frontend change.
+4. **School tariff fields already sent.** `schools/[id]/edit.vue` posts/reads `sAccountType`,
+   `sBillingMode`, `dFixedAmount`, `dAmountPerTeacher`, `dAmountPerStudent`, `dDiscountPct`
+   with those exact names.
+5. **Card data never reaches the backend.** `BillingCardForm.vue:123` gets a SetupIntent client
+   secret and confirms with Stripe.js client-side, then posts only `sPaymentMethodId`. Correct —
+   keeps the backend out of PCI scope.
 
 ---
 

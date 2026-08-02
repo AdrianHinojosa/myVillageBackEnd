@@ -344,4 +344,12 @@ export default {
         }
     },
 
+    // ========  Support  ==================
+    Support: {
+        sendTicket: {
+            sp: 'Tu reporte fue enviado. Te contactaremos pronto.',
+            en: "Your report was sent. We will contact you soon."
+        }
+    },
+
 };

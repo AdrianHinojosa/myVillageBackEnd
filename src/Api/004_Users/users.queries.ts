@@ -53,6 +53,15 @@ class Queries {
             .where('bActive', true)
             .first();
     }
+
+    // Used: Get the contact details of whoever is behind a token (support tickets, notifications)
+    static async getUserContactById(sUserId) {
+        return await UsersModel.query()
+            .findById(sUserId)
+            .select('sUserId', 'sName', 'sLastName', 'sSecondLastName', 'sEmail', 'sPhoneNumber', 'sType')
+            .where('bActive', true)
+            .first();
+    }
 }
 
 export default Queries;

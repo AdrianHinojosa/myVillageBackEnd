@@ -295,4 +295,16 @@ export default {
         },
     },
 
+    // ==== Support: =======
+    Support: {
+        reporterNotFound: {
+            sp: "No se pudo identificar al usuario que reporta. Intenta de nuevo.",
+            en: "The reporting user could not be identified. Please try again."
+        },
+        sendTicketFailed: {
+            sp: "No se pudo enviar el reporte. Intenta de nuevo.",
+            en: "The report could not be sent. Please try again."
+        },
+    },
+
 };

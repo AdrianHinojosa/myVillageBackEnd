@@ -29,7 +29,8 @@ frontend work didn't exist.
 
 | # | Punto | Endpoint / area | Change | Severity |
 |---|---|---|---|---|
-| — | — | — | *(none yet — populated as features land)* | — |
+| 1 | 8 | `POST/PUT /trackingRecords`, record GETs, chart, PDF | **Many help types per record, each 0–10** — replaces the single `sHelpType` + `iHelpAmount` | 🔴 breaking |
+| 2 | 10 | `POST /support/ticket` | None — contract matches as built | 🟢 none |
 
 Severity: 🔴 breaking (integration fails without it) · 🟡 rename/adapt · 🟢 nice-to-have
 
@@ -37,38 +38,90 @@ Severity: 🔴 breaking (integration fails without it) · 🟡 rename/adapt · �
 
 ## Pending changes
 
-*(none yet — the first entries land with Punto 10 / Punto 8)*
+### 1. P8 — Help types are MANY per record, not one 🔴
+
+**PO decision, 2026-08-02.** The frontend built one help type per record. The client's model —
+confirmed against their mock-up ("¿Qué tipo de ayuda deseas otorgarle tu estudiante?" listing all
+8 types with a value box each) — is **several types per record, each with its own 0–10 value**.
+
+**What the frontend does today**
+
+```ts
+// app/utils/records.ts:88-92
+if (oData.sHelpType) {
+  oPayload.sHelpType   = oData.sHelpType;          // ONE slug: "visual"
+  oPayload.iHelpAmount = oData.iHelpAmount || 0;   // ONE number
+}
+// app/utils/records.ts:35-36
+sHelpType:   oRecord.sHelpType || '',
+iHelpAmount: oRecord.iHelpAmount ?? null,
+```
+
+and `GUIA_BACKEND_AMPLIACION.md` §P8 states *"Un solo tipo por registro."*
+
+**What it must do instead** — send and read an **array**:
+
+```jsonc
+// POST /trackingRecords  ·  PUT /trackingRecords/:sTrackingRecordId
+{
+  "dtDate": "2026-08-02",
+  "iCorrect": 8, "iTotal": 10,
+  "aHelpTypes": [
+    { "sHelpType": "visual",  "iHelpAmount": 8 },
+    { "sHelpType": "verbal",  "iHelpAmount": 7 },
+    { "sHelpType": "escrita", "iHelpAmount": 6 }
+  ]
+}
+```
+
+- `sHelpType` — the frontend's existing lowercase slugs, unchanged
+  (`independiente | ayuda_general | visual | verbal | escrita | gestual | modelacion | fisica`).
+- `iHelpAmount` — integer **0–10** (PO-confirmed range).
+- Omit a type entirely when it wasn't given. Do **not** send `iHelpAmount: null`.
+- `aHelpTypes: []` or omitted = no help recorded.
+- Sending the same `sHelpType` twice in one record is rejected (400).
+- Every record GET returns `aHelpTypes` in the same shape.
+
+**Frontend work**
+| File | Change |
+|---|---|
+| `app/utils/records.ts` | `mapRecordToBackend` / `mapRecordFromBackend` — array instead of two scalars |
+| `app/components/goals/RecordForm.vue` | capture UI: 8 rows, each with a 0–10 value, per the client mock-up |
+| `app/components/goals/GoalSummary.vue` | `aChartJsDatasets` — point colour can no longer come from a single slug |
+| `app/components/charts/BaseLineChart.vue` | per-point label likewise |
+| `app/composables/useGoalChartCapture.ts` + PDF export | same |
+
+**⚠️ Open question back to the PO — chart colour rule.** The signed PDF (p.4) says
+*"cada punto (registro) se mostrará con **un color distinto** según el tipo de ayuda otorgado e
+incluirá **un número pequeño**"* — one dot, one colour, one number. With Visual 8 + Verbal 7 +
+Escrita 6 on the same record, **there is no defined colour**. The contract's chart rule only works
+for one-type-per-record, so a new rule is needed. Options for the PO to pick:
+1. colour by the **highest-value** type (label = that value);
+2. the user marks one type as **primary**; ← would need a `bPrimary` flag in `aHelpTypes`
+3. neutral dot, with the breakdown in the tooltip only.
+**Backend is not blocked by this** — it stores and returns the array either way. Option 2 is the
+only one that changes the API, so flag it before the frontend builds the chart.
+
+### 2. P10 — Support tickets: no change needed 🟢
+
+`POST /support/ticket` is implemented exactly as `API_CONTRATO_TICKETS_SOPORTE.md` specifies.
+`TicketModal.vue:136-146` works unmodified. For the record:
+- Request: `{ sSubject (≤120, required), sMessage (≤1000, required), sCategory? }`.
+  `sCategory` ∈ `technical | question | suggestion | other`, or omitted.
+- Response: **200** `{ message, success: true }` — `message` is localized, so the axios
+  interceptor displays it as designed.
+- Errors: 401 invalid/expired token · 400 validation · 404 reporter not found.
+- **Reachable by SchoolAdmin, FACULTY *and* SuperAdmin** — the support button can stay visible
+  for every user type, including superadmin. Also works for users of a **blocked** school (they
+  can log in but nothing else works, so support must stay reachable).
+- The body must contain **only** those three fields. The schema is strict: adding `sUserId`,
+  `sSchoolId` or any other key returns 400. Identity comes from the token.
 
 ---
 
-## Proposed changes awaiting PO decision
+## Decided internals (recorded for transparency — no frontend action)
 
-These are **not yet confirmed** — they are the backend's recommendation, pending an answer to the
-matching open question in `implementationTracket.md`.
-
-### P8 — Help type: storage column and enum casing 🟢 *(pending Q1 — frontend impact: none)*
-
-- **Endpoints:** `POST /trackingRecords`, `PUT /trackingRecords/:sTrackingRecordId`, and every
-  GET that returns records.
-- **Frontend today** (`app/utils/records.ts:88-92`, `app/utils/helpTypes.ts`): sends
-  `sHelpType` + `iHelpAmount`, with lowercase Spanish slugs
-  `independiente | ayuda_general | visual | verbal | escrita | gestual | modelacion | fisica`.
-  Reads `oRecord.sHelpType || ''` (tolerant).
-- **Backend recommendation:** **keep the wire exactly as-is** — frontend sends and receives
-  `sHelpType` with its slugs, unchanged. Internally store into the **existing**
-  `TrackingRecords.sSupportUsed` column using the project's UPPERCASE codes
-  (`VISUAL`, `GENERAL`, `MODELING`, …), translating slug↔code at the API boundary.
-- **Why:** `sSupportUsed` **already exists** (migration `3021_TrackingRecords.ts:10`) documented
-  with exactly these 8 values, and is currently dead code. Adding a second `sHelpType` column
-  would leave two columns for one concept and introduce the schema's only lowercase enum
-  (`sStatus`, `sMeasurementType`, `sDirection` are all UPPERCASE). The boundary map is ~10 lines
-  and this codebase already does exactly this kind of translation
-  (`iCorrect`↔`iHits`, `dtDate`↔`tRecordDate`, `sNotes`↔`sObservations`).
-- **Frontend impact:** **none.** Listed here for transparency only.
-- **If rejected:** we add `sHelpType` as its own column with the lowercase slugs and
-  `sSupportUsed` stays dead — also zero frontend impact, just a worse schema.
-
-### P7 — Subgoal storage 🟢 *(pending Q2 — frontend impact: none)*
+### P7 — Subgoal storage 🟢 *(APPROVED 2026-08-02 — frontend impact: none)*
 
 - **Endpoints:** `GET/POST /goals/:sGoalId/subGoals`, `PUT/DELETE /subGoals/:sSubGoalId`,
   `GET /subGoals/:sSubGoalId/trackingRecords`, `POST /trackingRecords` with `sSubGoalId`.

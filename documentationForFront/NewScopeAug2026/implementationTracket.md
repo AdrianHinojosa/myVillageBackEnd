@@ -28,6 +28,57 @@ Legend: ⬜ not started · 🔄 in progress · ✅ done & committed · ➖ no ba
 
 ---
 
+## Progress — as of 2026-08-02
+
+### Backend: ~6%
+
+Weighted by the contract's own prices (what the client actually paid per point).
+
+| # | Punto | Price | Backend done | Notes |
+|---|---|---|---|---|
+| 10 | Tickets de soporte | $8,000 | ✅ **100%** | shipped `271e9a1` |
+| 8 | Tipos de ayuda | $14,000 | ⬜ 0% code | design + contract approved, migration not written |
+| 5 | Modo terapeuta | $14,000 | ⬜ 0% | unblocked, ~0.5 day |
+| 7 | Submetas | $24,000 | ⬜ 0% code | architecture decided (`Goals` + `sParentGoalId`) |
+| 3 | Cobranza (Stripe) | $70,000 | ⬜ 0% | **blocked** — Q7/Q8/Q11/Q12 |
+| 11 | Guía de metas | $5,500 | ➖ n/a | frontend only |
+| 13 | Capacitaciones | $11,000 | ➖ n/a | frontend only |
+
+- **By point price:** backend-relevant scope $130,000 · delivered $8,000 → **6.2%**
+- **By estimated backend effort share** (P3 70%, P7 50%, P8 35%, P10 55%, P5 15% of each
+  point's price): $4,400 of $72,400 → **6.1%**
+
+Both methods agree, so ~6% is robust. Plainly: *one of five backend points, and the smallest.*
+
+### Overall project (frontend + backend): ~50%
+
+| Side | Est. share of scope | Complete | Contribution |
+|---|---|---|---|
+| Frontend | ~$74,100 | ~93% | ~$69,100 |
+| Backend | ~$72,400 | ~6% | ~$4,400 |
+| **Total** | **$146,500** | | **~$73,500 → ~50%** |
+
+Frontend is **not** 100% any more: the PO's Model B decision on P8 invalidated part of it
+(`records.ts`, `RecordForm.vue`, chart colouring, PDF export all assume one help type per record).
+See `frontEndChanges.md` entry 1.
+
+⚠️ The front/back effort splits are **estimates**, so treat ~50% as ±5. The backend 6% is firm.
+
+### Remaining backend effort
+
+| Point | Estimate | Blocked? |
+|---|---|---|
+| P8 | ~1 day | No |
+| P5 | ~0.5 day | No |
+| P7 | ~2–3 days | No |
+| P3 | ~5–8 days | **Yes — Q7, Q8, Q11, Q12** |
+| **Total** | **~9–13 days (≈2–2.5 working weeks)** | |
+
+Contract allows **4 working weeks**. That fits *only if P3 unblocks soon*: it is 54% of contract
+value and more than half the remaining effort, and it cannot be compressed by reordering work.
+
+---
+
 ## Environment / repo findings recorded at kickoff (2026-08-02)
 
 These are facts discovered while reading the code, kept here so nobody re-derives them.

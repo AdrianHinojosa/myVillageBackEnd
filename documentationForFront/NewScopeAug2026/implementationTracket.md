@@ -6,7 +6,9 @@
 **Scope source of truth:** `futureFeatures/NewScopeAug2026/My Village_ Ampliación de alcance -  Cerrado 24_Julio_2026  (1).pdf`
 **Frontend contract docs:** `futureFeatures/NewScopeAug2026/Front_*.md`
 
-> Companion file: [`frontEndChanges.md`](frontEndChanges.md) — everything the frontend must change to integrate.
+> **Companion files**
+> - [`featureGuide.md`](featureGuide.md) — plain-language explanation of each feature for the frontend team
+> - [`frontEndChanges.md`](frontEndChanges.md) — everything the frontend must change to integrate
 
 ---
 
@@ -15,10 +17,10 @@
 | # | Punto | Backend weight | Status | Commit |
 |---|---|---|---|---|
 | 10 | Tickets de soporte | 1 endpoint + SES email + shared auth gate | ✅ Done | `915e3e0` |
-| 8 | Tipos de ayuda | child table (Model B) | ⛔ Blocked — needs a non-prod DB | — |
-| 5 | Modo terapeuta | 1 column + login payload | ⛔ Blocked — needs a non-prod DB | — |
-| 7 | Submetas | schema + 6 endpoints + calculated fields | ⛔ Blocked — needs a non-prod DB | — |
-| 3 | Cobranza automática (Stripe) | full module + webhooks + dunning | ⛔ Blocked — DB + Q7/Q8/Q11/Q12 | — |
+| 8 | Tipos de ayuda | child table `TrackingRecordHelps` (Model B) | 🔄 In progress | — |
+| 5 | Modo terapeuta | 1 column + login payload | ⬜ Not started | — |
+| 7 | Submetas | schema + 6 endpoints + calculated fields | ⬜ Not started (design approved) | — |
+| 3 | Cobranza automática (Stripe) | full module + webhooks + dunning | ⛔ Blocked — Q7/Q8/Q11/Q12 | — |
 | 11 | Guía de creación de metas | none (frontend only) | ➖ N/A backend | — |
 | 13 | Módulo de capacitaciones | none (frontend only) | ➖ N/A backend | — |
 
@@ -105,13 +107,15 @@ These are facts discovered while reading the code, kept here so nobody re-derive
     uses the v3 `@aws-sdk/client-ses` instead. It is imported nowhere. `.env` defines
     `ADMIN_PHONE`. Reusable as-is for P10 SMS notifications.
 
-12. **🚨 `.env` POINTS AT THE PRODUCTION DATABASE.** `DB_HOST` is the live RDS instance
-    `myvillagedb.ckz88o2wq1ur.us-east-1.rds.amazonaws.com`, `DB_NAME='production'`,
-    `PG_SCHEMA='myvillageschema'`. `NODE_ENV=development` selects the knexfile's `development`
-    profile — which reads **those same variables**, so it is *not* a separate database.
-    **`npm run db:migrations` from this checkout migrates PRODUCTION.**
-    No migration has been run. P10 needed none. P8/P5/P7/P3 all do — resolve this first
-    (local Postgres via `PG_CONNECTION_LOCAL` + `NODE_ENV=local`, or a staging RDS).
+12. **Database targets — RESOLVED 2026-08-02.** `.env` originally pointed at `DB_NAME='production'`
+    on the live RDS `myvillagedb.ckz88o2wq1ur.us-east-1.rds.amazonaws.com`, which meant
+    `npm run db:migrations` would have altered production (`NODE_ENV=development` selects the
+    knexfile's `development` profile, which reads those same `DB_*` vars — it is not a separate
+    database). The PO switched `DB_NAME` to **`development`**, a genuinely separate database on the
+    same host, verified as: 33/33 migrations applied, 26 tables in `myvillageschema`, and realistic
+    data (30 Users, 12 Schools, 8 Students, 41 Goals, 74 TrackingRecords).
+    ⚠️ **Same host and same DB user as production** — only `DB_NAME` separates them. Re-check
+    `DB_NAME` before every migration run.
 
 13. **The production build is broken, independently of this scope.** `.babelrc` enables
     `@babel/plugin-transform-runtime`, which rewrites helpers to `require('@babel/runtime/...')`,
@@ -142,6 +146,11 @@ These are facts discovered while reading the code, kept here so nobody re-derive
 | Q1 | P8 help type | **Model B — many help types per record, each with its own 0–10 value** | PO decision, backed by the client mock-up. ⚠️ Contradicts what the frontend built (a single `sHelpType` + `iHelpAmount`) and its own guide ("un solo tipo por registro"). Frontend rework required — see `frontEndChanges.md`. | 2026-08-02 |
 | Q10 | P10 audience | **Any authenticated user** (SchoolAdmin, FACULTY, SuperAdmin) via a new `verifyAnyAuthenticatedUser()` gate | PO decision; matches the PDF, which places the button in the top bar every user sees. | 2026-08-02 |
 | — | P10 SMS | **Wired but disabled**, behind `SUPPORT_SMS_ENABLED` + `SUPPORT_PHONE` | PO asked for SNS "left prepared". No destination number provided yet, so it must not send. | 2026-08-02 |
+| — | P8 chart colour | **Colour the chart point by the highest-value help type**; ties broken by the canonical 8-type order | PO decision. Keeps the contract's "one colour per point" rule workable under Model B with **no API change** — the backend returns the array, the frontend picks the max. | 2026-08-02 |
+| — | P8 enum casing | **UPPERCASE codes in the DB** (`VISUAL`), frontend keeps its lowercase slugs (`visual`), mapped at the API boundary | Convention call (naming, not business logic). Matches `sStatus`/`sMeasurementType`/`sDirection` and the vocabulary already documented on `sSupportUsed`. Zero frontend impact — this codebase already translates names at the boundary (`iCorrect`↔`iHits`). | 2026-08-02 |
+| — | P8 legacy shim | `POST`/`PUT` also accept the **old single** `sHelpType` + `iHelpAmount` and store it as a one-item array | Backend and frontend deploy independently; without this the existing capture form breaks the moment the backend ships. Marked in code for removal once the frontend ships the new UI. | 2026-08-02 |
+| — | P8 `sSupportUsed` | **Left in place, marked superseded** — not dropped | It holds a single value so it cannot serve Model B, but dropping a column from a production schema is irreversible and needs its own approval. | 2026-08-02 |
+| — | Docs | Added **`featureGuide.md`** — plain-language explanation of each feature for the frontend team | PO request: explain in understandable terms what was built (tables, endpoints, behaviour), not just what changed. | 2026-08-02 |
 
 ---
 
@@ -151,18 +160,20 @@ Tracked here as they are asked/answered. See the conversation for full phrasing.
 
 | ID | Punto | Question | Status |
 |---|---|---|---|
-| Q1 | 8 | Store help type in the existing `sSupportUsed` column (UPPERCASE codes, slug↔code mapped at the API boundary so the frontend keeps `sHelpType` + its lowercase slugs), or add a second `sHelpType` column exactly as the guide asks? | ⬜ Open |
-| Q2 | 7 | Subgoals as self-referencing `Goals` rows (reuses the progress engine, `GoalTasks`, `GoalFiles`; frontend contract unchanged) vs. a separate `SubGoals` table as the guide proposes (duplicates the engine)? | ⬜ Open |
-| Q3 | 7 | Sequential subgoals (signed PDF) vs. independent statuses (frontend/PO deviation)? Needs client confirmation — they signed for sequential. | ⬜ Open |
+| Q1 | 8 | ~~Single vs multiple help types per record~~ | ✅ **Answered** — Model B (many per record, 0–10 each) |
+| Q2 | 7 | ~~Subgoal storage~~ | ✅ **Answered** — `Goals` rows with `sParentGoalId` |
+| Q3 | 7 | ~~Sequential vs independent subgoals~~ | ✅ **Answered** — independent, as the frontend built (deviation logged) |
 | Q4 | 7 | `iTargetPercentage`: add to subgoals only, or to `Goals` as well (it's missing there too)? | ⬜ Open |
 | Q5 | 7 | Allow `PAUSED` on the existing goal status endpoint too, or only on subgoals? | ⬜ Open |
 | Q6 | 5 | Should the backend *enforce* therapist restrictions (single user, no IEP, no documents) or only expose the flag as the guide says? | ⬜ Open |
 | Q7 | 3 | Both billing modalities (`FIXED` + `VARIABLE`) is what the frontend built and the guide states, but the signed PDF says they are *"alternativas y NO acumulables"* and prices only the variable. Confirm both are in scope. | ⬜ Open |
-| Q8 | 3 | Stripe account + secret key (test/live) available? Currency MXN confirmed? Without keys P3 cannot be tested end-to-end. | ⬜ Open |
+| Q8 | 3 | Stripe account + secret key (test/live) available? Currency MXN confirmed? `.env` already has `STRIPE_PRIVATE_KEY`/`STRIPE_PUBLIC_KEY` — are those real MyVillage keys or leftovers from the SHIPO template this repo forked from? | ⬜ Open |
 | Q9 | 3 | Is "usuario principal del colegio" the school user with `sCreatedBy === null`? (that's the only marker in the schema) | ⬜ Open |
-| Q10 | 10 | Should support tickets be reachable by superadmin tokens too (guide says yes; needs a new combined auth gate)? | ⬜ Open |
+| Q10 | 10 | ~~Support ticket audience~~ | ✅ **Answered** — any authenticated user |
 | Q11 | 3 | Who creates the Stripe subscription, and when? On first card added, or when the superadmin sets the tariff? The guide never says. | ⬜ Open |
 | Q12 | 3 | Suspension enforcement: block at login only (frontend redirect), or also reject every API call from a `SUSPENDED` school (`bBlocked`-style gate in the middleware)? | ⬜ Open |
+| Q13 | 10 | SMS destination number for `SUPPORT_PHONE`, and should it fire on every ticket or only some categories? Feature ships disabled until answered. | ⬜ Open |
+| Q14 | — | `npm run build && npm start` is already broken on `main`: `.babelrc` enables `@babel/plugin-transform-runtime` but `@babel/runtime` is not a dependency. How does production deploy today — does the host install it, or does it run via ts-node? | ⬜ Open |
 
 ---
 

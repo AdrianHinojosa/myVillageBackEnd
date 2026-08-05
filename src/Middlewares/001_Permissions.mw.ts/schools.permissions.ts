@@ -102,6 +102,8 @@ export const verifySchoolUserPermissions = (sArrModules: Permission[]) => async 
     res.locals.sTypeUser = 'School';
     res.locals.sSchoolId = schoolUserSession.sSchoolId;
     res.locals.sType = schoolUserSession.sType || 'ADMINISTRATION';
+    // P5 — the school was already fetched above, so denyTherapistAccess() costs no extra query
+    res.locals.sAccountType = mySchool.sAccountType || 'SCHOOL';
 
     // Refresh Token for 120 hours (5 days)
     await refreshTokenSchools(res.locals);
@@ -115,6 +117,25 @@ export const denyFacultyAccess = () => async (req: Request, res: Response, next:
     const { sLang, sType } = res.locals;
     if (sType === 'FACULTY') {
         return next(new MyError(403, ErrorMessages.Authentication.accessDenied[sLang]));
+    }
+    return next();
+};
+
+
+/**
+ * P5 — Deny access to THERAPIST accounts.
+ *
+ * The scope document restricts therapist accounts: they operate as a single user (no additional
+ * users), cannot upload documents, and cannot see or use the IEP module. The frontend hides all
+ * three, and this enforces them server-side so the restriction is real and not just cosmetic.
+ *
+ * Place AFTER a school auth middleware — it reads `res.locals.sAccountType`, which those set.
+ * Reads only locals, so it adds no database query.
+ */
+export const denyTherapistAccess = () => async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const { sLang, sAccountType } = res.locals;
+    if (sAccountType === 'THERAPIST') {
+        return next(new MyError(403, ErrorMessages.Schools.therapistNotAllowed[sLang]));
     }
     return next();
 };
@@ -170,6 +191,8 @@ export const verifySchoolUserHasAnyPermissions = (sArrModules: Permission[]) => 
     res.locals.sTypeUser = 'School';
     res.locals.sSchoolId = schoolUserSession.sSchoolId;
     res.locals.sType = schoolUserSession.sType || 'ADMINISTRATION';
+    // P5 — the school was already fetched above, so denyTherapistAccess() costs no extra query
+    res.locals.sAccountType = mySchool.sAccountType || 'SCHOOL';
 
     // Refresh Token for 120 hours (5 days)
     await refreshTokenSchools(res.locals);

@@ -18,7 +18,7 @@
 |---|---|---|---|---|
 | 10 | Tickets de soporte | 1 endpoint + SES email + shared auth gate | ✅ Done | `915e3e0` |
 | 8 | Tipos de ayuda | child table `TrackingRecordHelps` (Model B) | 🔄 In progress | — |
-| 5 | Modo terapeuta | 1 column + login payload | ⬜ Not started | — |
+| 5 | Modo terapeuta | 1 column + login payload + enforcement | ✅ Done | `3d9e44d` |
 | 7 | Submetas | schema + 6 endpoints + calculated fields | ⬜ Not started (design approved) | — |
 | 3 | Cobranza automática (Stripe) | full module + webhooks + dunning | ⛔ Blocked — Q7/Q8/Q11/Q12 | — |
 | 11 | Guía de creación de metas | none (frontend only) | ➖ N/A backend | — |
@@ -30,7 +30,7 @@ Legend: ⬜ not started · 🔄 in progress · ✅ done & committed · ➖ no ba
 
 ## Progress — as of 2026-08-02
 
-### Backend: ~6%
+### Backend: ~9%
 
 Weighted by the contract's own prices (what the client actually paid per point).
 
@@ -38,44 +38,46 @@ Weighted by the contract's own prices (what the client actually paid per point).
 |---|---|---|---|---|
 | 10 | Tickets de soporte | $8,000 | ✅ **100%** | shipped `271e9a1` |
 | 8 | Tipos de ayuda | $14,000 | ⬜ 0% code | design + contract approved, migration not written |
-| 5 | Modo terapeuta | $14,000 | ⬜ 0% | unblocked, ~0.5 day |
+| 5 | Modo terapeuta | $14,000 | ✅ **100%** | `3d9e44d` — column + login + enforcement, verified end-to-end |
 | 7 | Submetas | $24,000 | ⬜ 0% code | architecture decided (`Goals` + `sParentGoalId`) |
 | 3 | Cobranza (Stripe) | $70,000 | ⬜ 0% | **blocked** — Q7/Q8/Q11/Q12 |
 | 11 | Guía de metas | $5,500 | ➖ n/a | frontend only |
 | 13 | Capacitaciones | $11,000 | ➖ n/a | frontend only |
 
-- **By point price:** backend-relevant scope $130,000 · delivered $8,000 → **6.2%**
+- **By point price:** backend-relevant scope $130,000 · delivered $22,000 (P10 + P5) → **16.9%**
 - **By estimated backend effort share** (P3 70%, P7 50%, P8 35%, P10 55%, P5 15% of each
-  point's price): $4,400 of $72,400 → **6.1%**
+  point's price): $6,500 of $72,400 → **9.0%**
 
-Both methods agree, so ~6% is robust. Plainly: *one of five backend points, and the smallest.*
+The two diverge because P5's price is large but its backend content is small. **9% is the honest
+figure**; 16.9% flatters it. Plainly: *two of five backend points, both small ones.*
 
 ### Overall project (frontend + backend): ~50%
 
 | Side | Est. share of scope | Complete | Contribution |
 |---|---|---|---|
 | Frontend | ~$74,100 | ~93% | ~$69,100 |
-| Backend | ~$72,400 | ~6% | ~$4,400 |
-| **Total** | **$146,500** | | **~$73,500 → ~50%** |
+| Backend | ~$72,400 | ~9% | ~$6,500 |
+| **Total** | **$146,500** | | **~$75,600 → ~52%** |
 
 Frontend is **not** 100% any more: the PO's Model B decision on P8 invalidated part of it
 (`records.ts`, `RecordForm.vue`, chart colouring, PDF export all assume one help type per record).
 See `frontEndChanges.md` entry 1.
 
-⚠️ The front/back effort splits are **estimates**, so treat ~50% as ±5. The backend 6% is firm.
+⚠️ The front/back effort splits are **estimates**, so treat ~52% as ±5. The backend 9% is firm.
 
 ### Remaining backend effort
 
 | Point | Estimate | Blocked? |
 |---|---|---|
+| P5 | ~~0.5 day~~ | ✅ **done** |
 | P8 | ~1 day | No |
-| P5 | ~0.5 day | No |
 | P7 | ~2–3 days | No |
-| P3 | ~5–8 days | **Yes — Q7, Q8, Q11, Q12** |
-| **Total** | **~9–13 days (≈2–2.5 working weeks)** | |
+| P3 | ~5–8 days | No longer blocked — test keys confirmed |
+| **Total** | **~8–12 days (≈2 working weeks)** | |
 
-Contract allows **4 working weeks**. That fits *only if P3 unblocks soon*: it is 54% of contract
-value and more than half the remaining effort, and it cannot be compressed by reordering work.
+Contract allows **4 working weeks**. P3 is 54% of contract value and more than half the remaining
+effort; it is now unblocked for development (test-mode keys), but **live keys are still needed
+before it can ship**.
 
 ---
 
@@ -181,7 +183,16 @@ These are facts discovered while reading the code, kept here so nobody re-derive
     this scope: *`npm run build` must succeed and the diff must add zero new `tsc` errors* —
     checked per feature.
 
-15. **Out of scope but present:** the frontend repo added `docs/BACKEND_FEEDBACK_02APR2026.md`
+15. **`npm run db:migrations` is BROKEN — use `npx knex migrate:latest` from the repo root.**
+    The script is `cd src && knex migrate:latest`, which makes knex pick up `src/knexfile.ts`
+    (tracked) whose `path.join(__dirname, '/knex/db/migrations')` resolves to
+    `src/knex/db/migrations` — a directory that does not exist. It fails with
+    `ENOENT ... scandir '.../src/knex/db/migrations'`. The **root** `knexfile.ts` resolves
+    correctly, so running `npx knex migrate:latest` (and `migrate:list`, `migrate:rollback`)
+    from the repo root works. That is how migration `3033` was applied. Either delete
+    `src/knexfile.ts` or change the npm script — needs PO approval since it touches tooling.
+
+16. **Out of scope but present:** the frontend repo added `docs/BACKEND_FEEDBACK_02APR2026.md`
     (413 lines), `BACKEND_FEEDBACK_LOGIN_USERTYPE.md`, `BACKEND_FIX_STUDENT_REPORT.md`,
     `BACKEND_TODO_25MAR2026.md` and `CLIENT_ISSUES_02APR2026.md`. These predate this scope and
     are **not** part of the 24/jul/2026 extension. Do not silently fold them in.
@@ -201,6 +212,10 @@ These are facts discovered while reading the code, kept here so nobody re-derive
 | — | P8 enum casing | **UPPERCASE codes in the DB** (`VISUAL`), frontend keeps its lowercase slugs (`visual`), mapped at the API boundary | Convention call (naming, not business logic). Matches `sStatus`/`sMeasurementType`/`sDirection` and the vocabulary already documented on `sSupportUsed`. Zero frontend impact — this codebase already translates names at the boundary (`iCorrect`↔`iHits`). | 2026-08-02 |
 | — | P8 legacy shim | `POST`/`PUT` also accept the **old single** `sHelpType` + `iHelpAmount` and store it as a one-item array | Backend and frontend deploy independently; without this the existing capture form breaks the moment the backend ships. Marked in code for removal once the frontend ships the new UI. | 2026-08-02 |
 | — | P8 `sSupportUsed` | **Left in place, marked superseded** — not dropped | It holds a single value so it cannot serve Model B, but dropping a column from a production schema is irreversible and needs its own approval. | 2026-08-02 |
+| Q6 | P5 enforcement | **Backend enforces** the therapist restrictions (403 on `POST /schoolUsers`, `POST /iep`, `GET /iep`, `POST /goals/:id/goalFiles`) | PO decision. "Hidden in the UI" is not the same as "not possible"; the contract states these as product limits. `res.locals.sAccountType` is set by the auth middlewares (which already fetch the school), so the gate costs no extra query. | 2026-08-02 |
+| Q8 | P3 Stripe keys | **Develop against the existing test-mode keys**; live keys before deploy | `.env` holds `sk_test_`/`pk_test_` MyVillage keys, so no real money can move during development. P3 is therefore **not** blocked on credentials. | 2026-08-02 |
+| — | P5 record files | **Not blocked** for therapists; raised as Q15 | The contract's "no podrá cargar documentos" arguably covers record attachments, but `RecordForm.vue` has no therapist gating — blocking would make a visible button fail. Better to ask than to introduce a UI bug. | 2026-08-02 |
+| — | P5 `PUT /schools` | `sAccountType` is patched **only when present** in the body | Patching unconditionally would silently reset a therapist account to `SCHOOL` on any unrelated school edit. | 2026-08-02 |
 | — | Docs | Added **`featureGuide.md`** — plain-language explanation of each feature for the frontend team | PO request: explain in understandable terms what was built (tables, endpoints, behaviour), not just what changed. | 2026-08-02 |
 
 ---
@@ -216,15 +231,17 @@ Tracked here as they are asked/answered. See the conversation for full phrasing.
 | Q3 | 7 | ~~Sequential vs independent subgoals~~ | ✅ **Answered** — independent, as the frontend built (deviation logged) |
 | Q4 | 7 | `iTargetPercentage`: add to subgoals only, or to `Goals` as well (it's missing there too)? | ⬜ Open |
 | Q5 | 7 | Allow `PAUSED` on the existing goal status endpoint too, or only on subgoals? | ⬜ Open |
-| Q6 | 5 | Should the backend *enforce* therapist restrictions (single user, no IEP, no documents) or only expose the flag as the guide says? | ⬜ Open |
+| Q6 | 5 | ~~Enforce therapist restrictions, or only expose the flag?~~ | ✅ **Answered** — enforce server-side |
 | Q7 | 3 | Both billing modalities (`FIXED` + `VARIABLE`) is what the frontend built and the guide states, but the signed PDF says they are *"alternativas y NO acumulables"* and prices only the variable. Confirm both are in scope. | ⬜ Open |
-| Q8 | 3 | Stripe account + secret key (test/live) available? Currency MXN confirmed? `.env` already has `STRIPE_PRIVATE_KEY`/`STRIPE_PUBLIC_KEY` — are those real MyVillage keys or leftovers from the SHIPO template this repo forked from? | ⬜ Open |
+| Q8 | 3 | ~~Stripe keys~~ | ✅ **Answered** — `.env` holds MyVillage **test-mode** keys (`sk_test_`/`pk_test_`); build against test, live keys to be provided before deploy |
 | Q9 | 3 | Is "usuario principal del colegio" the school user with `sCreatedBy === null`? (that's the only marker in the schema) | ⬜ Open |
 | Q10 | 10 | ~~Support ticket audience~~ | ✅ **Answered** — any authenticated user |
 | Q11 | 3 | Who creates the Stripe subscription, and when? On first card added, or when the superadmin sets the tariff? The guide never says. | ⬜ Open |
 | Q12 | 3 | Suspension enforcement: block at login only (frontend redirect), or also reject every API call from a `SUSPENDED` school (`bBlocked`-style gate in the middleware)? | ⬜ Open |
 | Q13 | 10 | SMS destination number for `SUPPORT_PHONE`, and should it fire on every ticket or only some categories? Feature ships disabled until answered. | ⬜ Open |
-| Q14 | — | `npm run build && npm start` is already broken on `main`: `.babelrc` enables `@babel/plugin-transform-runtime` but `@babel/runtime` is not a dependency. How does production deploy today — does the host install it, or does it run via ts-node? | ⬜ Open |
+| Q14 | — | `npm run build && npm start` is already broken on `main`: `.babelrc` enables `@babel/plugin-transform-runtime` but `@babel/runtime` is not a dependency. PO confirmed production runs `npm start`, so a clean `npm ci` deploy **will** fail. Approve adding `@babel/runtime` to `dependencies`? | ⬜ Open — **blocks deployment** |
+| Q15 | 5 | Should therapist accounts be blocked from attaching files to tracking records (`POST /trackingRecords/:id/files`)? Left open because `RecordForm.vue` has no therapist gating and blocking would break a visible button. | ⬜ Open |
+| Q16 | — | `npm run db:migrations` is broken (see finding 15). Approve deleting the stale `src/knexfile.ts`, or changing the npm script to not `cd src`? | ⬜ Open |
 
 ---
 
@@ -307,8 +324,68 @@ the PO, not done unilaterally.
 ### Punto 8 — Tipos de ayuda
 *(not started)*
 
-### Punto 5 — Modo terapeuta
-*(not started)*
+### Punto 5 — Modo terapeuta ✅
+
+**Commit:** `3d9e44d` · **Migration:** `3033_Schools_sAccountType.ts` (applied to `development`)
+
+**What it does.** An account is `SCHOOL` or `THERAPIST`. The superadmin sets it; login exposes it
+so the frontend can switch terminology; and the backend **enforces** the three restrictions the
+contract places on therapist accounts.
+
+**Schema.** `Schools.sAccountType` string `notNullable` default `'SCHOOL'`. All 12 existing rows
+backfilled to `SCHOOL` by the default — verified post-migration.
+
+**Files**
+| File | Change |
+|---|---|
+| `knex/db/migrations/3033_Schools_sAccountType.ts` | **new** — adds the column |
+| `src/Api/022_Schools/schools.model.ts` | `sAccountType` on interface + class |
+| `src/Api/022_Schools/schools.validations.ts` | **new** exported `AccountType` Joi enum, added to Create + Update bodies |
+| `src/Api/022_Schools/schools.queries.ts` | `insertSchool` defaults to `SCHOOL`; `updateSchool` patches it **only when sent** |
+| `src/Api/022_Schools/schools.controllers.ts` | destructures and forwards `sAccountType` |
+| `src/Api/003_Authentication/authentication.controllers.ts` | `sAccountType` added to `oSchool` |
+| `src/Middlewares/001_Permissions.mw.ts/schools.permissions.ts` | sets `res.locals.sAccountType`; **new** `denyTherapistAccess()` |
+| `src/Middlewares/001_Permissions.mw.ts/shared.permissions.ts` | sets `res.locals.sAccountType` for parity |
+| `src/Middlewares/001_Permissions.mw.ts/Permissions.mw.ts` | `sAccountType` added to the `Response.locals` type |
+| `src/Api/026_SchoolUsers/schoolUsers.routes.ts` | `denyTherapistAccess()` on `POST /` |
+| `src/Api/025_Ieps/ieps.routes.ts` | `denyTherapistAccess()` on `POST /` and `GET /` |
+| `src/Api/024_Goals/002_GoalFiles/goalFiles.routes.ts` | `denyTherapistAccess()` on `POST /` |
+| `src/Utils/ErrorMessages.util.ts` | `Schools.therapistNotAllowed` (`sp`/`en`) |
+
+**Decisions taken**
+
+1. **Enforced server-side, per PO instruction.** The frontend guide called enforcement optional.
+   Enforcing makes the contract's limit real instead of cosmetic — otherwise anyone with a token
+   could create a second user on a therapist account.
+2. **`sAccountType` is carried in `res.locals`, set by the auth middlewares.** Those already fetch
+   the school (`verifySchoolExists`) to check `bBlocked`, so `denyTherapistAccess()` reads locals
+   and adds **zero** database queries. Alternative — querying the school inside the gate — would
+   have added a query to every gated request.
+3. **`GET /iep` is blocked too, not just writes.** The contract says *"no podrá **visualizar** o
+   utilizar"*. Verified safe: the frontend's `fetchIep()` is `silent: true` with an empty
+   `.catch()`, so the 403 produces no user-visible error.
+4. **`PUT /schools/:id` omitting `sAccountType` preserves the current value.** Patching it
+   unconditionally would silently reset therapist accounts to `SCHOOL` on any unrelated edit.
+5. **Record file attachments deliberately NOT blocked.** `RecordForm.vue` has no therapist gating,
+   so the attach button is visible to therapists; blocking server-side would break a working
+   flow. Raised as Q15 instead of deciding unilaterally.
+6. **Student photos and school logos NOT blocked** — images, not documents; a therapist still
+   needs an avatar and a logo.
+7. **`POST /schoolUsers` only.** `PUT /schoolUsers/:id` stays open — the rule is about creating
+   *additional* users, and a therapist must still be able to edit their own record.
+
+**Verification** (real development DB, genuine minted session token)
+- Migration applied; 12/12 existing schools defaulted to `SCHOOL`.
+- As `SCHOOL`: none of the four endpoints blocked.
+- As `THERAPIST`: `GET /iep`, `POST /iep`, `POST /schoolUsers`, `POST /goals/:id/goalFiles` all
+  `403` with the localized message.
+- As `THERAPIST`: `GET /students` → 201, `POST /support/ticket` → 200 (not over-blocked).
+- Login returns `sAccountType` in `oSchool` for both types; `oSchool` keys are
+  `sSchoolId, sSchoolName, sSchoolLogo, oImages, sAccountType`.
+- Invalid enum rejected; omitting the field on `PUT` preserves the type.
+- `npm run build` succeeds, zero new `tsc` errors.
+- Test data fully restored: all accounts back to `SCHOOL`, borrowed password hash restored,
+  test sessions deleted — confirmed by re-query.
 
 ### Punto 7 — Submetas
 *(not started)*
@@ -340,3 +417,6 @@ Anything we build differently from the PDF gets logged here with who approved it
 | `db2ea9c` | — | Scope kickoff: working-agreement skill, CLAUDE.md pointers, both trackers |
 | `7a01cd7` | — | Corrected kickoff findings against the real frontend (`d560e21`); re-mirrored the guides; registered the invocable skill |
 | `915e3e0` | **10** | `POST /support/ticket` + SES template + `verifyAnyAuthenticatedUser()` gate; SMS wired but disabled |
+| `3c5e4d8` | — | `featureGuide.md` (plain-language feature doc) + resolved decisions |
+| `07f535c` | — | Measured progress recorded in the tracker |
+| `3d9e44d` | **5** | `Schools.sAccountType` + login payload + `denyTherapistAccess()` on 4 endpoints |

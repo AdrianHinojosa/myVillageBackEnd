@@ -41,7 +41,7 @@ them is rejected with a 400.
 |---|---|---|---|---|
 | 10 | Support tickets | ✅ **Built** (`271e9a1`) | No | 1 |
 | 8 | Help types | 🔄 Designed, not built | Yes — `TrackingRecordHelps` | 0 (extends existing) |
-| 5 | Therapist mode | ⬜ Not started | No — 1 new column | 0 (extends existing) |
+| 5 | Therapist mode | ✅ **Built** | No — 1 new column on `Schools` | 0 (extends existing) + 4 gated |
 | 7 | Subgoals | ⬜ Not started | No — `Goals` gains a parent link | 6 |
 | 3 | Billing (Stripe) | ⬜ Not started | Yes — `Payments` + columns on `Schools` | ~8 + webhook |
 | 11 | Goal-writing guide | ➖ Frontend only | — | — |
@@ -256,11 +256,114 @@ temporary shim, marked in the code for removal once the frontend ships the new c
 
 ---
 
-# ⬜ Punto 5 — Therapist mode *(not started)*
+# ✅ Punto 5 — Therapist mode
 
-Planned: one new column `sAccountType` on `Schools` (`SCHOOL` | `THERAPIST`, default `SCHOOL`),
-settable by the superadmin when creating or editing a school, and returned inside `oSchool` on
-login so the frontend can switch its terminology. Documented here once built.
+### What it does, in one paragraph
+
+An account is now either a **school** (everything as before) or a **therapist**. The superadmin
+picks which when creating or editing the account. When someone logs in, the backend tells the
+front-end which type it is, and the front-end reworks all its wording — "colegio" becomes
+"terapeuta", "alumnos" become "Pacientes", "Docente" becomes "Terapeuta". On top of that, the
+backend now **actively refuses** the three things a therapist account isn't allowed to do, so the
+restriction is real rather than just hidden in the interface.
+
+### Was a table created?
+
+**No — one new column** on the existing `Schools` table.
+
+| Column | Values | Default |
+|---|---|---|
+| `sAccountType` | `SCHOOL` or `THERAPIST` | `SCHOOL` |
+
+Every existing school was automatically set to `SCHOOL`, so nothing about current behaviour
+changed. Verified after the migration: all 12 accounts in the development database came out as
+`SCHOOL`.
+
+### How an account becomes a therapist account
+
+The superadmin sets it, on the endpoints that already exist:
+
+| URL | Change |
+|---|---|
+| `POST /schools` | accepts `sAccountType` — omit it and you get `SCHOOL` |
+| `PUT /schools/:sSchoolId` | accepts `sAccountType` — **omit it and the current type is kept**, it is never silently reset |
+| `GET /schools/:sSchoolId` | returns `sAccountType` |
+
+Sending anything other than `SCHOOL` or `THERAPIST` is rejected with `400`.
+
+### Login tells the front-end which mode to use
+
+`sAccountType` now travels inside `oSchool`, exactly where the front-end already looks
+(`oResults.oSchool.sAccountType`):
+
+```jsonc
+{
+  "message": "Bienvenido, …",
+  "status": true,
+  "results": {
+    "sUserId": "…", "sToken": "…", "sUserType": "SchoolAdmin",
+    "oSchool": {
+      "sSchoolId": "…",
+      "sSchoolName": "Consultorio Ana López",
+      "sSchoolLogo": "…",
+      "oImages": { },
+      "sAccountType": "THERAPIST"      // ← new
+    },
+    "aPermissions": [ ]
+  }
+}
+```
+
+Superadmins have no school, so they have no `oSchool` and never see therapist mode.
+
+### What a therapist account is refused
+
+The contract says a therapist *"operará como un usuario único, por lo que no contará con la
+posibilidad de crear usuarios adicionales"* and *"no podrá cargar documentos ni visualizar o
+utilizar el módulo de IEP"*. All three are now enforced server-side:
+
+| URL | Result for a therapist account | Why |
+|---|---|---|
+| `POST /schoolUsers` | **403** | single user — cannot create more |
+| `POST /iep` | **403** | cannot *use* the IEP module |
+| `GET /iep` | **403** | cannot *view* it either |
+| `POST /goals/:sGoalId/goalFiles` | **403** | cannot upload documents |
+
+The message is localized: *"Esta función no está disponible en las cuentas de terapeuta."* /
+*"This feature is not available on therapist accounts."*
+
+**Everything else works normally** — students, goals, tracking records, reports, support tickets.
+Verified: a therapist account still gets `201` on `GET /students` and `200` on
+`POST /support/ticket`.
+
+### Two things deliberately *not* blocked
+
+1. **Attaching files to a tracking record** (`POST /trackingRecords/:id/files`). The contract's
+   "cannot upload documents" arguably covers these, but `RecordForm.vue` has **no** therapist
+   gating — the button is still visible to therapists, so blocking it server-side would make a
+   working button fail. Raised as a question rather than silently breaking it.
+2. **Student photos and school logos** (`POST /students/:id/image`, `POST /schools/:id/image`).
+   Those are pictures, not documents, and a therapist still needs an avatar and a logo.
+
+### One thing the front-end should tidy up
+
+The student detail page calls `fetchIep()` **unconditionally**, including for therapists
+([`students/[id]/index.vue:335`](../../../myVillage/app/pages/admin/students/[id]/index.vue#L335)).
+That call now returns `403`. It's harmless — the request is `silent: true` with an empty
+`.catch()`, so nothing appears on screen — but it's a pointless failing request in the console.
+Skip it when in therapist mode.
+
+### How it was verified
+
+Against the real development database, with a genuine session token:
+
+- migration applied; all 12 existing schools defaulted to `SCHOOL`
+- as `SCHOOL`: none of the four endpoints blocked
+- as `THERAPIST`: all four return `403` with the localized message
+- as `THERAPIST`: `GET /students` and `POST /support/ticket` still succeed
+- login returns `sAccountType` correctly for both types
+- invalid values rejected; omitting the field on `PUT` preserves the existing type
+- test data restored afterwards (all accounts back to `SCHOOL`, password restored, sessions removed)
 
 # ⬜ Punto 7 — Subgoals *(not started)*
 

@@ -31,6 +31,8 @@ frontend work didn't exist.
 |---|---|---|---|---|
 | 1 | 8 | `POST/PUT /trackingRecords`, record GETs, chart, PDF | **Many help types per record, each 0–10** — replaces the single `sHelpType` + `iHelpAmount` | 🔴 breaking |
 | 2 | 10 | `POST /support/ticket` | None — contract matches as built | 🟢 none |
+| 3 | 5 | `students/[id]/index.vue` | Skip `fetchIep()` in therapist mode — it now returns 403 | 🟡 tidy-up |
+| 4 | 5 | `POST /schools`, `PUT /schools/:id`, login | None — `sAccountType` already wired correctly | 🟢 none |
 
 Severity: 🔴 breaking (integration fails without it) · 🟡 rename/adapt · 🟢 nice-to-have
 
@@ -91,16 +93,15 @@ and `GUIA_BACKEND_AMPLIACION.md` §P8 states *"Un solo tipo por registro."*
 | `app/components/charts/BaseLineChart.vue` | per-point label likewise |
 | `app/composables/useGoalChartCapture.ts` + PDF export | same |
 
-**⚠️ Open question back to the PO — chart colour rule.** The signed PDF (p.4) says
-*"cada punto (registro) se mostrará con **un color distinto** según el tipo de ayuda otorgado e
-incluirá **un número pequeño**"* — one dot, one colour, one number. With Visual 8 + Verbal 7 +
-Escrita 6 on the same record, **there is no defined colour**. The contract's chart rule only works
-for one-type-per-record, so a new rule is needed. Options for the PO to pick:
-1. colour by the **highest-value** type (label = that value);
-2. the user marks one type as **primary**; ← would need a `bPrimary` flag in `aHelpTypes`
-3. neutral dot, with the breakdown in the tooltip only.
-**Backend is not blocked by this** — it stores and returns the array either way. Option 2 is the
-only one that changes the API, so flag it before the frontend builds the chart.
+**Chart colour rule — DECIDED (PO, 2026-08-02).** The signed PDF (p.4) says each point shows
+*"un color distinto según el tipo de ayuda otorgado"* plus *"un número pequeño"* — one dot, one
+colour, one number. With Visual 8 + Verbal 7 + Escrita 6 on one record that rule is undefined, so:
+
+> **Colour the point by the help type with the highest `iHelpAmount`**, and use that number as the
+> point label. Ties break by the canonical order of the 8 types in `helpTypes.ts`, so the result is
+> deterministic. The full breakdown can go in the tooltip.
+
+**No API change** — the backend returns the array; the frontend picks the maximum.
 
 ### 2. P10 — Support tickets: no change needed 🟢
 
@@ -116,6 +117,50 @@ only one that changes the API, so flag it before the frontend builds the chart.
   can log in but nothing else works, so support must stay reachable).
 - The body must contain **only** those three fields. The schema is strict: adding `sUserId`,
   `sSchoolId` or any other key returns 400. Identity comes from the token.
+
+### 3. P5 — Skip the IEP fetch in therapist mode 🟡
+
+- **File:** `app/pages/admin/students/[id]/index.vue` — `fetchStudent()` at line 335 calls
+  `fetchIep()` unconditionally.
+- **What happens now:** the backend enforces the contract's rule that a therapist account
+  *"no podrá visualizar o utilizar el módulo de IEP"*, so `GET /iep` returns **403** for
+  `THERAPIST` accounts.
+- **Impact today: none visible.** The call is `silent: true` with an empty `.catch()`, so nothing
+  is shown to the user. It's just a guaranteed-to-fail request in the network log.
+- **Change:** guard the call, e.g. `if (!this.bIsTherapist) this.fetchIep();` — the page already
+  has a `bIsTherapist` computed (line 270) used to hide the IEP tab.
+- **Priority:** cosmetic. Nothing breaks if you skip it.
+
+### 4. P5 — Therapist mode: everything else already matches 🟢
+
+No change needed. Recorded so nobody re-checks:
+
+- `POST /schools` and `PUT /schools/:sSchoolId` accept **`sAccountType`** (`SCHOOL` | `THERAPIST`)
+  with exactly that name — `schools/[id]/edit.vue` and `add.vue` already send it. Invalid values
+  return 400.
+- **Omitting `sAccountType` on `PUT` preserves the current type** — it is never silently reset, so
+  partial school edits are safe.
+- `GET /schools/:sSchoolId` returns it.
+- Login returns it at **`oResults.oSchool.sAccountType`**, exactly where `login.vue:105` reads it.
+  `auth.ts` already declares `sAccountType?` on `IUser`. Superadmins have no `oSchool`, so they
+  never enter therapist mode.
+- **The backend now enforces the restrictions**, not just reports them. For `THERAPIST` accounts:
+  `POST /schoolUsers`, `POST /iep`, `GET /iep` and `POST /goals/:sGoalId/goalFiles` all return
+  **403** with a localized message. The frontend already hides all four, so this only matters if
+  something calls them anyway.
+- Not blocked: student photos, school logos, and **tracking-record file attachments** (see the
+  open question below).
+
+### ⚠️ Open question — should therapists be able to attach files to tracking records?
+
+`RecordForm.vue` has **no** therapist gating, so a therapist can still attach files via
+`POST /trackingRecords/:sTrackingRecordId/files`. The contract says therapists *"no podrá cargar
+documentos"*, which arguably covers these. The backend deliberately left it **open** rather than
+break a visible button. Two ways to resolve:
+1. **Therapists may attach record files** — treat "documentos" as meaning goal documents only.
+   Nothing changes on either side.
+2. **They may not** — the frontend hides the attach control in therapist mode, and the backend
+   adds the same gate to that route (a one-line change).
 
 ---
 

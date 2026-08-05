@@ -21,6 +21,7 @@ export interface ISchools {
     iUsersLimit?: number;
     iStudentsLimit?: number;
     bBlocked?: boolean;
+    sAccountType?: string;
     sCreatedBy?: string;
     sLastUpdatedBy?: string;
     sLastDeletedBy?: string;
@@ -38,6 +39,7 @@ export class SchoolsModel extends Model {
     public iUsersLimit?: number;
     public iStudentsLimit?: number;
     public bBlocked?: boolean;
+    public sAccountType?: string;
     public sCreatedBy?: string;
     public sLastUpdatedBy?: string;
     public sLastDeletedBy?: string;

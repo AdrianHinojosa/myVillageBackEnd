@@ -1,11 +1,16 @@
 import { Joi } from 'celebrate';
 import * as Validations from '../../Middlewares/Validations.mw';
 
+// P5 — account type. Optional on the wire; defaults to SCHOOL so existing callers are unaffected.
+export const AccountType = Joi.string().valid('SCHOOL', 'THERAPIST')
+    .allow(null).allow('').error(new Error("Schools sAccountType"));
+
 export const CreateSchoolBody = Validations.JoiObjectKeys({
     sName: Validations.RequiredString("Schools sName"),
     sPhone: Validations.String("Schools sPhone"),
     iUsersLimit: Validations.RequiredPositiveInteger("Schools iUsersLimit"),
     iStudentsLimit: Validations.RequiredPositiveInteger("Schools iStudentsLimit"),
+    sAccountType: AccountType,
 
     // USER info
     sAdminName: Validations.RequiredString("SchoolUsers sName"),
@@ -32,6 +37,7 @@ export const UpdateSchoolBody = Validations.JoiObjectKeys({
     sPhone: Validations.String("Schools sPhone"),
     iUsersLimit: Validations.RequiredPositiveInteger("Schools iUsersLimit"),
     iStudentsLimit: Validations.RequiredPositiveInteger("Schools iStudentsLimit"),
+    sAccountType: AccountType,
 });
 
 export const DeleteSchoolParams = Validations.JoiObjectKeys({

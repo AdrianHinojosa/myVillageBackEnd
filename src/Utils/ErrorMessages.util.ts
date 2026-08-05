@@ -172,6 +172,11 @@ export default {
             en: "Your school is not part of the platform."
         },
 
+        therapistNotAllowed: {
+            sp: "Esta función no está disponible en las cuentas de terapeuta.",
+            en: "This feature is not available on therapist accounts."
+        },
+
         bBlockedPermission: {
             sp: "Tu escuela no cuenta con acceso a la plataforma.",
             en: "Your school does not have access to the platform."

@@ -22,6 +22,7 @@ class Controllers {
             sPhone,
             iUsersLimit,
             iStudentsLimit,
+            sAccountType,
 
             // User info
             sAdminName,
@@ -42,7 +43,7 @@ class Controllers {
             return next(new MyError(401, ErrorMessages.Authentication.invalidToken[sLang]));
         }
 
-        const myObject = await SchoolQueries.insertSchool({sName, sPhone, sEmail, sAddress: null, sCityId: null, iUsersLimit, iStudentsLimit, sCreatedBy, sAdminName, sLastName, sSecondLastName});
+        const myObject = await SchoolQueries.insertSchool({sName, sPhone, sEmail, sAddress: null, sCityId: null, iUsersLimit, iStudentsLimit, sAccountType, sCreatedBy, sAdminName, sLastName, sSecondLastName});
 
         const Token: string = Services.CreateRandomToken(64);
         const ExpiredDate: Date = Services.ExpireToken(new Date(), 4320); //72 hours
@@ -118,6 +119,7 @@ class Controllers {
             sPhone,
             iUsersLimit,
             iStudentsLimit,
+            sAccountType,
         } = req.body;
 
         // Validate that the school Exists
@@ -127,7 +129,7 @@ class Controllers {
         const sLastUpdatedBy = res.locals.sUserId;
 
         // Update school
-        const updatedSchool = await SchoolQueries.updateSchool(sSchoolId, { sName, sPhone, sCityId: null, iUsersLimit, iStudentsLimit, sLastUpdatedBy })
+        const updatedSchool = await SchoolQueries.updateSchool(sSchoolId, { sName, sPhone, sCityId: null, iUsersLimit, iStudentsLimit, sAccountType, sLastUpdatedBy })
 
         return res.status(201).json({
             message: SuccessMessages.Schools.updateSchool[sLang],

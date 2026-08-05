@@ -21,6 +21,8 @@ declare module 'express' {
             sEmployeeId?: string;
             sSchoolId?: string;
             sType?: 'FACULTY' | 'ADMINISTRATION';
+            /** P5 — account type of the school in res.locals.sSchoolId. Set by the school auth middlewares. */
+            sAccountType?: 'SCHOOL' | 'THERAPIST';
 
         }
     }

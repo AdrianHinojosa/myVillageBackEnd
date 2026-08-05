@@ -14,7 +14,7 @@ class Queries {
     }
 
     // DONE: Insert school
-    static async insertSchool({sName, sPhone, sEmail, sAddress, sCityId, iUsersLimit, iStudentsLimit, sCreatedBy, sAdminName, sLastName, sSecondLastName}: any) {
+    static async insertSchool({sName, sPhone, sEmail, sAddress, sCityId, iUsersLimit, iStudentsLimit, sAccountType, sCreatedBy, sAdminName, sLastName, sSecondLastName}: any) {
         return await SchoolsModel.transaction(async (trx) => {
 
             // Insert into School table
@@ -26,6 +26,8 @@ class Queries {
                 sCityId,
                 iUsersLimit,
                 iStudentsLimit,
+                // P5 — SCHOOL unless the superadmin explicitly asked for a therapist account
+                sAccountType: sAccountType || 'SCHOOL',
                 bBlocked: false,
                 sCreatedBy,
                 bActive: true
@@ -57,18 +59,24 @@ class Queries {
     }
 
     // Done: Update school
-    static async updateSchool(sSchoolId, {sName, sPhone, sCityId, iUsersLimit, iStudentsLimit, sLastUpdatedBy}) {
+    static async updateSchool(sSchoolId, {sName, sPhone, sCityId, iUsersLimit, iStudentsLimit, sAccountType, sLastUpdatedBy}) {
 
         return await SchoolsModel.transaction(async (trx) => {
-            // Update school
-            let updatedSchool =  await SchoolsModel.query(trx).patchAndFetchById(sSchoolId, {
+            // Only patch sAccountType when it was actually sent — omitting it must not reset the type
+            const oPatch: any = {
                 sName,
                 sPhone,
                 sCityId,
                 iUsersLimit,
                 iStudentsLimit,
                 sLastUpdatedBy
-            }).where('bActive', true);
+            };
+            if (sAccountType) {
+                oPatch.sAccountType = sAccountType;
+            }
+
+            // Update school
+            let updatedSchool =  await SchoolsModel.query(trx).patchAndFetchById(sSchoolId, oPatch).where('bActive', true);
 
             // GET updated school with fields required
             let mySchool =  await SchoolsModel.query(trx).findById(sSchoolId).select('Schools.*')

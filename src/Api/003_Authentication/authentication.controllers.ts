@@ -75,7 +75,9 @@ class Controllers {
                     sSchoolId: school.sSchoolId,
                     sSchoolName: school.sName,
                     sSchoolLogo: school.oImages?.md || '',
-                    oImages: school.oImages || null
+                    oImages: school.oImages || null,
+                    // P5 — the frontend reads this to switch into therapist mode
+                    sAccountType: school.sAccountType || 'SCHOOL'
                 };
             } else {
                 return next(new MyError(401, ErrorMessages.Authentication.login.invalidCredentials[sLang]));

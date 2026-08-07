@@ -19,7 +19,7 @@
 | 10 | Tickets de soporte | 1 endpoint + SES email + shared auth gate | ✅ Done | `915e3e0` |
 | 8 | Tipos de ayuda | child table `TrackingRecordHelps` (Model B) | ✅ Done | `d16cd4a` |
 | 5 | Modo terapeuta | 1 column + login payload + enforcement | ✅ Done | `3d9e44d` |
-| 7 | Submetas | schema + 6 endpoints + calculated fields | ⬜ Not started (design approved) | — |
+| 7 | Submetas | schema + 6 endpoints + calculated fields | 🔄 In progress — schema + leak guards done | — |
 | 3 | Cobranza automática (Stripe) | full module + webhooks + dunning | ⛔ Blocked — Q7/Q8/Q11/Q12 | — |
 | 11 | Guía de creación de metas | none (frontend only) | ➖ N/A backend | — |
 | 13 | Módulo de capacitaciones | none (frontend only) | ➖ N/A backend | — |
@@ -478,8 +478,71 @@ backfilled to `SCHOOL` by the default — verified post-migration.
 - Test data fully restored: all accounts back to `SCHOOL`, borrowed password hash restored,
   test sessions deleted — confirmed by re-query.
 
-### Punto 7 — Submetas
-*(not started)*
+### Punto 7 — Submetas 🔄 (in progress)
+
+**Migration:** `3035_Goals_subGoals.ts` (applied to `development`) · **Endpoints: not yet built**
+
+#### Step 1 of 2 — schema + leak-proofing ✅
+
+A subgoal is a **`Goals` row with `sParentGoalId`** set (Q2 decision), so the existing progress
+engine, `GoalTasks`, `GoalFiles` and the TrackingRecords pipeline all serve subgoals unchanged.
+
+**New columns on `Goals`**
+| Column | Purpose |
+|---|---|
+| `sParentGoalId` | uuid, nullable, FK → `Goals.sGoalId`. NULL = top-level goal. Indexed. |
+| `iOrder` | int, default 0 — display order within the parent (not user-reorderable, PO decision) |
+| `bHasSubGoals` | bool, default false — **stored, not derived** |
+| `iTargetPercentage` | int, nullable — listed in the signed PDF but previously missing from `Goals` |
+
+`bHasSubGoals` is stored rather than derived from a child count because the frontend marks a goal
+as divided **at creation time, before any subgoal exists**; a derived flag would report `false`
+during that window and the UI would show the wrong screen.
+
+**⚠️ CORRECTION to an earlier estimate.** I told the PO the leak risk was "one `WHERE` clause".
+It is **12 predicates across 3 modules** — every query that lists or aggregates goals must exclude
+children, or subgoals appear as independent goals and are double-counted in analytics:
+
+| File | Sites | What would have broken |
+|---|---|---|
+| `024_Goals/goals.queries.ts` | 2 | `findGoalsByStudent` (subgoals listed as goals) + the folio search precompute |
+| `023_Students/students.queries.ts` | 4 | `iGoalsCount` and `dGoalsProgress`, in both the list and single-student queries |
+| `022_Schools/schools.queries.ts` | 8 | `iGoals`, `sGoalsProgress`, `iGoalProgress`, `dCurrentGoalProgress`, `iCurrentCompleted`, `iPrevCompleted`, and the created/completed monthly trend counts |
+
+All 12 are in place. They were added **before** any subgoal can exist, deliberately, so no window
+exists in which a subgoal could pollute a report.
+
+**Verification** — the guards being no-ops today proves nothing, so they were tested by inserting
+a synthetic child row with `dProgress = 999` and re-reading the real endpoints and aggregates:
+- goals list `iTotal` 23 → 23; the subgoal did **not** appear in the returned array
+- student `iGoalsCount` 23 → 23; `dGoalsProgress` stayed 50 (not poisoned above 100)
+- school-level aggregate: **guarded** count/avg 22/49 → 22/49, while the **unguarded** form went
+  22/49 → 23/**90** — proving the guard holds *and* that the test could detect a leak
+- pre/post migration aggregates identical to the recorded baseline
+  (`25 goals, avg 50.00, 23 active, 1 completed`); all 41 existing rows have `sParentGoalId` NULL
+  and `bHasSubGoals` false
+- synthetic rows removed; rows with a parent back to 0
+
+#### Step 2 of 2 — endpoints ⬜ (next)
+`GET/POST /goals/:sGoalId/subGoals` · `PUT/DELETE /subGoals/:sSubGoalId` ·
+`GET /subGoals/:sSubGoalId/trackingRecords` · `POST /trackingRecords` accepting `sSubGoalId` ·
+`bHasSubGoals` on `GET /goals/:id`.
+
+**Contract facts already established from frontend source** (`SubGoalsManager.vue`, `GoalForm.vue`):
+1. The subgoal form **is** `GoalForm.vue` with `bIsSubGoal`, so a subgoal payload is a *goal*
+   payload. It sends `sTitle` (empty — the input is hidden), `sMeasurementType` (the inherited one),
+   `bHasSubGoals`, `aDocuments` and `aTasks`. The subgoal schema must **accept and ignore** the
+   first four rather than 409 on them: title and measurement type are inherited, documents go
+   through the separate upload endpoint, and a subgoal cannot itself be divided.
+2. **`POST /goals` currently REJECTS the frontend's payload.** `GoalForm` sends `bHasSubGoals` on
+   create, `CreateGoalBody` is a strict `JoiObjectKeys`, and `"bHasSubGoals" is not allowed`
+   (confirmed by running the validator). So the "divide into subgoals?" flow is broken against the
+   current backend until `bHasSubGoals` is accepted.
+3. **`POST /trackingRecords` needs to accept `sSubGoalId` in place of `sGoalId`.**
+   `SubGoalsManager.vue:360` posts `{ sSubGoalId, ...oPayload }` and `RecordForm` does not supply
+   `sGoalId`, which is currently `RequiredUUID` — so the request would fail validation.
+4. Lists must return **`aData`** (`SubGoalsManager.vue:285` falls through to the raw response object
+   otherwise and then calls `.map()` on it).
 
 ### Punto 3 — Cobranza automática (Stripe)
 *(not started)*

@@ -184,6 +184,7 @@ class Queries {
                                         (SELECT COUNT(*)::integer FROM "Goals" g
                                          JOIN "Students" s ON s."sStudentId" = g."sStudentId" AND s."bActive" = true
                                          WHERE s."sSchoolId" = "Schools"."sSchoolId" AND g."bActive" = true AND g."sStatus" = 'ACTIVE'
+                                           AND g."sParentGoalId" IS NULL   -- P7: exclude subgoals
                                         ) AS "iGoals"
                                     `))
                                     // Computed: sGoalsProgress (AVG of active goals dProgress)
@@ -191,6 +192,7 @@ class Queries {
                                         (SELECT COALESCE(ROUND(AVG(g."dProgress")::numeric, 0), 0)::text FROM "Goals" g
                                          JOIN "Students" s ON s."sStudentId" = g."sStudentId" AND s."bActive" = true
                                          WHERE s."sSchoolId" = "Schools"."sSchoolId" AND g."bActive" = true AND g."sStatus" = 'ACTIVE'
+                                           AND g."sParentGoalId" IS NULL   -- P7: exclude subgoals
                                         ) AS "sGoalsProgress"
                                     `))
                                     .where('Schools.bActive', true)
@@ -343,6 +345,7 @@ class Queries {
                 JOIN "Students" s ON s."sStudentId" = g."sStudentId" AND s."bActive" = true
                 JOIN "Schools" sc ON sc."sSchoolId" = s."sSchoolId" AND sc."bActive" = true
                 WHERE g."bActive" = true AND g."sStatus" = 'ACTIVE'
+                  AND g."sParentGoalId" IS NULL   -- P7: exclude subgoals
                   AND g."created_at"::date BETWEEN ?::date AND ?::date
             `, [sStart, sEnd]),
 
@@ -407,14 +410,14 @@ class Queries {
             // 7. Goals trend: current period completion rate vs previous
             db.raw(`
                 SELECT
-                    COALESCE((SELECT ROUND(AVG("dProgress")::numeric, 1) FROM "Goals" WHERE "bActive" = true AND "sStatus" = 'ACTIVE' AND "created_at"::date BETWEEN ?::date AND ?::date), 0) ::float8 AS "dCurrentGoalProgress",
+                    COALESCE((SELECT ROUND(AVG("dProgress")::numeric, 1) FROM "Goals" WHERE "bActive" = true AND "sStatus" = 'ACTIVE' AND "sParentGoalId" IS NULL AND "created_at"::date BETWEEN ?::date AND ?::date), 0) ::float8 AS "dCurrentGoalProgress",
                     COALESCE((
                         SELECT COUNT(*)::integer FROM "Goals"
-                        WHERE "bActive" = true AND "sStatus" = 'COMPLETED' AND "tCompletedDate" IS NOT NULL AND "tCompletedDate" BETWEEN ?::date AND ?::date
+                        WHERE "bActive" = true AND "sStatus" = 'COMPLETED' AND "sParentGoalId" IS NULL AND "tCompletedDate" IS NOT NULL AND "tCompletedDate" BETWEEN ?::date AND ?::date
                     ), 0) AS "iCurrentCompleted",
                     COALESCE((
                         SELECT COUNT(*)::integer FROM "Goals"
-                        WHERE "bActive" = true AND "sStatus" = 'COMPLETED' AND "tCompletedDate" IS NOT NULL AND "tCompletedDate" BETWEEN ?::date AND ?::date
+                        WHERE "bActive" = true AND "sStatus" = 'COMPLETED' AND "sParentGoalId" IS NULL AND "tCompletedDate" IS NOT NULL AND "tCompletedDate" BETWEEN ?::date AND ?::date
                     ), 0) AS "iPrevCompleted"
             `, [sStart, sEnd, sStart, sEnd, sPrevStart, sPrevEnd]),
 
@@ -431,12 +434,12 @@ class Queries {
                 ) AS gs(month)
                 LEFT JOIN (
                     SELECT date_trunc('month', "created_at") AS month, COUNT(*) AS cnt
-                    FROM "Goals" WHERE "bActive" = true AND "created_at"::date BETWEEN ? AND ?
+                    FROM "Goals" WHERE "bActive" = true AND "sParentGoalId" IS NULL AND "created_at"::date BETWEEN ? AND ?
                     GROUP BY date_trunc('month', "created_at")
                 ) AS created_cnt ON created_cnt.month = gs.month
                 LEFT JOIN (
                     SELECT date_trunc('month', "tCompletedDate") AS month, COUNT(*) AS cnt
-                    FROM "Goals" WHERE "bActive" = true AND "sStatus" = 'COMPLETED' AND "tCompletedDate" IS NOT NULL AND "tCompletedDate" BETWEEN ?::date AND ?::date
+                    FROM "Goals" WHERE "bActive" = true AND "sStatus" = 'COMPLETED' AND "sParentGoalId" IS NULL AND "tCompletedDate" IS NOT NULL AND "tCompletedDate" BETWEEN ?::date AND ?::date
                     GROUP BY date_trunc('month', "tCompletedDate")
                 ) AS completed_cnt ON completed_cnt.month = gs.month
                 ORDER BY gs.month ASC

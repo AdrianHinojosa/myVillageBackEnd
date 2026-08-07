@@ -28,6 +28,10 @@ export interface IGoals {
     sCompletionNotes?: string;
     sDirection?: string;
     iTargetOpportunities?: number;
+    iTargetPercentage?: number;
+    sParentGoalId?: string;
+    iOrder?: number;
+    bHasSubGoals?: boolean;
     sCreatedBy?: string;
     sLastUpdatedBy?: string;
     sLastDeletedBy?: string;
@@ -57,6 +61,10 @@ export class GoalsModel extends Model {
     public sCompletionNotes?: string;
     public sDirection?: string;
     public iTargetOpportunities?: number;
+    public iTargetPercentage?: number;
+    public sParentGoalId?: string;
+    public iOrder?: number;
+    public bHasSubGoals?: boolean;
     public sCreatedBy?: string;
     public sLastUpdatedBy?: string;
     public sLastDeletedBy?: string;
@@ -81,6 +89,25 @@ export class GoalsModel extends Model {
             join: {
                 from: 'Goals.sGoalId',
                 to: 'GoalTasks.sGoalId'
+            }
+        },
+
+        // P7 — a subgoal is a Goals row pointing at its parent.
+        SubGoals: {
+            relation: Model.HasManyRelation,
+            modelClass: () => GoalsModel,
+            join: {
+                from: 'Goals.sGoalId',
+                to: 'Goals.sParentGoalId'
+            }
+        },
+
+        ParentGoal: {
+            relation: Model.BelongsToOneRelation,
+            modelClass: () => GoalsModel,
+            join: {
+                from: 'Goals.sParentGoalId',
+                to: 'Goals.sGoalId'
             }
         },
     };

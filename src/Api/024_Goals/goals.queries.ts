@@ -130,7 +130,9 @@ class Queries {
             const allGoalIds = await GoalsModel.query()
                 .select('sGoalId')
                 .where('sStudentId', sStudentId)
-                .where('bActive', true);
+                .where('bActive', true)
+                // P7: subgoals are Goals rows — never surface them as top-level goals
+                .whereNull('sParentGoalId');
             const sFolioSearch = String(sSearch).toUpperCase();
             aFolioMatchIds = allGoalIds
                 .filter((g: any) => Queries.computeFolio(g.sGoalId).includes(sFolioSearch))
@@ -140,6 +142,9 @@ class Queries {
         return await GoalsModel.query().modify(function (queryBuilder: any) {
             queryBuilder.where('Goals.bActive', true)
             queryBuilder.where('Goals.sStudentId', sStudentId)
+            // P7: THE critical guard. Subgoals live in this same table; without this they would
+            // appear in the student's goal list as if they were independent goals.
+            queryBuilder.whereNull('Goals.sParentGoalId')
 
             queryBuilder.withGraphFetched('GoalTasks')
             queryBuilder.modifyGraph('GoalTasks', builder => {

@@ -46,7 +46,7 @@ something useful without the frontend inspecting the error.
 | 10 | Support tickets | ✅ **Built** | No | 1 |
 | 8 | Help types | ✅ **Built** | Yes — `TrackingRecordHelps` | 0 (extends existing 3) |
 | 5 | Therapist mode | ✅ **Built** | No — 1 new column on `Schools` | 0 (extends existing) + 4 gated |
-| 7 | Subgoals | ⬜ Not started | No — `Goals` gains a parent link | 6 |
+| 7 | Subgoals | ✅ **Built** | No — `Goals` gains a parent link | 5 new + 3 extended |
 | 3 | Billing (Stripe) | ⬜ Not started | Yes — `Payments` + columns on `Schools` | ~8 + webhook |
 | 11 | Goal-writing guide | ➖ Frontend only | — | — |
 | 13 | Trainings module | ➖ Frontend only | — | — |
@@ -414,13 +414,111 @@ Against the real development database, with a genuine session token:
 - invalid values rejected; omitting the field on `PUT` preserves the existing type
 - test data restored afterwards (all accounts back to `SCHOOL`, password restored, sessions removed)
 
-# ⬜ Punto 7 — Subgoals *(not started)*
+# ✅ Punto 7 — Subgoals
 
-Planned: a goal can be split into up to 5 subgoals. Internally a subgoal will be a **`Goals` row
-with a parent link**, not a separate table — that way it automatically reuses the existing progress
-engine, tasks, files and records instead of duplicating them. **The frontend contract is unchanged**:
-the URLs stay `/goals/:id/subGoals` and `/subGoals/:id`, and the id field stays `sSubGoalId`.
-Six endpoints. Documented here once built.
+### What it does, in one paragraph
+
+A goal can be split into up to **5 subgoals** — think quarterly stages inside a yearly goal. Each
+subgoal has its own description, dates, targets, status, records and chart, and inherits the
+parent's title and measurement type. The parent becomes a container showing a roll-up. Goals that
+aren't split behave exactly as before.
+
+### Was a table created?
+
+**No — and that is the most important decision in this feature.** A subgoal *is* a goal: same
+fields, same records, same chart, same measurement maths. So it's a `Goals` row with a pointer to
+its parent, rather than a parallel `SubGoals` table.
+
+| Column added to `Goals` | Meaning |
+|---|---|
+| `sParentGoalId` | NULL = a normal goal · set = a subgoal of that goal |
+| `iOrder` | display order within the parent (0, 1, 2…) |
+| `bHasSubGoals` | true when the goal is divided |
+| `iTargetPercentage` | target percentage 0–100 (in the signed PDF, previously missing entirely) |
+
+**Why it matters:** the progress calculation is ~140 lines that branch across 6 measurement types
+and 2 directions. A separate table would have meant a **second copy** of it, plus a second tasks
+table and a second files table — and every future fix would need doing twice. This way subgoals got
+progress, averages, record counts, tasks, files and charts for free, and a fix applies to both.
+
+**The cost, stated honestly:** every query that lists or counts goals must now exclude children, or
+subgoals would show up as independent goals and be double-counted in every report. That's **12
+places** across goals, students and schools. All 12 are guarded, and it was tested by planting a
+subgoal with `dProgress = 999`: the guarded school average stayed **49** while the unguarded form
+jumped to **90**.
+
+### The endpoints
+
+| URL | What it does |
+|---|---|
+| `GET /goals/:sGoalId/subGoals` | list a goal's subgoals → **`aData`** |
+| `POST /goals/:sGoalId/subGoals` | create one (max 5) → `oData` |
+| `PUT /subGoals/:sSubGoalId` | edit one |
+| `DELETE /subGoals/:sSubGoalId` | delete it **and its records** |
+| `GET /subGoals/:sSubGoalId/trackingRecords` | its records → **`aData`** |
+| `POST /trackingRecords` with `sSubGoalId` | log a record against a subgoal |
+| `GET /goals/:sGoalId` | now returns `bHasSubGoals` |
+| `POST` / `PUT /goals` | now accept `bHasSubGoals` and `iTargetPercentage` |
+
+**Every subgoal carries both ids:**
+
+```jsonc
+{
+  "sSubGoalId": "…",       // the subgoal itself — use this for PUT / DELETE
+  "sGoalId":    "…",       // the PARENT goal
+  "sTitle":            "inherited from the parent, always",
+  "sMeasurementType":  "inherited, immutable",
+  "sStatus": "ACTIVE", "iOrder": 0,
+  "dProgress": 80, "dAverageValue": 80, "iRecordsCount": 1, "tLastRecord": "…"
+}
+```
+
+### The business rules it enforces
+
+1. **Max 5 subgoals.** The 6th returns 409 *"Una meta puede dividirse en un máximo de 5 submetas."*
+   The front-end also disables its button, but that's cosmetic — this is the real limit.
+2. **One level only.** Creating a subgoal *of a subgoal* returns 409. The contract is explicit:
+   *"una submeta no podrá contener a su vez otras submetas."*
+3. **Title and measurement type are inherited and cannot be overridden.** Whatever you send for
+   those is ignored — so all stages of a goal always measure the same thing.
+4. **Independent statuses, no sequencing.** Every subgoal starts `ACTIVE` and can be set to
+   `COMPLETED`, `NOT_ACHIEVED` or `PAUSED` at any time. ⚠️ *This deviates from the signed PDF,
+   which specified a locked sequence — approved by the PO.*
+5. **A divided goal takes no records of its own.** Posting a record with `sGoalId` to a divided goal
+   returns 409; it must go to a subgoal. Otherwise the parent's progress and the roll-up would each
+   count the same work and the student's advance would be double-reported.
+6. **Deleting a subgoal deletes its records too** (soft delete, both recoverable).
+7. **Creating a subgoal marks the parent as divided** automatically, so `bHasSubGoals` can never
+   drift from reality even if the goal wasn't created with the flag.
+
+### Who can do what
+
+Same rules as goals: the subgoal's student must belong to your school, and a **FACULTY** user must
+be assigned to that student. Otherwise 403.
+
+### The roll-up is computed by the front-end
+
+The backend supplies accurate `dProgress` and `iRecordsCount` per subgoal; the front-end's
+`getSubGoalsRollup()` averages the **started** ones (≥1 record) and counts closed stages. Empty
+subgoals are excluded from the average so they don't drag it to a false zero.
+
+### ⚠️ One gap on the front-end side
+
+**Nothing in the UI can change a subgoal's status.** The badge is read-only and the subgoal form
+never sends `sStatus`, so every subgoal stays `ACTIVE` forever — which means the roll-up's
+"N/total completed" is permanently 0/N and the parent can never auto-complete. The backend accepts
+`sStatus` on `PUT /subGoals/:sSubGoalId` already; the front-end needs a control. See
+[`frontEndChanges.md`](frontEndChanges.md) entry 7.
+
+### How it was verified
+
+39 checks against the real development database, all passing: inheritance of title and measurement
+type, the id remapping, `iOrder` sequencing, the 5-subgoal cap, nesting refusal, `aData` envelopes,
+calculated fields present, **subgoals absent from the goals list while the parent is present**,
+records via `sSubGoalId` producing real progress (80%), the divided-parent 409, `PUT` partial edits
+preserving untouched fields, `PAUSED` accepted, delete cascading to records, and 404s for unknown
+ids and for using a goal id on a subgoal route. Test data removed afterwards; zero leftover subgoal
+rows and zero counter drift.
 
 # ⬜ Punto 3 — Billing with Stripe *(not started)*
 

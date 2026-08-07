@@ -344,6 +344,26 @@ export default {
         }
     },
 
+    // ========  SubGoals  ==================
+    SubGoals: {
+        createSubGoal: {
+            sp: 'Se creó la submeta exitosamente!',
+            en: "The subgoal was created successfully."
+        },
+        getAllSubGoals: {
+            sp: 'Se han encontrado las submetas!',
+            en: "The subgoals were successfully found."
+        },
+        updateSubGoal: {
+            sp: 'Se actualizó la submeta exitosamente!',
+            en: "The subgoal was updated successfully."
+        },
+        deleteSubGoal: {
+            sp: 'Se eliminó la submeta y sus registros exitosamente!',
+            en: "The subgoal and its records were successfully deleted."
+        }
+    },
+
     // ========  Support  ==================
     Support: {
         sendTicket: {

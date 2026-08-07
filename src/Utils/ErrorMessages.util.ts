@@ -300,6 +300,26 @@ export default {
         },
     },
 
+    // ==== SubGoals: =======
+    SubGoals: {
+        notFound: {
+            sp: "La submeta especificada no existe.",
+            en: "The specified subgoal does not exist."
+        },
+        maxReached: {
+            sp: "Una meta puede dividirse en un máximo de 5 submetas.",
+            en: "A goal can be divided into a maximum of 5 subgoals."
+        },
+        nestingNotAllowed: {
+            sp: "Una submeta no puede dividirse en más submetas.",
+            en: "A subgoal cannot be divided into further subgoals."
+        },
+        parentHasSubGoals: {
+            sp: "Esta meta está dividida en submetas: los registros se capturan en la submeta, no en la meta principal.",
+            en: "This goal is divided into subgoals: records must be captured on a subgoal, not on the main goal."
+        },
+    },
+
     // ==== Support: =======
     Support: {
         reporterNotFound: {

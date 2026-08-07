@@ -685,6 +685,78 @@ export default {
             },
         },
 
+        // P7 — Submetas
+        SubGoals: {
+            sSubGoalId: {
+                sp: "Por favor, ingresa un identificador de submeta correcto.",
+                en: "Please, enter a valid subgoal id."
+            },
+            sDescription: {
+                sp: "Por favor, ingresa una descripción válida.",
+                en: "Please, enter a valid description."
+            },
+            tStartDate: {
+                sp: "Por favor, ingresa una fecha de inicio válida.",
+                en: "Please, enter a valid start date."
+            },
+            tTargetDate: {
+                sp: "Por favor, ingresa una fecha objetivo válida.",
+                en: "Please, enter a valid target date."
+            },
+            tCompletedDate: {
+                sp: "Por favor, ingresa una fecha de completado válida.",
+                en: "Please, enter a valid completion date."
+            },
+            sCompletionNotes: {
+                sp: "Por favor, ingresa notas de cierre válidas.",
+                en: "Please, enter valid completion notes."
+            },
+            iTargetValue: {
+                sp: "Por favor, ingresa un valor objetivo correcto.",
+                en: "Please, enter a valid target value."
+            },
+            iTargetDuration: {
+                sp: "Por favor, ingresa una duración objetivo correcta.",
+                en: "Please, enter a valid target duration."
+            },
+            iScaleMin: {
+                sp: "Por favor, ingresa una escala mínima correcta.",
+                en: "Please, enter a valid minimum scale."
+            },
+            iScaleMax: {
+                sp: "Por favor, ingresa una escala máxima correcta.",
+                en: "Please, enter a valid maximum scale."
+            },
+            sFrequencyUnit: {
+                sp: "Por favor, ingresa una unidad de frecuencia válida.",
+                en: "Please, enter a valid frequency unit."
+            },
+            iBaselineValue: {
+                sp: "Por favor, ingresa un valor base correcto.",
+                en: "Please, enter a valid baseline value."
+            },
+            sDirection: {
+                sp: "Por favor, selecciona una dirección válida.",
+                en: "Please, select a valid direction."
+            },
+            iTargetOpportunities: {
+                sp: "Por favor, ingresa un número de oportunidades objetivo correcto.",
+                en: "Please, enter a valid target opportunities value."
+            },
+            iTargetPercentage: {
+                sp: "Por favor, ingresa un porcentaje objetivo entre 0 y 100.",
+                en: "Please, enter a target percentage between 0 and 100."
+            },
+            sStatus: {
+                sp: "Por favor, selecciona un estado válido (activa, completada, no alcanzada o pausada).",
+                en: "Please, select a valid status (active, completed, not achieved or paused)."
+            },
+            aTasks: {
+                sp: "Por favor, revisa las tareas de la submeta.",
+                en: "Please, review the subgoal tasks."
+            },
+        },
+
         // P10 — Tickets de soporte
         Support: {
             sSubject: {

@@ -25,7 +25,11 @@ const LegacyHelpAmount = Joi.number().integer().min(MIN_HELP_AMOUNT).max(MAX_HEL
     .error(new Error("TrackingRecords iHelpAmount"));
 
 export const CreateTrackingRecordBody = Joi.object({
-    sGoalId: Validations.RequiredUUID("TrackingRecords sGoalId"),
+    // P7 — a record belongs EITHER to a goal or to a subgoal. The frontend posts `sSubGoalId` for
+    // subgoal records (SubGoalsManager.vue) and never supplies `sGoalId` in that case, so neither
+    // can be unconditionally required; exactly one must be present (enforced by `.xor` below).
+    sGoalId: Validations.UUID("TrackingRecords sGoalId"),
+    sSubGoalId: Validations.UUID("TrackingRecords sSubGoalId"),
     dtDate: Validations.Date("TrackingRecords dtDate"),
     sNotes: Validations.String("TrackingRecords sNotes"),
     // EXACTITUD
@@ -46,7 +50,8 @@ export const CreateTrackingRecordBody = Joi.object({
     aHelpTypes: HelpTypesArray,
     sHelpType: LegacyHelpType,
     iHelpAmount: LegacyHelpAmount,
-}).options({ allowUnknown: true });
+}).xor('sGoalId', 'sSubGoalId').options({ allowUnknown: true })
+  .error(new Error("TrackingRecords sGoalId"));
 
 export const GetTrackingRecordsByGoalParams = Validations.JoiObjectKeys({
     sGoalId: Validations.RequiredUUID("TrackingRecords sGoalId"),

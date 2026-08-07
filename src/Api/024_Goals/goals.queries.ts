@@ -20,7 +20,7 @@ class Queries {
     }
 
     // Insert a new goal with optional tasks
-    static async insertGoal({sStudentId, sTitle, sDescription, sMeasurementType, tStartDate, tTargetDate, iTargetValue, iTargetDuration, iScaleMin, iScaleMax, sFrequencyUnit, iBaselineValue, sDirection, iTargetOpportunities, sCreatedBy}, aTasks) {
+    static async insertGoal({sStudentId, sTitle, sDescription, sMeasurementType, tStartDate, tTargetDate, iTargetValue, iTargetDuration, iScaleMin, iScaleMax, sFrequencyUnit, iBaselineValue, sDirection, iTargetOpportunities, iTargetPercentage, bHasSubGoals, sCreatedBy}, aTasks) {
         return await GoalsModel.transaction(async (trx) => {
             // Insert goal
             const newGoal = await GoalsModel.query(trx).insert({
@@ -39,6 +39,9 @@ class Queries {
                 iBaselineValue,
                 sDirection,
                 iTargetOpportunities,
+                iTargetPercentage,
+                // P7 — the frontend's "¿Deseas dividir esta meta en submetas?" answer
+                bHasSubGoals: bHasSubGoals === true,
                 sCreatedBy,
                 sLastUpdatedBy: sCreatedBy,
                 bActive: true
@@ -63,10 +66,10 @@ class Queries {
     }
 
     // Update a goal with optional task replacement
-    static async updateGoal(sGoalId, {sTitle, sDescription, tStartDate, tTargetDate, iTargetValue, iTargetDuration, iScaleMin, iScaleMax, sFrequencyUnit, iBaselineValue, sDirection, iTargetOpportunities, sLastUpdatedBy}, aTasks) {
+    static async updateGoal(sGoalId, {sTitle, sDescription, tStartDate, tTargetDate, iTargetValue, iTargetDuration, iScaleMin, iScaleMax, sFrequencyUnit, iBaselineValue, sDirection, iTargetOpportunities, iTargetPercentage, bHasSubGoals, sLastUpdatedBy}, aTasks) {
         return await GoalsModel.transaction(async (trx) => {
             // Update goal
-            const updatedGoal = await GoalsModel.query(trx).patchAndFetchById(sGoalId, {
+            const oPatch: any = {
                 sTitle,
                 sDescription,
                 tStartDate,
@@ -79,8 +82,13 @@ class Queries {
                 iBaselineValue,
                 sDirection,
                 iTargetOpportunities,
+                iTargetPercentage,
                 sLastUpdatedBy
-            }).where('bActive', true);
+            };
+            // P7 — only touch the divided flag when the caller actually sent it
+            if (bHasSubGoals !== undefined) oPatch.bHasSubGoals = bHasSubGoals === true;
+
+            const updatedGoal = await GoalsModel.query(trx).patchAndFetchById(sGoalId, oPatch).where('bActive', true);
 
             // If tasks are provided, replace them
             let goalTasks = [];

@@ -21,6 +21,7 @@ import SchoolUserRoutes from '../026_SchoolUsers/schoolUsers.routes';
 import ProfileRoutes from '../027_Profile/profile.routes';
 import StudentAssignmentRoutes from '../028_StudentAssignments/studentAssignments.routes';
 import SupportRoutes from '../029_Support/support.routes';
+import SubGoalRoutes from '../024_Goals/004_SubGoals/subGoals.routes';
 
 
 function BaseRoute(env: string, module: string): string {
@@ -41,6 +42,7 @@ export default (app: Application, env: string) : void => {
     app.use(BaseRoute(env, 'profile'), celebrate({ params: LanguageParams }), aH(Language()), aH(ProfileRoutes));
     app.use(BaseRoute(env, 'studentAssignments'), celebrate({ params: LanguageParams }), aH(Language()), aH(StudentAssignmentRoutes));
     app.use(BaseRoute(env, 'support'), celebrate({ params: LanguageParams }), aH(Language()), aH(SupportRoutes));
+    app.use(BaseRoute(env, 'subGoals'), celebrate({ params: LanguageParams }), aH(Language()), aH(SubGoalRoutes));
 
 
     app.all(`*`, (req: Request, res: Response, next: NextFunction): object => {

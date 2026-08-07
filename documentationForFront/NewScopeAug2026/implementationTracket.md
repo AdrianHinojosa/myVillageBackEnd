@@ -19,7 +19,7 @@
 | 10 | Tickets de soporte | 1 endpoint + SES email + shared auth gate | ✅ Done | `915e3e0` |
 | 8 | Tipos de ayuda | child table `TrackingRecordHelps` (Model B) | ✅ Done | `d16cd4a` |
 | 5 | Modo terapeuta | 1 column + login payload + enforcement | ✅ Done | `3d9e44d` |
-| 7 | Submetas | schema + 6 endpoints + calculated fields | 🔄 In progress — schema + leak guards done | — |
+| 7 | Submetas | schema + endpoints + calculated fields | ✅ Done | `c303c03` + `a891f2b` |
 | 3 | Cobranza automática (Stripe) | full module + webhooks + dunning | ⛔ Blocked — Q7/Q8/Q11/Q12 | — |
 | 11 | Guía de creación de metas | none (frontend only) | ➖ N/A backend | — |
 | 13 | Módulo de capacitaciones | none (frontend only) | ➖ N/A backend | — |
@@ -30,7 +30,7 @@ Legend: ⬜ not started · 🔄 in progress · ✅ done & committed · ➖ no ba
 
 ## Progress — as of 2026-08-07
 
-### Backend: ~16%
+### Backend: ~32%
 
 Weighted by the contract's own prices (what the client actually paid per point).
 
@@ -39,32 +39,32 @@ Weighted by the contract's own prices (what the client actually paid per point).
 | 10 | Tickets de soporte | $8,000 | ✅ **100%** | shipped `271e9a1` |
 | 8 | Tipos de ayuda | $14,000 | ✅ **100%** | `d16cd4a` — child table + array wire + legacy shim, 39 checks green |
 | 5 | Modo terapeuta | $14,000 | ✅ **100%** | `3d9e44d` — column + login + enforcement, verified end-to-end |
-| 7 | Submetas | $24,000 | ⬜ 0% code | architecture decided (`Goals` + `sParentGoalId`) |
+| 7 | Submetas | $24,000 | ✅ **100%** | `Goals` + `sParentGoalId`, 5 endpoints, 12 leak guards, 39 checks green |
 | 3 | Cobranza (Stripe) | $70,000 | ⬜ 0% | **blocked** — Q7/Q8/Q11/Q12 |
 | 11 | Guía de metas | $5,500 | ➖ n/a | frontend only |
 | 13 | Capacitaciones | $11,000 | ➖ n/a | frontend only |
 
-- **By point price:** backend-relevant scope $130,000 · delivered $36,000 (P10 + P5 + P8) → **27.7%**
+- **By point price:** backend-relevant scope $130,000 · delivered $60,000 (P10 + P5 + P8 + P7) → **46.2%**
 - **By estimated backend effort share** (P3 70%, P7 50%, P8 35%, P10 55%, P5 15% of each
-  point's price): $11,400 of $72,400 → **15.7%**
+  point's price): $23,400 of $72,400 → **32.3%**
 
-The two diverge because P5's price is large but its backend content is small. **15.7% is the honest
-figure**; 27.7% flatters it. Plainly: *three of five backend points done — the three small ones.
-The two heavy ones (P7, P3) are 84% of the remaining backend effort.*
+**32% is the honest figure**; 46% flatters it. Plainly: *four of five backend points done. The one
+that remains — P3 Stripe — is 54% of contract value and ~68% of the remaining backend effort.*
 
 ### Overall project (frontend + backend): ~50%
 
 | Side | Est. share of scope | Complete | Contribution |
 |---|---|---|---|
-| Frontend | ~$74,100 | ~93% | ~$69,100 |
-| Backend | ~$72,400 | ~16% | ~$11,400 |
-| **Total** | **$146,500** | | **~$80,500 → ~55%** |
+| Frontend | ~$74,100 | ~90% | ~$66,700 |
+| Backend | ~$72,400 | ~32% | ~$23,400 |
+| **Total** | **$146,500** | | **~$90,100 → ~62%** |
 
-Frontend is **not** 100% any more: the PO's Model B decision on P8 invalidated part of it
-(`records.ts`, `RecordForm.vue`, chart colouring, PDF export all assume one help type per record).
-See `frontEndChanges.md` entry 1.
+Frontend has **dropped** from ~93% to ~90% as integration work surfaced: the P8 Model B decision
+invalidated its record capture, chart colouring and PDF export (entry 1); therapist mode needs the
+record-attach control hidden (entry 5); and **subgoals have no status control at all** (entry 7),
+which leaves a contract requirement unreachable. Five open items in `frontEndChanges.md`.
 
-⚠️ The front/back effort splits are **estimates**, so treat ~55% as ±5. The backend 16% is firm.
+⚠️ The front/back effort splits are **estimates**, so treat ~62% as ±5. The backend 32% is firm.
 
 ### Remaining backend effort
 
@@ -72,9 +72,9 @@ See `frontEndChanges.md` entry 1.
 |---|---|---|
 | P5 | ~~0.5 day~~ | ✅ **done** |
 | P8 | ~~1 day~~ | ✅ **done** |
-| P7 | ~2–3 days | No |
+| P7 | ~~2–3 days~~ | ✅ **done** |
 | P3 | ~5–8 days | No longer blocked for development — test keys confirmed; live keys before ship |
-| **Total** | **~7–11 days (≈1.5–2 working weeks)** | |
+| **Total** | **~5–8 days (≈1–1.5 working weeks)** | |
 
 Contract allows **4 working weeks**. P3 is 54% of contract value and more than half the remaining
 effort; it is now unblocked for development (test-mode keys), but **live keys are still needed
@@ -243,6 +243,9 @@ These are facts discovered while reading the code, kept here so nobody re-derive
 | Q14 | Build | **`@babel/runtime@^7.29.7` added to `dependencies`** | `.babelrc` enables `@babel/plugin-transform-runtime`, which emits `require('@babel/runtime/...')`. Without the package a clean `npm ci && npm run build && npm start` crashed — production could not deploy. ⚠️ **Must be `^7`**: `npm install` defaults to `^8.0.0`, which dropped the `./regenerator` subpath the Babel 7 transform emits, and the app fails to boot. Verified booting and serving after pinning to 7. | 2026-08-07 |
 | Q15 | P5 uploads | **Therapists blocked from ALL document uploads**, including tracking-record attachments | PO decision. The contract states it without qualification: *"el terapeuta no podrá cargar documentos"*. My earlier reading — that it might mean goal documents only — was over-cautious. Profile images (student photo, account logo) remain allowed: they are pictures, not documents. | 2026-08-07 |
 | — | Upload gate order | `denyTherapistAccess()` placed **before** `upload()` on both file routes | A rejected request must not buffer the uploaded file into memory first. On `POST /trackingRecords/:id/files` the auth check itself also ran *after* `upload()` — now fixed, so unauthenticated uploads no longer consume memory. | 2026-08-07 |
+| — | P7 records | A **divided** goal refuses records posted with `sGoalId` (409); they must use `sSubGoalId` | Contract: *"la meta principal no tiene registros propios cuando está dividida"*. Allowing both would double-report progress — the parent's own `dProgress` and the subgoal rollup would each count the same work. | 2026-08-07 |
+| — | P7 inherited fields | Subgoal schema **strips** `sTitle`, `sMeasurementType`, `bHasSubGoals`, `aDocuments` instead of rejecting them | The frontend reuses `GoalForm.vue` for subgoals and always sends all four. Rejecting would 409 the form; ignoring keeps title/measurement inherited as the contract requires. | 2026-08-07 |
+| — | P7 `PAUSED` | Added to `CompleteGoalBody` so it is reachable for goals too | Finding 5: the DB allowed `PAUSED` but the API never did. Subgoals need all four states, and there was no reason for goals to lack one. | 2026-08-07 |
 | — | Docs | Added **`featureGuide.md`** — plain-language explanation of each feature for the frontend team | PO request: explain in understandable terms what was built (tables, endpoints, behaviour), not just what changed. | 2026-08-02 |
 
 ---
@@ -480,7 +483,7 @@ backfilled to `SCHOOL` by the default — verified post-migration.
 
 ### Punto 7 — Submetas 🔄 (in progress)
 
-**Migration:** `3035_Goals_subGoals.ts` (applied to `development`) · **Endpoints: not yet built**
+**Commits:** `c303c03` (schema + guards) · `a891f2b` (endpoints) · **Migration:** `3035_Goals_subGoals.ts`
 
 #### Step 1 of 2 — schema + leak-proofing ✅
 
@@ -523,12 +526,36 @@ a synthetic child row with `dProgress = 999` and re-reading the real endpoints a
   and `bHasSubGoals` false
 - synthetic rows removed; rows with a parent back to 0
 
-#### Step 2 of 2 — endpoints ⬜ (next)
+#### Step 2 of 2 — endpoints ✅
 `GET/POST /goals/:sGoalId/subGoals` · `PUT/DELETE /subGoals/:sSubGoalId` ·
 `GET /subGoals/:sSubGoalId/trackingRecords` · `POST /trackingRecords` accepting `sSubGoalId` ·
 `bHasSubGoals` on `GET /goals/:id`.
 
-**Contract facts already established from frontend source** (`SubGoalsManager.vue`, `GoalForm.vue`):
+**Module:** `src/Api/024_Goals/004_SubGoals/` (validations, queries, controllers, routes — **no
+model**, it reuses `GoalsModel`). Collection routes are nested in `goals.routes.ts`; the
+`/subGoals` item routes are mounted in `Index.routes.ts`.
+
+**All three integration breaks found in step 1 are fixed:**
+1. `POST /goals` accepts `bHasSubGoals` (+ `iTargetPercentage`) — the divide flow works now.
+2. `POST /trackingRecords` takes `sGoalId` **xor** `sSubGoalId`; a subgoal id resolves to the same
+   `sGoalId` downstream, so `recalculateGoalProgress` needed no change whatsoever.
+3. The subgoal schema **strips** `sTitle`, `sMeasurementType`, `bHasSubGoals` and `aDocuments`
+   rather than 409-ing, because the frontend reuses `GoalForm.vue` and always sends them.
+
+**Business rules enforced:** max 5 · one nesting level · title and measurement type inherited and
+immutable · independent statuses incl. `PAUSED` · a divided parent refuses direct records · delete
+cascades to records · creating a subgoal marks the parent divided.
+
+**Also fixed:** `PAUSED` is now reachable on `PATCH /goals/:id/complete` (finding 5 — the DB always
+allowed it, the API never did).
+
+**Verification:** 39/39 checks green — inheritance, id remapping, `iOrder`, the 5 cap, nesting
+refusal, `aData` envelopes, calculated fields, **subgoals absent from the goals list while the
+parent is present**, records via `sSubGoalId` yielding real progress (80%), divided-parent 409,
+partial-edit preservation, `PAUSED`, delete cascade, and 404s including using a goal id on a
+subgoal route. Cleanup verified: 0 leftover subgoal rows, 0 counter drift.
+
+**Contract facts established from frontend source** (`SubGoalsManager.vue`, `GoalForm.vue`):
 1. The subgoal form **is** `GoalForm.vue` with `bIsSubGoal`, so a subgoal payload is a *goal*
    payload. It sends `sTitle` (empty — the input is hidden), `sMeasurementType` (the inherited one),
    `bHasSubGoals`, `aDocuments` and `aTasks`. The subgoal schema must **accept and ignore** the
@@ -576,4 +603,6 @@ Anything we build differently from the PDF gets logged here with who approved it
 | `4a8a577` | **5** | `Schools.sAccountType` + login payload + `denyTherapistAccess()` on 4 endpoints |
 | `a0dd135` | 10 | Enabled support SMS (+528181377416); fixed two latent bugs in `SMS.services.ts` |
 | `d16cd4a` | **8** | `TrackingRecordHelps` child table + `aHelpTypes` wire + legacy shim; **fixed the 500-on-validation crash shipped in P10/P5** |
-| *(next)* | 5 / build | `@babel/runtime` dependency (deployment unblocked) + therapists blocked from record-file uploads |
+| `d657335` | 5 / build | `@babel/runtime` dependency (deployment unblocked) + therapists blocked from record-file uploads |
+| `c303c03` | **7** | Subgoal schema + 12 leak guards across goals/students/schools |
+| `a891f2b` | **7** | SubGoals module: 5 endpoints + 3 integration fixes + business rules |

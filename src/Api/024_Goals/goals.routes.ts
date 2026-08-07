@@ -8,6 +8,8 @@ import GoalTaskRoutes from './001_GoalTasks/goalTasks.routes';
 import GoalFileRoutes from './002_GoalFiles/goalFiles.routes';
 import TrackingRecordController from './003_TrackingRecords/trackingRecords.controllers';
 import * as TrackingRecordValidations from './003_TrackingRecords/trackingRecords.validations';
+import SubGoalController from './004_SubGoals/subGoals.controllers';
+import * as SubGoalValidations from './004_SubGoals/subGoals.validations';
 
 const router = Router();
 
@@ -22,6 +24,19 @@ router.get('/:sGoalId/trackingRecords',
     aH(verifySchoolUserPermissions([{sModuleName: 'General', sActionCode: 'READ'}])),
     celebrate({ params: TrackingRecordValidations.GetTrackingRecordsByGoalParams, query: TrackingRecordValidations.GetTrackingRecordsByGoalQuery }),
     aH(TrackingRecordController.getTrackingRecordsByGoal));
+
+// P7 — SubGoal collection routes (nested under the parent goal)
+// GET /goals/:sGoalId/subGoals — list the subgoals of a goal
+router.get('/:sGoalId/subGoals',
+    aH(verifySchoolUserPermissions([{sModuleName: 'General', sActionCode: 'READ'}])),
+    celebrate({ params: SubGoalValidations.GetSubGoalsParams }),
+    aH(SubGoalController.getSubGoalsByGoal));
+
+// POST /goals/:sGoalId/subGoals — create a subgoal (max 5, one level only)
+router.post('/:sGoalId/subGoals',
+    aH(verifySchoolUserPermissions([{sModuleName: 'General', sActionCode: 'WRITE'}])),
+    celebrate({ params: SubGoalValidations.CreateSubGoalParams, body: SubGoalValidations.CreateSubGoalBody }),
+    aH(SubGoalController.createSubGoal));
 
 // Create Goal
 router.post('/',

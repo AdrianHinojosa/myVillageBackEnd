@@ -34,6 +34,9 @@ frontend work didn't exist.
 | 3 | 5 | `students/[id]/index.vue` | Skip `fetchIep()` in therapist mode — it now returns 403 | 🟡 tidy-up |
 | 4 | 5 | `POST /schools`, `PUT /schools/:id`, login | None — `sAccountType` already wired correctly | 🟢 none |
 | 5 | 5 | `RecordForm.vue` | **Hide the file-attach dropzone in therapist mode** — the upload endpoint now returns 403 | 🔴 breaking |
+| 6 | 7 | `POST /trackingRecords` | Records on a **divided** goal must carry `sSubGoalId`; posting `sGoalId` for a divided goal now returns 409 | 🟡 adapt |
+| 7 | 7 | `SubGoalsManager.vue` | **No UI exists to change a subgoal's status** — so subgoals can never close and the rollup is permanently 0/N | 🔴 gap |
+| 8 | 7 | `POST /goals`, `PUT /goals/:id` | `bHasSubGoals` + `iTargetPercentage` now accepted — `POST /goals` previously **rejected** the frontend payload | 🟢 fixed backend-side |
 
 Severity: 🔴 breaking (integration fails without it) · 🟡 rename/adapt · 🟢 nice-to-have
 
@@ -173,11 +176,86 @@ covers tracking-record attachments, not only goal documents.
 needs a patient photo and their own logo. Say the word if you want those blocked too; it is one
 line each, but it would remove functionality the contract does not ask to remove.
 
+### 6. P7 — Records on a divided goal must use `sSubGoalId` 🟡
+
+**Business rule (signed PDF p.3):** *"Registros → submeta. La meta principal **no** tiene registros
+propios cuando está dividida."* When a goal is split, the student's progress is tracked on the
+stages, not on the container. If both accepted records, the parent's own progress and the subgoal
+rollup would each count the same work and the student's advance would be double-reported.
+
+**What the backend does now**
+
+| Request | Result |
+|---|---|
+| `POST /trackingRecords` `{ sSubGoalId, … }` | ✅ 201 — record attaches to the subgoal |
+| `POST /trackingRecords` `{ sGoalId, … }` on a **normal** goal | ✅ 201 — unchanged |
+| `POST /trackingRecords` `{ sGoalId, … }` on a **divided** goal | ⛔ **409** *"Esta meta está dividida en submetas: los registros se capturan en la submeta, no en la meta principal."* |
+| Both `sGoalId` and `sSubGoalId` | ⛔ 409 — exactly one is required |
+| Neither | ⛔ 409 |
+
+**Frontend impact: none for the current code.** `SubGoalsManager.vue:360` already posts
+`{ sSubGoalId, ...oPayload }`, and the normal record form posts `sGoalId` on undivided goals. This
+is registered so nobody later "fixes" the divided-goal path by sending `sGoalId`.
+
+### 7. P7 — There is no way to change a subgoal's status 🔴 GAP
+
+**Business rule (signed PDF p.3):** subgoals carry the same four states as goals —
+*activa, completada, no alcanzada, pausada*. The frontend guide adds that the parent goal
+*"se completa cuando TODAS las submetas están cerradas (completada / no alcanzada)"*, and the
+rollup shows *"N/total etapas completadas"*.
+
+**The gap.** `SubGoalsManager.vue` renders the status badge read-only (`GoalsGoalStatusBadges` at
+~line 70) and offers only **view / edit / delete** per subgoal. `GoalForm.vue` — which is the
+subgoal form — never sends `sStatus`. So **nothing in the UI can move a subgoal off `ACTIVE`.**
+
+Consequences, all of them contract requirements that are currently unreachable:
+- the rollup's *"N/total etapas completadas"* is permanently **0/N**
+- `getSubGoalsRollup().bAllClosed` can never become true, so the parent can never auto-complete
+- *pausada* and *no alcanzada* are unusable for subgoals
+
+**The backend is ready** — no further backend work needed:
+- `PUT /subGoals/:sSubGoalId` accepts `sStatus` ∈ `ACTIVE | COMPLETED | NOT_ACHIEVED | PAUSED`
+  (verified: setting `PAUSED` returns 200 and persists)
+- it also accepts `tCompletedDate` and `sCompletionNotes` for closing a stage
+
+**What the frontend needs:** a status control per subgoal — a dropdown on the card, or the same
+complete/reopen dialog goals already use — issuing `PUT /subGoals/:sSubGoalId { sStatus }`.
+
+### 8. P7 — `POST /goals` was rejecting the frontend's payload 🟢 fixed backend-side
+
+`GoalForm.vue:739` sends `bHasSubGoals` on create (the *"¿Deseas dividir esta meta en submetas?"*
+answer). `CreateGoalBody` is a strict schema, so the whole request failed with
+`"bHasSubGoals" is not allowed` — **the divide-into-subgoals flow could not work at all.**
+
+Now accepted on both `POST /goals` and `PUT /goals/:sGoalId`, together with `iTargetPercentage`
+(in the signed PDF, previously missing from the schema entirely). `GET /goals/:sGoalId` returns
+`bHasSubGoals`, which is what tells the frontend to show the subgoal manager instead of the normal
+detail. **No frontend change required** — this entry exists so the fix is traceable.
+
 ---
 
 ## Decided internals (recorded for transparency — no frontend action)
 
-### P7 — Subgoal storage 🟢 *(APPROVED 2026-08-02 — frontend impact: none)*
+### P7 — Subgoal storage 🟢 *(APPROVED 2026-08-02, BUILT 2026-08-07 — frontend impact: none)*
+
+**Response shape, for reference.** Every subgoal carries both ids, mirroring `ISubGoal`:
+
+```jsonc
+{
+  "sSubGoalId": "…",   // the subgoal itself  (what you key off, PUT/DELETE with)
+  "sGoalId":    "…",   // the PARENT goal it belongs to
+  "sTitle":            "inherited from the parent, always",
+  "sMeasurementType":  "inherited from the parent, immutable",
+  "sStatus": "ACTIVE", "iOrder": 0,
+  "dProgress": 80, "dAverageValue": 80, "iRecordsCount": 1, "tLastRecord": "…",
+  "aGoalTasks": [ ]
+}
+```
+Anything you send as `sTitle`, `sMeasurementType`, `bHasSubGoals` or `aDocuments` on a subgoal is
+**accepted and ignored** — the first two are inherited, a subgoal cannot itself be divided, and
+documents go through the existing `goalFiles` upload endpoint. That is deliberate, so reusing
+`GoalForm.vue` never triggers a validation error.
+
 
 - **Endpoints:** `GET/POST /goals/:sGoalId/subGoals`, `PUT/DELETE /subGoals/:sSubGoalId`,
   `GET /subGoals/:sSubGoalId/trackingRecords`, `POST /trackingRecords` with `sSubGoalId`.

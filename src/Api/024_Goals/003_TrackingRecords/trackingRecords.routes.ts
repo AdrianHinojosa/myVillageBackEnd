@@ -3,7 +3,7 @@ import aH from "express-async-handler";
 import { celebrate } from "celebrate";
 import TrackingRecordController from './trackingRecords.controllers';
 import * as TrackingRecordValidations from './trackingRecords.validations';
-import { verifySchoolUserPermissions } from '../../../Middlewares/001_Permissions.mw.ts/schools.permissions';
+import { verifySchoolUserPermissions, denyTherapistAccess } from '../../../Middlewares/001_Permissions.mw.ts/schools.permissions';
 import upload from 'express-fileupload';
 
 const router = Router();
@@ -43,9 +43,12 @@ router.delete('/:sTrackingRecordId',
 );
 
 // POST /trackingRecords/:sTrackingRecordId/files — Upload record files
+// P5: therapist accounts cannot upload documents ("el terapeuta no podrá cargar documentos").
+// Gate runs before upload() so a rejected request never buffers the file.
 router.post('/:sTrackingRecordId/files',
-    aH(upload()),
     aH(verifySchoolUserPermissions([{ sModuleName: 'Goals', sActionCode: 'WRITE' }])),
+    aH(denyTherapistAccess() as any),
+    aH(upload()),
     aH(TrackingRecordController.uploadRecordFiles)
 );
 

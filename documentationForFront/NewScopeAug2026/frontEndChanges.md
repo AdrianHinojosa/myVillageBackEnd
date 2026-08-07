@@ -33,6 +33,7 @@ frontend work didn't exist.
 | 2 | 10 | `POST /support/ticket` | None — contract matches as built | 🟢 none |
 | 3 | 5 | `students/[id]/index.vue` | Skip `fetchIep()` in therapist mode — it now returns 403 | 🟡 tidy-up |
 | 4 | 5 | `POST /schools`, `PUT /schools/:id`, login | None — `sAccountType` already wired correctly | 🟢 none |
+| 5 | 5 | `RecordForm.vue` | **Hide the file-attach dropzone in therapist mode** — the upload endpoint now returns 403 | 🔴 breaking |
 
 Severity: 🔴 breaking (integration fails without it) · 🟡 rename/adapt · 🟢 nice-to-have
 
@@ -151,16 +152,26 @@ No change needed. Recorded so nobody re-checks:
 - Not blocked: student photos, school logos, and **tracking-record file attachments** (see the
   open question below).
 
-### ⚠️ Open question — should therapists be able to attach files to tracking records?
+### 5. P5 — Hide the record file-attach control in therapist mode 🔴
 
-`RecordForm.vue` has **no** therapist gating, so a therapist can still attach files via
-`POST /trackingRecords/:sTrackingRecordId/files`. The contract says therapists *"no podrá cargar
-documentos"*, which arguably covers these. The backend deliberately left it **open** rather than
-break a visible button. Two ways to resolve:
-1. **Therapists may attach record files** — treat "documentos" as meaning goal documents only.
-   Nothing changes on either side.
-2. **They may not** — the frontend hides the attach control in therapist mode, and the backend
-   adds the same gate to that route (a one-line change).
+**PO decision, 2026-08-07: therapists may NOT upload files.** The contract is explicit —
+*"el terapeuta **no podrá cargar documentos** ni visualizar o utilizar el módulo de IEP"* — and that
+covers tracking-record attachments, not only goal documents.
+
+- **Backend now returns 403** on `POST /trackingRecords/:sTrackingRecordId/files` for `THERAPIST`
+  accounts, with the localized message *"Esta función no está disponible en las cuentas de
+  terapeuta."*
+- **Frontend must hide the dropzone.** `RecordForm.vue` renders the attachment dropzone at
+  ~line 208 with **no** therapist gating, so a therapist currently sees a control that will now
+  fail. Gate it the same way `GoalForm.vue:311` gates the goal-documents section
+  (`v-if="!bIsTherapist"`).
+- Reading and deleting existing record files is **not** blocked — the restriction is on *uploading*.
+  A therapist account that was previously a school account could still have files to view.
+
+**Still allowed for therapists:** student photos (`POST /students/:id/image`) and the account logo
+(`POST /schools/:id/image`). Those are profile pictures, not documents — a therapist legitimately
+needs a patient photo and their own logo. Say the word if you want those blocked too; it is one
+line each, but it would remove functionality the contract does not ask to remove.
 
 ---
 

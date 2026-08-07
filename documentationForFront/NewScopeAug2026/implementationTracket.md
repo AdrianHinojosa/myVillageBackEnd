@@ -240,6 +240,9 @@ These are facts discovered while reading the code, kept here so nobody re-derive
 | — | P8 storage | **Child table `TrackingRecordHelps`**, UPPERCASE codes stored / lowercase slugs on the wire, uniqueness enforced in Joi *and* Postgres | A record holds several types, so no scalar column works; 8 fixed columns would be unqueryable. Casing matches the rest of the schema while leaving the frontend untouched. | 2026-08-07 |
 | — | P8 legacy shim | `POST`/`PUT` still accept the single `sHelpType` + `iHelpAmount` | Backend and frontend deploy independently; without it the current capture form breaks on deploy. Marked for removal. | 2026-08-07 |
 | — | P8 list read | Help types fetched for **all** records in one `whereIn`, grouped in memory | `formatRecordsForFrontend` is already N+1 for tasks and files; adding a third per-record query would have made it worse. | 2026-08-07 |
+| Q14 | Build | **`@babel/runtime@^7.29.7` added to `dependencies`** | `.babelrc` enables `@babel/plugin-transform-runtime`, which emits `require('@babel/runtime/...')`. Without the package a clean `npm ci && npm run build && npm start` crashed — production could not deploy. ⚠️ **Must be `^7`**: `npm install` defaults to `^8.0.0`, which dropped the `./regenerator` subpath the Babel 7 transform emits, and the app fails to boot. Verified booting and serving after pinning to 7. | 2026-08-07 |
+| Q15 | P5 uploads | **Therapists blocked from ALL document uploads**, including tracking-record attachments | PO decision. The contract states it without qualification: *"el terapeuta no podrá cargar documentos"*. My earlier reading — that it might mean goal documents only — was over-cautious. Profile images (student photo, account logo) remain allowed: they are pictures, not documents. | 2026-08-07 |
+| — | Upload gate order | `denyTherapistAccess()` placed **before** `upload()` on both file routes | A rejected request must not buffer the uploaded file into memory first. On `POST /trackingRecords/:id/files` the auth check itself also ran *after* `upload()` — now fixed, so unauthenticated uploads no longer consume memory. | 2026-08-07 |
 | — | Docs | Added **`featureGuide.md`** — plain-language explanation of each feature for the frontend team | PO request: explain in understandable terms what was built (tables, endpoints, behaviour), not just what changed. | 2026-08-02 |
 
 ---
@@ -263,8 +266,8 @@ Tracked here as they are asked/answered. See the conversation for full phrasing.
 | Q11 | 3 | Who creates the Stripe subscription, and when? On first card added, or when the superadmin sets the tariff? The guide never says. | ⬜ Open |
 | Q12 | 3 | Suspension enforcement: block at login only (frontend redirect), or also reject every API call from a `SUSPENDED` school (`bBlocked`-style gate in the middleware)? | ⬜ Open |
 | Q13 | 10 | ~~SMS destination number~~ | ✅ **Answered** — `+528181377416`, enabled, fires on every ticket |
-| Q14 | — | `npm run build && npm start` is already broken on `main`: `.babelrc` enables `@babel/plugin-transform-runtime` but `@babel/runtime` is not a dependency. PO confirmed production runs `npm start`, so a clean `npm ci` deploy **will** fail. Approve adding `@babel/runtime` to `dependencies`? | ⬜ Open — **blocks deployment** |
-| Q15 | 5 | Should therapist accounts be blocked from attaching files to tracking records (`POST /trackingRecords/:id/files`)? Left open because `RecordForm.vue` has no therapist gating and blocking would break a visible button. | ⬜ Open |
+| Q14 | — | ~~`@babel/runtime` missing from `dependencies`~~ | ✅ **Answered & FIXED** — `@babel/runtime@^7.29.7` added; `npm run build && npm start` now boots (verified). ⚠️ Must be `^7`, not `^8` |
+| Q15 | 5 | ~~Block therapists from attaching files to tracking records?~~ | ✅ **Answered** — YES, blocked. Contract says *"no podrá cargar documentos"* plainly. Frontend must hide the dropzone (frontEndChanges entry 5) |
 | Q16 | — | `npm run db:migrations` is broken (see finding 17). Approve deleting the stale `src/knexfile.ts`, or changing the npm script to not `cd src`? | ⬜ Open |
 
 ---
@@ -510,3 +513,4 @@ Anything we build differently from the PDF gets logged here with who approved it
 | `4a8a577` | **5** | `Schools.sAccountType` + login payload + `denyTherapistAccess()` on 4 endpoints |
 | `a0dd135` | 10 | Enabled support SMS (+528181377416); fixed two latent bugs in `SMS.services.ts` |
 | `d16cd4a` | **8** | `TrackingRecordHelps` child table + `aHelpTypes` wire + legacy shim; **fixed the 500-on-validation crash shipped in P10/P5** |
+| *(next)* | 5 / build | `@babel/runtime` dependency (deployment unblocked) + therapists blocked from record-file uploads |

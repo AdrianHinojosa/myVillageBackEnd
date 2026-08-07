@@ -32,6 +32,7 @@
   "homepage": "https://github.com/SofexTech/shipoBack#readme",
   "dependencies": {
     "@aws-sdk/client-ses": "^3.454.0",
+    "@babel/runtime": "^7.29.7",
     "aws-sdk": "^2.740.0",
     "bcryptjs": "^2.4.3",
     "celebrate": "^11.0.2",

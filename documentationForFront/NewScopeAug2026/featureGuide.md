@@ -369,6 +369,7 @@ utilizar el módulo de IEP"*. All three are now enforced server-side:
 | `POST /iep` | **403** | cannot *use* the IEP module |
 | `GET /iep` | **403** | cannot *view* it either |
 | `POST /goals/:sGoalId/goalFiles` | **403** | cannot upload documents |
+| `POST /trackingRecords/:id/files` | **403** | same — no document uploads at all |
 
 The message is localized: *"Esta función no está disponible en las cuentas de terapeuta."* /
 *"This feature is not available on therapist accounts."*
@@ -377,14 +378,21 @@ The message is localized: *"Esta función no está disponible en las cuentas de 
 Verified: a therapist account still gets `201` on `GET /students` and `200` on
 `POST /support/ticket`.
 
-### Two things deliberately *not* blocked
+### What is still allowed
 
-1. **Attaching files to a tracking record** (`POST /trackingRecords/:id/files`). The contract's
-   "cannot upload documents" arguably covers these, but `RecordForm.vue` has **no** therapist
-   gating — the button is still visible to therapists, so blocking it server-side would make a
-   working button fail. Raised as a question rather than silently breaking it.
-2. **Student photos and school logos** (`POST /students/:id/image`, `POST /schools/:id/image`).
-   Those are pictures, not documents, and a therapist still needs an avatar and a logo.
+**Student photos and the account logo** (`POST /students/:id/image`,
+`POST /schools/:id/image`). Those are profile pictures, not documents — a therapist legitimately
+needs a patient photo and their own logo, and the contract restricts *documentos*.
+
+**Reading and deleting** existing files is not blocked either; the restriction is on *uploading*.
+An account switched from school to therapist may still have files worth viewing.
+
+### ⚠️ Frontend must hide one control
+
+`RecordForm.vue` renders a file-attach dropzone (~line 208) with **no** therapist gating, so a
+therapist currently sees a control whose endpoint now returns 403. It must be gated the same way
+`GoalForm.vue:311` gates the goal-documents section. See
+[`frontEndChanges.md`](frontEndChanges.md) entry 5.
 
 ### One thing the front-end should tidy up
 

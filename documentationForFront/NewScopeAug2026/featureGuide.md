@@ -381,6 +381,47 @@ suspension. Roughly 8 endpoints plus a Stripe webhook. Documented here once buil
 
 ---
 
+## ⚠️ Outstanding items — deliberately not done
+
+Everything here was a conscious choice, not an oversight. Each row says **who owns it** and
+**what happens if it's ignored**. Nothing here blocks the features already shipped.
+
+### Needs a decision (blocks nobody today)
+
+| # | Item | Owner | If ignored |
+|---|---|---|---|
+| **Q15** | **May therapists attach files to tracking records?** The contract says therapists cannot *"cargar documentos"*. Goal documents are blocked; record attachments are **not**, because `RecordForm.vue` has no therapist gating and blocking would make a visible button fail. | PO | The contract's rule is only half true — therapists can still upload via record attachments. |
+| — | **Should support tickets confirm real email delivery?** Today the API answers *"we received your report"*, not *"the email arrived"* — AWS SES errors are only logged (`Mail.service.ts`). Fixing it changes behaviour for **every** email the platform sends, so it wasn't done unilaterally. | PO | A silently failed SES send looks like success to the user. Low risk, non-zero. |
+
+### Needs approval — one-line changes
+
+| # | Item | Owner | If ignored |
+|---|---|---|---|
+| **Q14** | **Add `@babel/runtime` to `dependencies`.** `.babelrc` enables `@babel/plugin-transform-runtime`, which compiles code to `require('@babel/runtime/...')`, but that package is in neither `dependencies` nor `devDependencies`. | PO → backend | 🔴 **A clean `npm ci && npm run build && npm start` crashes.** This blocks deploying any of this work. Existing servers survive only on a stale `node_modules`. |
+| **Q16** | **Fix `npm run db:migrations`.** It does `cd src`, picking up the stale tracked `src/knexfile.ts` whose migrations path resolves to a directory that doesn't exist. | PO → backend | Migrations fail with `ENOENT`. **Workaround: run `npx knex migrate:latest` from the repo root** — that's how `3033` was applied. *Deferred by PO 2026-08-02.* |
+
+### Front-end work required
+
+| # | Item | Owner | If ignored |
+|---|---|---|---|
+| **1** | **P8 — send `aHelpTypes` as an array** instead of a single `sHelpType` + `iHelpAmount`. See [`frontEndChanges.md`](frontEndChanges.md) entry 1. | Front-end | 🔴 Only one help type per record would be saved. A temporary compatibility shim will keep the old form working, so nothing breaks immediately. |
+| **3** | **P5 — skip `fetchIep()` in therapist mode** (`students/[id]/index.vue:335`). | Front-end | Harmless — a silent, always-403 request in the network log. Cosmetic only. |
+
+### Deferred cleanup (no action needed)
+
+| Item | Why it's being left |
+|---|---|
+| **`TrackingRecords.sSupportUsed`** — will be superseded by the `TrackingRecordHelps` table in P8. | It holds a single value so it cannot serve the multi-type model, and it has never been written to. Dropping a column from a live schema is irreversible and deserves its own approval. Marked superseded, left in place. |
+| **`src/knexfile.ts`** — stale duplicate of the root `knexfile.ts`. | Same as Q16 — deferred by the PO. |
+
+### Waiting on the client
+
+| Item | Needed by |
+|---|---|
+| **Live Stripe keys** (secret + webhook signing secret) and confirmation of MXN currency. Development uses the existing MyVillage **test-mode** keys, so P3 can be built and verified without them. | Before P3 can go live |
+
+---
+
 ## Environment variables introduced so far
 
 | Variable | Default | Feature | Purpose |

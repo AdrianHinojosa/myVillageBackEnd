@@ -183,7 +183,14 @@ These are facts discovered while reading the code, kept here so nobody re-derive
     this scope: *`npm run build` must succeed and the diff must add zero new `tsc` errors* —
     checked per feature.
 
-15. **`npm run db:migrations` is BROKEN — use `npx knex migrate:latest` from the repo root.**
+15. **`SMS.services.ts` had never been executed and did not work.** Two bugs, both fixed on
+    2026-08-07 when P10 activated it: the SNS client was built with `new SNS({})` *before*
+    `AWS.config.update()` ran — aws-sdk v2 captures config at construction, so it had no region
+    and no credentials — and the `.catch()` returned without settling the promise. ⚠️ AWS SNS
+    accounts start in a **sandbox** that can only send to verified numbers; if
+    `+528181377416` is not verified in the SNS console, sends fail silently (fire-and-forget).
+
+16. **`npm run db:migrations` is BROKEN — use `npx knex migrate:latest` from the repo root.**
     The script is `cd src && knex migrate:latest`, which makes knex pick up `src/knexfile.ts`
     (tracked) whose `path.join(__dirname, '/knex/db/migrations')` resolves to
     `src/knex/db/migrations` — a directory that does not exist. It fails with
@@ -192,7 +199,7 @@ These are facts discovered while reading the code, kept here so nobody re-derive
     from the repo root works. That is how migration `3033` was applied. Either delete
     `src/knexfile.ts` or change the npm script — needs PO approval since it touches tooling.
 
-16. **Out of scope but present:** the frontend repo added `docs/BACKEND_FEEDBACK_02APR2026.md`
+17. **Out of scope but present:** the frontend repo added `docs/BACKEND_FEEDBACK_02APR2026.md`
     (413 lines), `BACKEND_FEEDBACK_LOGIN_USERTYPE.md`, `BACKEND_FIX_STUDENT_REPORT.md`,
     `BACKEND_TODO_25MAR2026.md` and `CLIENT_ISSUES_02APR2026.md`. These predate this scope and
     are **not** part of the 24/jul/2026 extension. Do not silently fold them in.
@@ -216,6 +223,8 @@ These are facts discovered while reading the code, kept here so nobody re-derive
 | Q8 | P3 Stripe keys | **Develop against the existing test-mode keys**; live keys before deploy | `.env` holds `sk_test_`/`pk_test_` MyVillage keys, so no real money can move during development. P3 is therefore **not** blocked on credentials. | 2026-08-02 |
 | — | P5 record files | **Not blocked** for therapists; raised as Q15 | The contract's "no podrá cargar documentos" arguably covers record attachments, but `RecordForm.vue` has no therapist gating — blocking would make a visible button fail. Better to ask than to introduce a UI bug. | 2026-08-02 |
 | — | P5 `PUT /schools` | `sAccountType` is patched **only when present** in the body | Patching unconditionally would silently reset a therapist account to `SCHOOL` on any unrelated school edit. | 2026-08-02 |
+| Q13 | P10 SMS | **Enabled** with `SUPPORT_PHONE=+528181377416`, fires on every ticket | PO provided the number "to begin". ⚠️ AWS SNS starts in a sandbox that can only reach *verified* numbers — verify this one in the SNS console or sends fail silently. | 2026-08-07 |
+| — | `SMS.services.ts` | **Fixed two latent bugs** while activating it | (a) `new SNS({})` was constructed *before* `AWS.config.update()`; aws-sdk v2 captures config at construction, so the client had no region and no credentials and every publish would have failed. (b) The error path returned without resolving or rejecting, leaving the promise permanently unsettled. Never caught because nothing imported this file until P10. | 2026-08-07 |
 | — | Docs | Added **`featureGuide.md`** — plain-language explanation of each feature for the frontend team | PO request: explain in understandable terms what was built (tables, endpoints, behaviour), not just what changed. | 2026-08-02 |
 
 ---
@@ -238,10 +247,10 @@ Tracked here as they are asked/answered. See the conversation for full phrasing.
 | Q10 | 10 | ~~Support ticket audience~~ | ✅ **Answered** — any authenticated user |
 | Q11 | 3 | Who creates the Stripe subscription, and when? On first card added, or when the superadmin sets the tariff? The guide never says. | ⬜ Open |
 | Q12 | 3 | Suspension enforcement: block at login only (frontend redirect), or also reject every API call from a `SUSPENDED` school (`bBlocked`-style gate in the middleware)? | ⬜ Open |
-| Q13 | 10 | SMS destination number for `SUPPORT_PHONE`, and should it fire on every ticket or only some categories? Feature ships disabled until answered. | ⬜ Open |
+| Q13 | 10 | ~~SMS destination number~~ | ✅ **Answered** — `+528181377416`, enabled, fires on every ticket |
 | Q14 | — | `npm run build && npm start` is already broken on `main`: `.babelrc` enables `@babel/plugin-transform-runtime` but `@babel/runtime` is not a dependency. PO confirmed production runs `npm start`, so a clean `npm ci` deploy **will** fail. Approve adding `@babel/runtime` to `dependencies`? | ⬜ Open — **blocks deployment** |
 | Q15 | 5 | Should therapist accounts be blocked from attaching files to tracking records (`POST /trackingRecords/:id/files`)? Left open because `RecordForm.vue` has no therapist gating and blocking would break a visible button. | ⬜ Open |
-| Q16 | — | `npm run db:migrations` is broken (see finding 15). Approve deleting the stale `src/knexfile.ts`, or changing the npm script to not `cd src`? | ⬜ Open |
+| Q16 | — | `npm run db:migrations` is broken (see finding 16). Approve deleting the stale `src/knexfile.ts`, or changing the npm script to not `cd src`? | ⬜ Open |
 
 ---
 

@@ -81,7 +81,7 @@ and `GUIA_BACKEND_AMPLIACION.md` §P8 states *"Un solo tipo por registro."*
 - `iHelpAmount` — integer **0–10** (PO-confirmed range).
 - Omit a type entirely when it wasn't given. Do **not** send `iHelpAmount: null`.
 - `aHelpTypes: []` or omitted = no help recorded.
-- Sending the same `sHelpType` twice in one record is rejected (400).
+- Sending the same `sHelpType` twice in one record is rejected (409).
 - Every record GET returns `aHelpTypes` in the same shape.
 
 **Frontend work**
@@ -111,12 +111,12 @@ colour, one number. With Visual 8 + Verbal 7 + Escrita 6 on one record that rule
   `sCategory` ∈ `technical | question | suggestion | other`, or omitted.
 - Response: **200** `{ message, success: true }` — `message` is localized, so the axios
   interceptor displays it as designed.
-- Errors: 401 invalid/expired token · 400 validation · 404 reporter not found.
+- Errors: **409** validation (localized `message`) · 401 invalid/expired token · 404 reporter not found.
 - **Reachable by SchoolAdmin, FACULTY *and* SuperAdmin** — the support button can stay visible
   for every user type, including superadmin. Also works for users of a **blocked** school (they
   can log in but nothing else works, so support must stay reachable).
 - The body must contain **only** those three fields. The schema is strict: adding `sUserId`,
-  `sSchoolId` or any other key returns 400. Identity comes from the token.
+  `sSchoolId` or any other key returns 409. Identity comes from the token.
 
 ### 3. P5 — Skip the IEP fetch in therapist mode 🟡
 
@@ -137,7 +137,7 @@ No change needed. Recorded so nobody re-checks:
 
 - `POST /schools` and `PUT /schools/:sSchoolId` accept **`sAccountType`** (`SCHOOL` | `THERAPIST`)
   with exactly that name — `schools/[id]/edit.vue` and `add.vue` already send it. Invalid values
-  return 400.
+  return 409.
 - **Omitting `sAccountType` on `PUT` preserves the current type** — it is never silently reset, so
   partial school edits are safe.
 - `GET /schools/:sSchoolId` returns it.

@@ -2,11 +2,48 @@ import { db } from '../../../Config/Db.config';
 import { TrackingRecordsModel } from './trackingRecords.model';
 import { TrackingRecordTasksModel } from './trackingRecordTasks.model';
 import { TrackingRecordFilesModel } from './trackingRecordFiles.model';
+import { TrackingRecordHelpsModel } from './trackingRecordHelps.model';
 import { GoalsModel } from '../goals.model';
 import { GoalTasksModel } from '../001_GoalTasks/goalTasks.model';
+import { normalizeHelpTypesInput, formatHelpTypesForFrontend } from './helpTypes';
 
 class Queries {
     constructor() {};
+
+    /**
+     * P8 — replace the help types stored on a record.
+     *
+     * Delete-then-insert, mirroring how TrackingRecordTasks are handled on update. Runs inside the
+     * caller's transaction so a record and its help types are always written atomically.
+     * Returns the wire-shaped list for the response.
+     */
+    static async replaceRecordHelpTypes(sTrackingRecordId: string, aHelpTypes: Array<{sHelpType: string, iHelpAmount: number}>, sUserId: string, trx) {
+        await TrackingRecordHelpsModel.query(trx)
+            .delete()
+            .where('sTrackingRecordId', sTrackingRecordId);
+
+        if (!aHelpTypes || aHelpTypes.length === 0) return [];
+
+        const aInserted = await TrackingRecordHelpsModel.query(trx).insertGraph(
+            aHelpTypes.map((oHelp) => ({
+                sTrackingRecordId,
+                sHelpType: oHelp.sHelpType,
+                iHelpAmount: oHelp.iHelpAmount,
+                sCreatedBy: sUserId,
+                sLastUpdatedBy: sUserId
+            }))
+        );
+
+        return formatHelpTypesForFrontend(aInserted as any[]);
+    }
+
+    /** P8 — read the help types of one record, in wire shape. */
+    static async findRecordHelpTypes(sTrackingRecordId: string, trx?) {
+        const aRows = await TrackingRecordHelpsModel.query(trx)
+            .where('sTrackingRecordId', sTrackingRecordId)
+            .orderBy('iHelpAmount', 'desc');
+        return formatHelpTypesForFrontend(aRows as any[]);
+    }
 
     // Verify tracking record exists and is active
     static async verifyRecordExists(sTrackingRecordId) {
@@ -64,6 +101,14 @@ class Queries {
                 aTasksCompleted = oData.aTasksCompleted;
             }
 
+            // P8: store the help types documented for this session. Purely documental — it is
+            // written before recalculateGoalProgress on purpose, to make plain that the
+            // recalculation does not read it and the result is identical either way.
+            const aNormalizedHelps = normalizeHelpTypesInput(oData);
+            const aHelpTypes = await Queries.replaceRecordHelpTypes(
+                newRecord.sTrackingRecordId, aNormalizedHelps || [], oData.sCreatedBy, trx
+            );
+
             // Update goal: increment iRecordsCount, set tLastRecord
             await GoalsModel.query(trx).patch({
                 iRecordsCount: GoalsModel.raw('"iRecordsCount" + 1'),
@@ -86,6 +131,7 @@ class Queries {
                 iSuccessful: newRecord.iAchieved,
                 iOpportunities: newRecord.iTotal,
                 aTasksCompleted,
+                aHelpTypes,
                 aDocuments: [],
             };
 
@@ -111,9 +157,25 @@ class Queries {
         }).orderBy('TrackingRecords.tRecordDate', 'desc').page((iPageNumber - 1), iItemsPerPage);
     }
 
-    // Format records with frontend field names, task completions, and documents
+    // Format records with frontend field names, task completions, documents and help types
     static async formatRecordsForFrontend(records: any[]) {
         const formatted = [];
+
+        // P8: fetch the help types for EVERY record in a single query and group them in memory.
+        // The per-record loop below is already N+1 for tasks and files; there is no reason to add
+        // another query per record on top of that.
+        const aRecordIds = (records || []).map((r: any) => r.sTrackingRecordId);
+        const oHelpsByRecord: { [key: string]: any[] } = {};
+        if (aRecordIds.length > 0) {
+            const aAllHelps = await TrackingRecordHelpsModel.query()
+                .whereIn('sTrackingRecordId', aRecordIds)
+                .orderBy('iHelpAmount', 'desc');
+            for (const oHelp of aAllHelps as any[]) {
+                if (!oHelpsByRecord[oHelp.sTrackingRecordId]) oHelpsByRecord[oHelp.sTrackingRecordId] = [];
+                oHelpsByRecord[oHelp.sTrackingRecordId].push(oHelp);
+            }
+        }
+
         for (const r of records) {
             // Get task completions for this record
             const taskCompletions = await TrackingRecordTasksModel.query()
@@ -149,6 +211,7 @@ class Queries {
                 iSuccessful: r.iAchieved,
                 iOpportunities: r.iTotal,
                 aTasksCompleted,
+                aHelpTypes: formatHelpTypesForFrontend(oHelpsByRecord[r.sTrackingRecordId] || []),
                 aDocuments,
             });
         }
@@ -216,6 +279,17 @@ class Queries {
                 aTasksCompleted = existingTasks.map((t: any) => t.sGoalTaskId);
             }
 
+            // P8: sending aHelpTypes REPLACES the stored set; omitting it leaves it untouched.
+            const aNormalizedHelps = normalizeHelpTypesInput(oData);
+            let aHelpTypes: Array<{sHelpType: string, iHelpAmount: number}>;
+            if (aNormalizedHelps !== null) {
+                aHelpTypes = await Queries.replaceRecordHelpTypes(
+                    sTrackingRecordId, aNormalizedHelps, oData.sLastUpdatedBy, trx
+                );
+            } else {
+                aHelpTypes = await Queries.findRecordHelpTypes(sTrackingRecordId, trx);
+            }
+
             const dUpdatedProgress = await Queries.recalculateGoalProgress(existing.sGoalId, trx);
 
             // Preserve attached files in the response (not touched here)
@@ -246,6 +320,7 @@ class Queries {
                 iSuccessful: updated.iAchieved,
                 iOpportunities: updated.iTotal,
                 aTasksCompleted,
+                aHelpTypes,
                 aDocuments,
             };
 

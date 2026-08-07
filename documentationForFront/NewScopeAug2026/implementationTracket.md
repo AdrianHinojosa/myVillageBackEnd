@@ -17,7 +17,7 @@
 | # | Punto | Backend weight | Status | Commit |
 |---|---|---|---|---|
 | 10 | Tickets de soporte | 1 endpoint + SES email + shared auth gate | ✅ Done | `915e3e0` |
-| 8 | Tipos de ayuda | child table `TrackingRecordHelps` (Model B) | 🔄 In progress | — |
+| 8 | Tipos de ayuda | child table `TrackingRecordHelps` (Model B) | ✅ Done | `d16cd4a` |
 | 5 | Modo terapeuta | 1 column + login payload + enforcement | ✅ Done | `3d9e44d` |
 | 7 | Submetas | schema + 6 endpoints + calculated fields | ⬜ Not started (design approved) | — |
 | 3 | Cobranza automática (Stripe) | full module + webhooks + dunning | ⛔ Blocked — Q7/Q8/Q11/Q12 | — |
@@ -28,52 +28,53 @@ Legend: ⬜ not started · 🔄 in progress · ✅ done & committed · ➖ no ba
 
 ---
 
-## Progress — as of 2026-08-02
+## Progress — as of 2026-08-07
 
-### Backend: ~9%
+### Backend: ~16%
 
 Weighted by the contract's own prices (what the client actually paid per point).
 
 | # | Punto | Price | Backend done | Notes |
 |---|---|---|---|---|
 | 10 | Tickets de soporte | $8,000 | ✅ **100%** | shipped `271e9a1` |
-| 8 | Tipos de ayuda | $14,000 | ⬜ 0% code | design + contract approved, migration not written |
+| 8 | Tipos de ayuda | $14,000 | ✅ **100%** | `d16cd4a` — child table + array wire + legacy shim, 39 checks green |
 | 5 | Modo terapeuta | $14,000 | ✅ **100%** | `3d9e44d` — column + login + enforcement, verified end-to-end |
 | 7 | Submetas | $24,000 | ⬜ 0% code | architecture decided (`Goals` + `sParentGoalId`) |
 | 3 | Cobranza (Stripe) | $70,000 | ⬜ 0% | **blocked** — Q7/Q8/Q11/Q12 |
 | 11 | Guía de metas | $5,500 | ➖ n/a | frontend only |
 | 13 | Capacitaciones | $11,000 | ➖ n/a | frontend only |
 
-- **By point price:** backend-relevant scope $130,000 · delivered $22,000 (P10 + P5) → **16.9%**
+- **By point price:** backend-relevant scope $130,000 · delivered $36,000 (P10 + P5 + P8) → **27.7%**
 - **By estimated backend effort share** (P3 70%, P7 50%, P8 35%, P10 55%, P5 15% of each
-  point's price): $6,500 of $72,400 → **9.0%**
+  point's price): $11,400 of $72,400 → **15.7%**
 
-The two diverge because P5's price is large but its backend content is small. **9% is the honest
-figure**; 16.9% flatters it. Plainly: *two of five backend points, both small ones.*
+The two diverge because P5's price is large but its backend content is small. **15.7% is the honest
+figure**; 27.7% flatters it. Plainly: *three of five backend points done — the three small ones.
+The two heavy ones (P7, P3) are 84% of the remaining backend effort.*
 
 ### Overall project (frontend + backend): ~50%
 
 | Side | Est. share of scope | Complete | Contribution |
 |---|---|---|---|
 | Frontend | ~$74,100 | ~93% | ~$69,100 |
-| Backend | ~$72,400 | ~9% | ~$6,500 |
-| **Total** | **$146,500** | | **~$75,600 → ~52%** |
+| Backend | ~$72,400 | ~16% | ~$11,400 |
+| **Total** | **$146,500** | | **~$80,500 → ~55%** |
 
 Frontend is **not** 100% any more: the PO's Model B decision on P8 invalidated part of it
 (`records.ts`, `RecordForm.vue`, chart colouring, PDF export all assume one help type per record).
 See `frontEndChanges.md` entry 1.
 
-⚠️ The front/back effort splits are **estimates**, so treat ~52% as ±5. The backend 9% is firm.
+⚠️ The front/back effort splits are **estimates**, so treat ~55% as ±5. The backend 16% is firm.
 
 ### Remaining backend effort
 
 | Point | Estimate | Blocked? |
 |---|---|---|
 | P5 | ~~0.5 day~~ | ✅ **done** |
-| P8 | ~1 day | No |
+| P8 | ~~1 day~~ | ✅ **done** |
 | P7 | ~2–3 days | No |
-| P3 | ~5–8 days | No longer blocked — test keys confirmed |
-| **Total** | **~8–12 days (≈2 working weeks)** | |
+| P3 | ~5–8 days | No longer blocked for development — test keys confirmed; live keys before ship |
+| **Total** | **~7–11 days (≈1.5–2 working weeks)** | |
 
 Contract allows **4 working weeks**. P3 is 54% of contract value and more than half the remaining
 effort; it is now unblocked for development (test-mode keys), but **live keys are still needed
@@ -183,14 +184,25 @@ These are facts discovered while reading the code, kept here so nobody re-derive
     this scope: *`npm run build` must succeed and the diff must add zero new `tsc` errors* —
     checked per feature.
 
-15. **`SMS.services.ts` had never been executed and did not work.** Two bugs, both fixed on
+15. **🚨 EVERY Joi error label MUST have an entry in `ValidationError.util.ts`, or the request
+    returns HTTP 500.** The label is a lookup key of the form `"<Group> <field>"`, and
+    `ErrorHandler.mw.ts:131` does `Messages[err.type][type][message][langCode]` with **no guard**.
+    A missing entry throws `Cannot read properties of undefined (reading 'sp')` → 500.
+    **This shipped in P10 and P5** (`Support sSubject/sMessage/sCategory`, `Schools sAccountType`)
+    and was only caught while testing P8; fixed for all three in the P8 commit.
+    Two testing lessons: validation surfaces as **409**, not 400; and it must be exercised
+    **through HTTP with a valid token** — auth (401) and permission gates (403) run before
+    `celebrate` and mask the bug, which is exactly why the earlier P10/P5 tests missed it.
+    Recorded in `WORKING_AGREEMENT_SKILL.md` §2.7.
+
+16. **`SMS.services.ts` had never been executed and did not work.** Two bugs, both fixed on
     2026-08-07 when P10 activated it: the SNS client was built with `new SNS({})` *before*
     `AWS.config.update()` ran — aws-sdk v2 captures config at construction, so it had no region
     and no credentials — and the `.catch()` returned without settling the promise. ⚠️ AWS SNS
     accounts start in a **sandbox** that can only send to verified numbers; if
     `+528181377416` is not verified in the SNS console, sends fail silently (fire-and-forget).
 
-16. **`npm run db:migrations` is BROKEN — use `npx knex migrate:latest` from the repo root.**
+17. **`npm run db:migrations` is BROKEN — use `npx knex migrate:latest` from the repo root.**
     The script is `cd src && knex migrate:latest`, which makes knex pick up `src/knexfile.ts`
     (tracked) whose `path.join(__dirname, '/knex/db/migrations')` resolves to
     `src/knex/db/migrations` — a directory that does not exist. It fails with
@@ -199,7 +211,7 @@ These are facts discovered while reading the code, kept here so nobody re-derive
     from the repo root works. That is how migration `3033` was applied. Either delete
     `src/knexfile.ts` or change the npm script — needs PO approval since it touches tooling.
 
-17. **Out of scope but present:** the frontend repo added `docs/BACKEND_FEEDBACK_02APR2026.md`
+18. **Out of scope but present:** the frontend repo added `docs/BACKEND_FEEDBACK_02APR2026.md`
     (413 lines), `BACKEND_FEEDBACK_LOGIN_USERTYPE.md`, `BACKEND_FIX_STUDENT_REPORT.md`,
     `BACKEND_TODO_25MAR2026.md` and `CLIENT_ISSUES_02APR2026.md`. These predate this scope and
     are **not** part of the 24/jul/2026 extension. Do not silently fold them in.
@@ -225,6 +237,9 @@ These are facts discovered while reading the code, kept here so nobody re-derive
 | — | P5 `PUT /schools` | `sAccountType` is patched **only when present** in the body | Patching unconditionally would silently reset a therapist account to `SCHOOL` on any unrelated school edit. | 2026-08-02 |
 | Q13 | P10 SMS | **Enabled** with `SUPPORT_PHONE=+528181377416`, fires on every ticket | PO provided the number "to begin". ⚠️ AWS SNS starts in a sandbox that can only reach *verified* numbers — verify this one in the SNS console or sends fail silently. | 2026-08-07 |
 | — | `SMS.services.ts` | **Fixed two latent bugs** while activating it | (a) `new SNS({})` was constructed *before* `AWS.config.update()`; aws-sdk v2 captures config at construction, so the client had no region and no credentials and every publish would have failed. (b) The error path returned without resolving or rejecting, leaving the promise permanently unsettled. Never caught because nothing imported this file until P10. | 2026-08-07 |
+| — | P8 storage | **Child table `TrackingRecordHelps`**, UPPERCASE codes stored / lowercase slugs on the wire, uniqueness enforced in Joi *and* Postgres | A record holds several types, so no scalar column works; 8 fixed columns would be unqueryable. Casing matches the rest of the schema while leaving the frontend untouched. | 2026-08-07 |
+| — | P8 legacy shim | `POST`/`PUT` still accept the single `sHelpType` + `iHelpAmount` | Backend and frontend deploy independently; without it the current capture form breaks on deploy. Marked for removal. | 2026-08-07 |
+| — | P8 list read | Help types fetched for **all** records in one `whereIn`, grouped in memory | `formatRecordsForFrontend` is already N+1 for tasks and files; adding a third per-record query would have made it worse. | 2026-08-07 |
 | — | Docs | Added **`featureGuide.md`** — plain-language explanation of each feature for the frontend team | PO request: explain in understandable terms what was built (tables, endpoints, behaviour), not just what changed. | 2026-08-02 |
 
 ---
@@ -250,7 +265,7 @@ Tracked here as they are asked/answered. See the conversation for full phrasing.
 | Q13 | 10 | ~~SMS destination number~~ | ✅ **Answered** — `+528181377416`, enabled, fires on every ticket |
 | Q14 | — | `npm run build && npm start` is already broken on `main`: `.babelrc` enables `@babel/plugin-transform-runtime` but `@babel/runtime` is not a dependency. PO confirmed production runs `npm start`, so a clean `npm ci` deploy **will** fail. Approve adding `@babel/runtime` to `dependencies`? | ⬜ Open — **blocks deployment** |
 | Q15 | 5 | Should therapist accounts be blocked from attaching files to tracking records (`POST /trackingRecords/:id/files`)? Left open because `RecordForm.vue` has no therapist gating and blocking would break a visible button. | ⬜ Open |
-| Q16 | — | `npm run db:migrations` is broken (see finding 16). Approve deleting the stale `src/knexfile.ts`, or changing the npm script to not `cd src`? | ⬜ Open |
+| Q16 | — | `npm run db:migrations` is broken (see finding 17). Approve deleting the stale `src/knexfile.ts`, or changing the npm script to not `cd src`? | ⬜ Open |
 
 ---
 
@@ -330,8 +345,72 @@ only logs them, so the success message means *"we accepted your report"*, not *"
 delivered"*. Making this reportable would change behaviour for every existing email — raised with
 the PO, not done unilaterally.
 
-### Punto 8 — Tipos de ayuda
-*(not started)*
+### Punto 8 — Tipos de ayuda ✅
+
+**Commit:** `d16cd4a` · **Migration:** `3034_TrackingRecordHelps.ts` (applied to `development`)
+
+**What it does.** Each tracking record can document several kinds of support, each scored 0–10.
+Purely documental — it must never move progress, average or record count, and that is *proved*
+below rather than asserted.
+
+**Schema.** New child table `TrackingRecordHelps`:
+`sTrackingRecordHelpId` (PK) · `sTrackingRecordId` (FK, notNullable) · `sHelpType` (notNullable) ·
+`iHelpAmount` (int, notNullable, default 0) · audit + timestamps ·
+**unique(`sTrackingRecordId`,`sHelpType`)** so the "one row per type per record" rule is enforced by
+Postgres, not only by Joi · index on `sTrackingRecordId`.
+
+**Wire.** No new endpoints — three existing ones gained `aHelpTypes`:
+`POST /trackingRecords` · `PUT /trackingRecords/:sTrackingRecordId` ·
+`GET /goals/:sGoalId/trackingRecords`.
+```jsonc
+"aHelpTypes": [ { "sHelpType": "visual", "iHelpAmount": 8 }, { "sHelpType": "verbal", "iHelpAmount": 7 } ]
+```
+POST: omitting it stores nothing. PUT: sending it **replaces** the set, `[]` **clears** it,
+omitting it **preserves** it.
+
+**Files**
+| File | Change |
+|---|---|
+| `knex/db/migrations/3034_TrackingRecordHelps.ts` | **new** table |
+| `src/Api/024_Goals/003_TrackingRecords/helpTypes.ts` | **new** — vocabulary, slug↔code maps, `normalizeHelpTypesInput`, `formatHelpTypesForFrontend` |
+| `src/Api/024_Goals/003_TrackingRecords/trackingRecordHelps.model.ts` | **new** model |
+| `trackingRecords.model.ts` | `TrackingRecordHelps` HasMany relation (thunk, avoids circular import) |
+| `trackingRecords.validations.ts` | `aHelpTypes` array + legacy scalars, on Create and Update |
+| `trackingRecords.queries.ts` | `replaceRecordHelpTypes`, `findRecordHelpTypes`; wired into insert/update; **batched** read in `formatRecordsForFrontend` |
+| `src/Utils/ValidationError.util.ts` | `TrackingRecords.{aHelpTypes,sHelpType,iHelpAmount}`, `TrackingRecordHelps.*`, **plus the missing `Support.*` and `Schools.sAccountType` from P10/P5** |
+
+**Decisions taken**
+
+1. **Child table, not 8 columns.** One record holds several types, so a scalar column cannot serve.
+   Eight fixed columns would be rigid and unqueryable for reporting.
+2. **UPPERCASE codes stored, lowercase slugs on the wire.** `VISUAL` in the database (matching
+   `sStatus`/`sMeasurementType`/`sDirection` and the vocabulary already documented on
+   `sSupportUsed`); `visual` on the wire so the frontend needs no change. Mapped in `helpTypes.ts`.
+3. **Uniqueness enforced twice** — Joi `.unique('sHelpType')` for a friendly message, plus a DB
+   constraint so no code path can bypass it.
+4. **Legacy shim retained.** `POST`/`PUT` still accept single `sHelpType` + `iHelpAmount` and store
+   it as a one-item array, so the frontend keeps working between deploys. Marked for removal.
+5. **Batched list read.** `formatRecordsForFrontend` already does N+1 for tasks and files; help
+   types are fetched for **all** records in one `whereIn` and grouped in memory rather than adding
+   another query per record.
+6. **`sSupportUsed` left in place**, marked superseded — it holds a single value so it cannot serve
+   this model, and dropping a live column needs its own approval.
+7. **Help types are written before `recalculateGoalProgress`** in the same transaction —
+   deliberately, to make it obvious in the code that the recalculation does not read them.
+
+**Verification** — 39 checks against the real development database with a genuine session token:
+- multi-type create; UPPERCASE storage vs lowercase wire; ordering by amount desc
+- rejections (all clean 409 with localized messages, **no 500s**): duplicate type, amount 11,
+  amount −1, non-integer 2.5, unknown slug, 9 items
+- accepted: amount 0, all 8 types at once
+- legacy shim: single value → one-item array, stored as `MODELING`; out-of-range legacy rejected
+- `PUT` replace / preserve-on-omit / clear-on-`[]`; DB row counts confirmed
+- batched list read returns all 8 for a record
+- **calculation invariance, properly proved** on an `EXACTITUD` goal: record 9/10 → `dProgress`
+  70.00; adding 4 help types at 10 each → still 70.00; clearing them → still 70.00; and a *sanity*
+  check changing the measurement 9/10 → 2/10 moved it to 35.00, proving the test can detect
+  movement, so the three unchanged readings are real evidence
+- cleanup verified: 0 leftover help rows, 0 goal counter drift
 
 ### Punto 5 — Modo terapeuta ✅
 
@@ -428,4 +507,6 @@ Anything we build differently from the PDF gets logged here with who approved it
 | `915e3e0` | **10** | `POST /support/ticket` + SES template + `verifyAnyAuthenticatedUser()` gate; SMS wired but disabled |
 | `3c5e4d8` | — | `featureGuide.md` (plain-language feature doc) + resolved decisions |
 | `07f535c` | — | Measured progress recorded in the tracker |
-| `3d9e44d` | **5** | `Schools.sAccountType` + login payload + `denyTherapistAccess()` on 4 endpoints |
+| `4a8a577` | **5** | `Schools.sAccountType` + login payload + `denyTherapistAccess()` on 4 endpoints |
+| `a0dd135` | 10 | Enabled support SMS (+528181377416); fixed two latent bugs in `SMS.services.ts` |
+| `d16cd4a` | **8** | `TrackingRecordHelps` child table + `aHelpTypes` wire + legacy shim; **fixed the 500-on-validation crash shipped in P10/P5** |

@@ -168,9 +168,24 @@ declared inside `goals.routes.ts`. Same trick is available for new sub-resources
   Every endpoint must return a localized `message`. Never hardcode Spanish in a controller.
 
 ### 2.7 Validation
+
+> 🚨 **THE TRAP THAT BITES EVERYONE.** Every Joi error label is a **lookup key**, not free text.
+> The label must be exactly `"<Group> <field>"`, and
+> `src/Utils/ValidationError.util.ts → JoiValidationError[Group][field][sLang]` **must exist**.
+> `ErrorHandler.mw.ts:131` does `Messages[err.type][type][message][langCode]` with no guard, so a
+> missing entry throws `Cannot read properties of undefined (reading 'sp')` and the request returns
+> **HTTP 500 instead of a validation error**. Adding a validated field without adding its catalogue
+> entry ships a crash. This happened on P10, P5 *and* P8 during this scope.
+>
+> **Two consequences for testing:** a validation error surfaces as **HTTP 409** (not 400 — see
+> `ErrorHandler.mw.ts`), and you must exercise validation **through HTTP with a valid token**.
+> Calling `Schema.validate()` directly, or testing without auth, hides the bug — auth (401) and
+> permission gates (403) run *before* `celebrate`, so they mask it.
+
 `src/Middlewares/Validations.mw.ts` exports the reusable Joi builders. Every builder takes an
 error label string: `Validations.RequiredUUID("Goals sGoalId")`.
 - Wrap schemas in `Validations.JoiObjectKeys({...})`.
+- **Add the matching `ValidationError.util.ts` entry in the same commit as the field.**
 - `trackingRecords.validations.ts` uses raw `Joi.object({...}).options({ allowUnknown: true })`
   — that is intentional there (frontend sends type-specific extras). Prefer strict
   `JoiObjectKeys` for new modules.

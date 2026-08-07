@@ -2,7 +2,7 @@
 
 **For:** the frontend team, QA, and anyone picking this up later
 **Backend branch:** `features02Aug2026`
-**Last updated:** 2026-08-02
+**Last updated:** 2026-08-07
 
 Plain-language explanation of **how each feature actually works on the backend**: what was stored,
 where, which endpoints exist, and what the frontend gets back. No backend knowledge assumed.
@@ -31,7 +31,11 @@ frontend never hardcodes those strings.
 
 Authentication is always the `Authorization: Bearer <token>` header. **The backend never accepts
 your user id, school id, or role in the request body** — it reads them from the token. Sending
-them is rejected with a 400.
+them is rejected.
+
+**Validation failures return HTTP `409`**, not 400 — that is this project's existing convention.
+The `message` is always localized and explains what was wrong, so the axios interceptor shows
+something useful without the frontend inspecting the error.
 
 ---
 
@@ -39,8 +43,8 @@ them is rejected with a 400.
 
 | # | Feature | Backend state | New table? | New endpoints |
 |---|---|---|---|---|
-| 10 | Support tickets | ✅ **Built** (`271e9a1`) | No | 1 |
-| 8 | Help types | 🔄 Designed, not built | Yes — `TrackingRecordHelps` | 0 (extends existing) |
+| 10 | Support tickets | ✅ **Built** | No | 1 |
+| 8 | Help types | ✅ **Built** | Yes — `TrackingRecordHelps` | 0 (extends existing 3) |
 | 5 | Therapist mode | ✅ **Built** | No — 1 new column on `Schools` | 0 (extends existing) + 4 gated |
 | 7 | Subgoals | ⬜ Not started | No — `Goals` gains a parent link | 6 |
 | 3 | Billing (Stripe) | ⬜ Not started | Yes — `Payments` + columns on `Schools` | ~8 + webhook |
@@ -100,7 +104,7 @@ The axios interceptor displays `message` automatically, so the modal only needs 
 
 | Code | Meaning |
 |---|---|
-| `400` | A field is missing, too long, an invalid category, **or you sent an extra field** |
+| `409` | A field is missing, too long, an invalid category, **or you sent an extra field**. `message` explains which, already localized. |
 | `401` | Token missing, invalid, or expired |
 | `404` | The user behind the token could not be found |
 
@@ -131,11 +135,20 @@ An HTML email in the My Village house style (logo, rainbow divider, teal button)
 
 Destination is `info@myvillage.com.mx` (overridable with the `SUPPORT_EMAIL` env var).
 
-### SMS — built but switched off
+### SMS — enabled
 
-An SMS heads-up via AWS SNS is wired in and dormant. It sends **only** when both
-`SUPPORT_SMS_ENABLED=true` and `SUPPORT_PHONE=<number>` are set. No destination number has been
-provided yet, so nothing sends today.
+Alongside the email, an SMS heads-up goes out through AWS SNS to **+528181377416**, on every
+ticket regardless of category. It fires only when both `SUPPORT_SMS_ENABLED=true` and
+`SUPPORT_PHONE` are set, so any environment missing them simply sends no SMS.
+
+Two things to know:
+
+- **The SNS service had never actually worked.** `SMS.services.ts` existed but nothing imported it,
+  and it built its AWS client *before* loading the credentials — so every send would have failed
+  silently. Fixed when this was switched on.
+- ⚠️ **AWS SNS accounts start in a sandbox** that can only reach *verified* phone numbers. If
+  `+528181377416` isn't verified in the SNS console, sends fail silently (the path is
+  fire-and-forget, exactly like email). Verify it there before relying on it.
 
 ### ⚠️ One honest limitation
 
@@ -146,10 +159,11 @@ platform sends, so it wasn't done unilaterally — flagged for a decision.
 
 ---
 
-# 🔄 Punto 8 — Help types (designed, not yet built)
+# ✅ Punto 8 — Help types
 
-> ⚠️ **Not built yet.** Design below is approved and about to be implemented. It **differs from
-> what the frontend currently has**, so read [`frontEndChanges.md`](frontEndChanges.md) entry 1.
+> ⚠️ This **differs from what the frontend currently has** — it sends one help type per record.
+> Read [`frontEndChanges.md`](frontEndChanges.md) entry 1. A compatibility shim keeps the old
+> format working meanwhile, so nothing breaks on deploy.
 
 ### What it does, in one paragraph
 
@@ -162,7 +176,7 @@ record count. On the chart, each point is coloured by the support type with the 
 
 The frontend currently sends **one** support type per record (`sHelpType` + `iHelpAmount`). The
 client's model — confirmed from their mock-up, which lists all 8 types each with its own value box
-— is **several types per record, each with its own number**. That is what the backend will build.
+— is **several types per record, each with its own number**. That is what the backend now stores.
 
 ### Was a table created?
 
@@ -226,19 +240,32 @@ already established for this concept — the same style as `sStatus`, `sMeasurem
 ```
 
 - Leave a type **out entirely** if it wasn't given — don't send it with a null.
-- `aHelpTypes: []`, or omitting it, means no support was recorded.
-- Repeating the same `sHelpType` twice returns `400`.
-- On `PUT`, the array you send **replaces** everything previously recorded for that record. Omit
-  the field to leave the existing set alone.
+- Repeating the same `sHelpType` twice returns **409** with a clear message.
+- `iHelpAmount` must be a whole number 0–10. `11`, `-1` and `2.5` are all rejected with 409.
+- All 8 types at once is allowed. A 9th entry is rejected.
+- **On `POST`:** omitting `aHelpTypes` stores nothing; the response returns `aHelpTypes: []`.
+- **On `PUT`:** sending the array **replaces** the whole stored set. Sending `[]` **clears** it.
+  **Omitting the field leaves the existing set untouched** — so partial edits are safe.
 
 **What you get back** — the same shape, on every record in every GET.
 
 ### It does not affect any calculation
 
-Worth stating plainly because the contract insists on it: progress, average, record count and the
-"last 3 records" rule read only the measurement fields (`iHits`, `iScaleValue`, `iOccurrences`,
-and so on). Help types are stored alongside and are never consulted. Adding, editing or removing
-them cannot move a student's progress by a single point.
+The contract insists on this, so it was tested rather than assumed. Progress, average, record
+count and the "last 3 records" rule read only the measurement fields (`iHits`, `iScaleValue`,
+`iOccurrences`, …). Help types sit alongside and are never consulted.
+
+Proven on a real `EXACTITUD` goal:
+
+| Step | `dProgress` | `dAverageValue` |
+|---|---|---|
+| record 9/10 correct, **no** help types | 70.00 | 70.00 |
+| **added 4 help types, all at 10** | 70.00 | 70.00 |
+| **cleared all help types** | 70.00 | 70.00 |
+| *sanity:* changed the measurement 9/10 → 2/10 | **35.00** | — |
+
+The last row matters: it proves the check can actually detect movement, so the three unchanged
+rows above are real evidence and not a test that simply never moves.
 
 ### Chart colouring (frontend side)
 
@@ -250,9 +277,23 @@ the backend returns the array and the frontend picks the maximum.
 
 ### Backwards compatibility during the transition
 
-So the frontend isn't broken the moment the backend deploys, `POST`/`PUT` will **also** accept the
-old single-value form (`sHelpType` + `iHelpAmount`) and store it as a one-item array. This is a
-temporary shim, marked in the code for removal once the frontend ships the new capture UI.
+So the frontend isn't broken the moment the backend deploys, `POST`/`PUT` **also** accept the old
+single-value form (`sHelpType` + `iHelpAmount`) and store it as a one-item array — verified:
+sending `sHelpType: "modelacion", iHelpAmount: 4` comes back as
+`aHelpTypes: [{ sHelpType: "modelacion", iHelpAmount: 4 }]` and is stored as `MODELING`. The 0–10
+range applies to the legacy field too.
+
+This is a **temporary shim**, marked in the code for removal once the frontend ships the new
+capture UI.
+
+### How it was verified
+
+39 checks against the real development database with a genuine session token: multi-type create,
+UPPERCASE storage with lowercase wire slugs, ordering by amount, all six validation rejections
+(duplicate, 11, −1, 2.5, unknown type, 9 items), 0 and all-8 accepted, the legacy shim, `PUT`
+replace / preserve / clear, the batched list read, and the calculation-invariance proof above.
+Every test record was removed afterwards and the affected goals' counters recomputed — leftover
+help rows: 0, goal counter drift: 0.
 
 ---
 
@@ -289,7 +330,7 @@ The superadmin sets it, on the endpoints that already exist:
 | `PUT /schools/:sSchoolId` | accepts `sAccountType` — **omit it and the current type is kept**, it is never silently reset |
 | `GET /schools/:sSchoolId` | returns `sAccountType` |
 
-Sending anything other than `SCHOOL` or `THERAPIST` is rejected with `400`.
+Sending anything other than `SCHOOL` or `THERAPIST` is rejected with **409** and a localized message.
 
 ### Login tells the front-end which mode to use
 

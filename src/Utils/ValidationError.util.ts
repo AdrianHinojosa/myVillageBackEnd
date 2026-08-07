@@ -225,6 +225,11 @@ export default {
                 sp: "Por favor, ingresa un identificador de escuela correcto.",
                 en: "Please, enter a valid school id."
             },
+            // P5 — Modo terapeuta
+            sAccountType: {
+                sp: "Por favor, selecciona un tipo de cuenta válido (colegio o terapeuta).",
+                en: "Please, select a valid account type (school or therapist)."
+            },
             sName: {
                 sp: "Por favor, ingresa un nombre de escuela correcto.",
                 en: "Please, enter a valid school name."
@@ -445,6 +450,19 @@ export default {
                 sp: "Por favor, ingresa un identificador de registro correcto.",
                 en: "Please, enter a valid tracking record id."
             },
+            // P8 — Tipos de ayuda
+            aHelpTypes: {
+                sp: "Por favor, revisa los tipos de ayuda: cada tipo puede registrarse una sola vez, con una cantidad de 0 a 10.",
+                en: "Please, review the help types: each type may be recorded only once, with an amount from 0 to 10."
+            },
+            sHelpType: {
+                sp: "Por favor, selecciona un tipo de ayuda válido.",
+                en: "Please, select a valid help type."
+            },
+            iHelpAmount: {
+                sp: "Por favor, ingresa una cantidad de ayuda entre 0 y 10.",
+                en: "Please, enter a help amount between 0 and 10."
+            },
             sGoalId: {
                 sp: "Por favor, ingresa un identificador de meta correcto.",
                 en: "Please, enter a valid goal id."
@@ -652,6 +670,34 @@ export default {
             sConfirmPassword: {
                 sp: "Por favor, confirma tu nueva contraseña.",
                 en: "Please, confirm your new password."
+            },
+        },
+
+        // P8 — Tipos de ayuda (items inside the aHelpTypes array)
+        TrackingRecordHelps: {
+            sHelpType: {
+                sp: "Por favor, selecciona un tipo de ayuda válido.",
+                en: "Please, select a valid help type."
+            },
+            iHelpAmount: {
+                sp: "Por favor, ingresa una cantidad de ayuda entre 0 y 10.",
+                en: "Please, enter a help amount between 0 and 10."
+            },
+        },
+
+        // P10 — Tickets de soporte
+        Support: {
+            sSubject: {
+                sp: "Por favor, ingresa un asunto válido (máximo 120 caracteres).",
+                en: "Please, enter a valid subject (120 characters maximum)."
+            },
+            sMessage: {
+                sp: "Por favor, describe tu reporte (máximo 1000 caracteres).",
+                en: "Please, describe your report (1000 characters maximum)."
+            },
+            sCategory: {
+                sp: "Por favor, selecciona una categoría válida.",
+                en: "Please, select a valid category."
             },
         },
 

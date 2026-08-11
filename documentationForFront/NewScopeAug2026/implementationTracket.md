@@ -20,7 +20,7 @@
 | 8 | Tipos de ayuda | child table `TrackingRecordHelps` (Model B) | ✅ Done | `e1efd72` |
 | 5 | Modo terapeuta | 1 column + login payload + enforcement | ✅ Done | `4a8a577` |
 | 7 | Submetas | schema + endpoints + calculated fields | ✅ Done | `c303c03` + `58a6534` |
-| 3 | Cobranza automática (Stripe) | full module + webhooks + dunning | ⬜ Not started — buildable on test keys; **live keys needed to ship** | — |
+| 3 | Cobranza automática (Stripe) | full module + webhooks + dunning | ✅ Done — verified vs live Stripe | `b98ffb3`→`59c0a55` |
 | 11 | Guía de creación de metas | none (frontend only) | ➖ N/A backend | — |
 | 13 | Módulo de capacitaciones | none (frontend only) | ➖ N/A backend | — |
 
@@ -30,7 +30,7 @@ Legend: ⬜ not started · 🔄 in progress · ✅ done & committed · ➖ no ba
 
 ## Progress — as of 2026-08-07
 
-### Backend: ~32%
+### Backend: ~100%
 
 Weighted by the contract's own prices (what the client actually paid per point).
 
@@ -40,31 +40,31 @@ Weighted by the contract's own prices (what the client actually paid per point).
 | 8 | Tipos de ayuda | $14,000 | ✅ **100%** | `e1efd72` — child table + array wire + legacy shim, 39 checks green |
 | 5 | Modo terapeuta | $14,000 | ✅ **100%** | `4a8a577` — column + login + enforcement, verified end-to-end |
 | 7 | Submetas | $24,000 | ✅ **100%** | `Goals` + `sParentGoalId`, 5 endpoints, 12 leak guards, 39 checks green |
-| 3 | Cobranza (Stripe) | $70,000 | ⬜ 0% | last point; buildable now on test keys |
+| 3 | Cobranza (Stripe) | $70,000 | ✅ **100%** | 8 endpoints + webhooks + dunning; 98 checks (74 vs live Stripe) |
 | 11 | Guía de metas | $5,500 | ➖ n/a | frontend only |
 | 13 | Capacitaciones | $11,000 | ➖ n/a | frontend only |
 
-- **By point price:** backend-relevant scope $130,000 · delivered $60,000 (P10 + P5 + P8 + P7) → **46.2%**
-- **By estimated backend effort share** (P3 70%, P7 50%, P8 35%, P10 55%, P5 15% of each
-  point's price): $23,400 of $72,400 → **32.3%**
+- **By point price:** backend-relevant scope $130,000 · delivered **$130,000** (all five points) → **100%**
+- **By estimated backend effort share**: $72,400 of $72,400 → **100%**
 
-**32% is the honest figure**; 46% flatters it. Plainly: *four of five backend points done. The one
-that remains — P3 Stripe — is 54% of contract value and ~68% of the remaining backend effort.*
+**All five backend points are functionally complete and verified.** What remains is not code:
+`STRIPE_WEBHOOK_SECRET` for real webhook delivery, live Stripe keys for go-live, and the five
+frontend items in `frontEndChanges.md`.
 
 ### Overall project (frontend + backend): ~62%
 
 | Side | Est. share of scope | Complete | Contribution |
 |---|---|---|---|
-| Frontend | ~$74,100 | ~90% | ~$66,700 |
-| Backend | ~$72,400 | ~32% | ~$23,400 |
-| **Total** | **$146,500** | | **~$90,100 → ~62%** |
+| Frontend | ~$74,100 | ~88% | ~$65,200 |
+| Backend | ~$72,400 | **100%** | ~$72,400 |
+| **Total** | **$146,500** | | **~$137,600 → ~94%** |
 
 Frontend has **dropped** from ~93% to ~90% as integration work surfaced: the P8 Model B decision
 invalidated its record capture, chart colouring and PDF export (entry 1); therapist mode needs the
 record-attach control hidden (entry 5); and **subgoals have no status control at all** (entry 7),
 which leaves a contract requirement unreachable. Five open items in `frontEndChanges.md`.
 
-⚠️ The front/back effort splits are **estimates**, so treat ~62% as ±5. The backend 32% is firm.
+⚠️ The front/back effort splits are **estimates**, so treat ~94% as ±5. The backend 100% is firm — every point built and tested.
 
 ### Remaining backend effort
 
@@ -73,12 +73,17 @@ which leaves a contract requirement unreachable. Five open items in `frontEndCha
 | P5 | ~~0.5 day~~ | ✅ **done** |
 | P8 | ~~1 day~~ | ✅ **done** |
 | P7 | ~~2–3 days~~ | ✅ **done** |
-| P3 | ~5–8 days | No longer blocked for development — test keys confirmed; live keys before ship |
-| **Total** | **~5–8 days (≈1–1.5 working weeks)** | |
+| P3 | ~~5–8 days~~ | ✅ **done** |
+| **Total** | **0 days of backend feature work remaining** | |
 
-Contract allows **4 working weeks**. P3 is 54% of contract value and more than half the remaining
-effort; it is now unblocked for development (test-mode keys), but **live keys are still needed
-before it can ship**.
+Contract allowed **4 working weeks**; backend feature work finished inside 2. Remaining to ship:
+the webhook secret, live Stripe keys, `NUXT_PUBLIC_STRIPE_PK`, and the frontend items.
+
+**Optional, not in scope:** there is no committed automated test suite. Roughly 230 assertions were
+written and run as throwaway scripts, then deleted with them. `jest`/`ts-jest`/`supertest` are all
+installed but the repo has zero test files. Converting the verification scripts into a committed
+suite is about half a day and would protect the invariants that matter most — the measurement
+engine, the subgoal leak guards, and the billing amount maths.
 
 ---
 
@@ -203,7 +208,17 @@ These are facts discovered while reading the code, kept here so nobody re-derive
     accounts start in a **sandbox** that can only send to verified numbers; if
     `+528181377416` is not verified in the SNS console, sends fail silently (fire-and-forget).
 
-17. **`npm run db:migrations` is BROKEN — use `npx knex migrate:latest` from the repo root.**
+17. **`npm run db:migrations` was BROKEN — FIXED 2026-08-11.** The scripts did `cd src` first, so
+    the CLI loaded the tracked `src/knexfile.ts`, whose migrations path resolves to
+    `src/knex/db/migrations` — a directory that does not exist — and failed with `ENOENT`. Removing
+    `cd src` from `db:migrations`, `db:rollback` and `db:seeds` makes them use the **root**
+    `knexfile.ts`, which resolves correctly. Verified: `npm run db:migrations` now reports
+    "Already up to date".
+    ⚠️ `src/knexfile.ts` was **kept**, not deleted: `migrationScript.ts` and
+    `productionMigrationUpdate.ts` both `import "./src/knexfile"` for its connection config. An
+    explanatory header was added so nobody removes it or re-adds the `cd`.
+
+18. **(superseded) `npm run db:migrations` notes — use `npx knex migrate:latest` from the repo root.**
     The script is `cd src && knex migrate:latest`, which makes knex pick up `src/knexfile.ts`
     (tracked) whose `path.join(__dirname, '/knex/db/migrations')` resolves to
     `src/knex/db/migrations` — a directory that does not exist. It fails with
@@ -212,7 +227,7 @@ These are facts discovered while reading the code, kept here so nobody re-derive
     from the repo root works. That is how migration `3033` was applied. Either delete
     `src/knexfile.ts` or change the npm script — needs PO approval since it touches tooling.
 
-18. **Out of scope but present:** the frontend repo added `docs/BACKEND_FEEDBACK_02APR2026.md`
+19. **Out of scope but present:** the frontend repo added `docs/BACKEND_FEEDBACK_02APR2026.md`
     (413 lines), `BACKEND_FEEDBACK_LOGIN_USERTYPE.md`, `BACKEND_FIX_STUDENT_REPORT.md`,
     `BACKEND_TODO_25MAR2026.md` and `CLIENT_ISSUES_02APR2026.md`. These predate this scope and
     are **not** part of the 24/jul/2026 extension. Do not silently fold them in.

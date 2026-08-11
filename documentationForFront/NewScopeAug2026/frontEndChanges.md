@@ -43,6 +43,8 @@ frontend work didn't exist.
 | 8 | 7 | `POST /goals`, `PUT /goals/:id` | `bHasSubGoals` + `iTargetPercentage` now accepted — `POST /goals` previously **rejected** the frontend payload | 🟢 fixed backend-side |
 | 9 | 3 | **Every school endpoint** | New **HTTP 402** when the school is `SUSPENDED` for non-payment — handle it like a block, not a generic error | 🟡 adapt |
 | 10 | 3 | `POST/PUT /schools`, login | Tariff fields + `sBillingStatus` accepted/returned — already matches what the frontend sends | 🟢 none |
+| 11 | 3 | **Environment** | Set `NUXT_PUBLIC_STRIPE_PK` to the publishable key, or card entry cannot work | 🔴 breaking |
+| 12 | 3 | `/billing/*` | All 8 endpoints live and match the guide — no change needed | 🟢 none |
 
 Severity: 🔴 breaking (integration fails without it) · 🟡 rename/adapt · 🟢 nice-to-have
 
@@ -289,6 +291,52 @@ No change needed. Recorded so nobody re-checks:
   your `computeMonthlyTotal()` in `app/utils/billing.ts` — same discount clamping, same rounding,
   and VARIABLE computed on `iUsersLimit`/`iStudentsLimit`, never the real user count. Verified
   identical: 500×10 + 200×40 − 10% = **11,700**. Keep using yours for the preview.
+
+### 11. P3 — Set `NUXT_PUBLIC_STRIPE_PK` 🔴
+
+Card entry runs entirely in the browser through Stripe.js, so the **publishable** key must be in the
+frontend environment. `nuxt.config.ts` already wires
+`runtimeConfig.public.stripePublishableKey`; it just needs a value.
+
+```
+NUXT_PUBLIC_STRIPE_PK=pk_test_...        # ask the backend team, or read it from .env
+```
+
+Without it, `stripe.confirmCardSetup()` cannot initialise and `BillingCardForm.vue` shows its
+placeholder state — the rest of the billing panel still works, since summary, history and cancel
+need no Stripe.js.
+
+⚠️ **Test and live keys differ.** The current value is `pk_test_…`. Going live needs the `pk_live_…`
+one, swapped at the same time as the backend's secret key.
+
+### 12. P3 — Billing endpoints: all live, no change needed 🟢
+
+Implemented exactly as `GUIA_BACKEND_AMPLIACION.md` §P3 specifies. Recorded so nobody re-checks:
+
+| Endpoint | Envelope | Note |
+|---|---|---|
+| `GET /billing/summary` | **`results`** | matches `data?.results \|\| data?.oData \|\| data` at `index.vue:138` |
+| `GET /billing/payment-methods` | **`aData`** | `{ sPaymentMethodId, sBrand, sLast4, iExpMonth, iExpYear, bDefault }` |
+| `GET /billing/payments` | **`aData`** | `{ sPaymentId, dAmount, sCurrency, tPaidAt, sStatus, sCardBrand, sLast4, sStripeTransactionId }` |
+| `POST /billing/setup-intent` | `sClientSecret` | |
+| `POST /billing/payment-methods` | `message` | body `{ sPaymentMethodId }` |
+| `PUT /billing/payment-methods/:id/default` | `message` | |
+| `DELETE /billing/payment-methods/:id` | `message` | |
+| `POST /billing/cancel` | `message` | |
+
+`sStatus` on a payment is lowercase — `succeeded` / `failed` / `pending` — matching your `IPayment`
+type. `dMonthlyTotal` in the summary is the **official** amount; keep using your
+`computeMonthlyTotal()` for the preview, they agree exactly.
+
+**Three behaviours worth knowing:**
+
+1. **Only the school's main user can mutate.** Adding, switching or removing a card, and cancelling,
+   all return **403** for any other user. Your page already restricts itself to SchoolAdmin; this is
+   the server-side equivalent. FACULTY cannot reach `/billing/*` at all.
+2. **Deleting the only card is refused with 409** while the subscription is live — it would
+   guarantee the next renewal fails and suspend the school. Show the message; the way out is Cancel.
+3. **`503` means billing is unconfigured on the server** (no Stripe key), not a user error. Worth
+   distinguishing in the UI from a real failure.
 
 ---
 

@@ -7,9 +7,9 @@
     "start": "node dist/server.js",
     "dev": "ts-node-dev --transpile-only src/server.ts",
     "build": "babel src --out-dir dist --extensions \".ts\" --copy-files",
-    "db:rollback": "cd src && knex migrate:rollback",
-    "db:migrations": "cd src && knex migrate:latest",
-    "db:seeds": "cd src && knex seed:run",
+    "db:rollback": "knex migrate:rollback",
+    "db:migrations": "knex migrate:latest",
+    "db:seeds": "knex seed:run",
     "migrate-script": "ts-node-dev --transpile-only migrationScript.ts",
     "update-prod-migrations": "NODE_ENV=production ts-node-dev --transpile-only productionMigrationUpdate.ts"
   },

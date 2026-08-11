@@ -2,7 +2,7 @@
 
 **For:** the frontend team, QA, and anyone picking this up later
 **Backend branch:** `features02Aug2026`
-**Last updated:** 2026-08-07
+**Last updated:** 2026-08-11
 
 Plain-language explanation of **how each feature actually works on the backend**: what was stored,
 where, which endpoints exist, and what the frontend gets back. No backend knowledge assumed.
@@ -54,6 +54,15 @@ One table for the whole integration. Paths are as the frontend calls them; the a
 | `PUT` | `/subGoals/:sSubGoalId` | 200 | `oData` | P7 |
 | `DELETE` | `/subGoals/:sSubGoalId` | 200 | `message` | P7 |
 | `GET` | `/subGoals/:sSubGoalId/trackingRecords` | 200 | **`aData`** | P7 |
+| `GET` | `/billing/summary` | 200 | **`results`** | P3 |
+| `GET` | `/billing/payments` | 200 | **`aData`** | P3 |
+| `GET` | `/billing/payment-methods` | 200 | **`aData`** | P3 |
+| `POST` | `/billing/setup-intent` | 200 | `sClientSecret` | P3 |
+| `POST` | `/billing/payment-methods` | 201 | `message` | P3 |
+| `PUT` | `/billing/payment-methods/:sPaymentMethodId/default` | 200 | `message` | P3 |
+| `DELETE` | `/billing/payment-methods/:sPaymentMethodId` | 200 | `message` | P3 |
+| `POST` | `/billing/cancel` | 200 | `message` | P3 |
+| `POST` | `/billing/webhook` | 200 | Stripe only — **no `sLang`, no auth** | P3 |
 
 ### Existing endpoints that changed
 
@@ -70,6 +79,10 @@ One table for the whole integration. Paths are as the frontend calls them; the a
 | `PUT` | `/schools/:sSchoolId` | accepts `sAccountType`; **omitting it preserves the current value** | P5 |
 | `GET` | `/schools/:sSchoolId` | returns `sAccountType` | P5 |
 | `POST` | `/auth/login` | `oSchool.sAccountType` added | P5 |
+| `POST` | `/auth/login` | `oSchool.sBillingStatus` added | P3 |
+| `POST`/`PUT` | `/schools` | tariff fields accepted; `PUT` also returns `bStripeSynced` | P3 |
+| `GET` | `/schools/:sSchoolId` | returns the tariff **and** `sBillingStatus` | P3 |
+| **all school endpoints** | — | **new 402** when the school is `SUSPENDED` | P3 |
 
 ### Endpoints now blocked for `THERAPIST` accounts (403)
 
@@ -103,7 +116,7 @@ Still allowed: reading/deleting existing files, student photos, account logo.
 | 8 | Help types | ✅ **Built** | Yes — `TrackingRecordHelps` | 0 (extends existing 3) |
 | 5 | Therapist mode | ✅ **Built** | No — 1 new column on `Schools` | 0 (extends existing) + 4 gated |
 | 7 | Subgoals | ✅ **Built** | No — `Goals` gains a parent link | 5 new + 3 extended |
-| 3 | Billing (Stripe) | ⬜ Not started | Yes — `Payments` + columns on `Schools` | ~8 + webhook |
+| 3 | Billing (Stripe) | ✅ **Built** | Yes — `Payments` + 12 columns on `Schools` | 8 + webhook |
 | 11 | Goal-writing guide | ➖ Frontend only | — | — |
 | 13 | Trainings module | ➖ Frontend only | — | — |
 
@@ -605,11 +618,133 @@ preserving untouched fields, `PAUSED` accepted, delete cascading to records, and
 ids and for using a goal id on a subgoal route. Test data removed afterwards; zero leftover subgoal
 rows and zero counter drift.
 
-# ⬜ Punto 3 — Billing with Stripe *(not started)*
+# ✅ Punto 3 — Billing with Stripe
 
-Planned: billing columns on `Schools`, a `Payments` history table, card management through Stripe
-(card numbers never touch our servers), monthly recurring charges, failure retries, and account
-suspension. Roughly 8 endpoints plus a Stripe webhook. Documented here once built.
+### What it does, in one paragraph
+
+The superadmin sets a monthly price for a school. The school's main user adds a card, which starts a
+Stripe subscription with a **30-day free trial**. From then on Stripe charges the card every month,
+each charge lands in a payment history the school can see, and if a charge fails the system retries
+twice before marking the account delinquent, emailing the main user and **cutting off access for
+every user of that school** until the payment goes through. The main user can cancel at any time and
+keeps access until the date already paid for.
+
+### What was created
+
+**A `Payments` table** — one row per charge attempt (amount, date, status, card brand, last 4,
+Stripe transaction id). Written only by the Stripe webhooks, never by a user.
+
+**Twelve columns on `Schools`** — five for the tariff (`sBillingMode`, `dFixedAmount`,
+`dAmountPerTeacher`, `dAmountPerStudent`, `dDiscountPct`) and seven for subscription state
+(`sBillingStatus`, `sStripeCustomerId`, `sStripeSubscriptionId`, `sStripePriceId`,
+`tCurrentPeriodEnd`, `bCancelAtPeriodEnd`, `iFailedAttempts`).
+
+### The two pricing modes
+
+| Mode | Amount |
+|---|---|
+| `FIXED` | `dFixedAmount` |
+| `VARIABLE` | `dAmountPerTeacher × iUsersLimit + dAmountPerStudent × iStudentsLimit` |
+
+Both then apply `dDiscountPct` (0–100). **`VARIABLE` uses the configured *limits*, never the real
+number of registered users** — the contract requires this explicitly, so a school cannot delete
+users the day before billing to shrink its invoice.
+
+`GET /billing/summary` returns `dMonthlyTotal`, which is **the official amount**. Your
+`computeMonthlyTotal()` in `app/utils/billing.ts` is a mirror of the same formula for previewing —
+verified identical on both sides (500×10 + 200×40 − 10% = **11,700**).
+
+### Card data never touches our servers
+
+1. Front-end calls `POST /billing/setup-intent` → gets `sClientSecret`
+2. Front-end calls `stripe.confirmCardSetup()` — the card is typed into **Stripe's** iframe
+3. Front-end sends only the resulting `sPaymentMethodId` to `POST /billing/payment-methods`
+
+No card number, expiry or CVC appears in any request to this API, or in any validation schema. That
+keeps the backend out of PCI scope entirely.
+
+### The six statuses, and which one blocks
+
+| Status | Access | Meaning |
+|---|---|---|
+| `NONE` | ✅ | never billed — **all 12 existing schools** |
+| `TRIALING` | ✅ | inside the 30-day free trial |
+| `ACTIVE` | ✅ | paid up |
+| `PAST_DUE` | ✅ | a charge failed, retries still running — warn, don't lock out |
+| **`SUSPENDED`** | ⛔ **402** | retries exhausted |
+| `CANCELED` | ✅ | cancelled, but paid until the cut-off date |
+
+### Business rules enforced
+
+1. **Only the school's main user** (`Users.sCreatedBy IS NULL`) can add, change or remove a card, or
+   cancel. Everyone else gets 403. FACULTY cannot reach billing at all.
+2. **The first card starts the subscription** — with the 30-day trial — but only if a chargeable
+   tariff exists.
+3. **Tariff changes apply from the next cycle only.** Changing a price (or a limit, under
+   `VARIABLE`) creates a new Stripe price and repoints the subscription with **no proration**, so
+   the period already invoiced is never re-priced. Verified: the upcoming invoice contains zero
+   proration lines.
+4. **Two retries, then suspension** — initial attempt plus 2 retries. On the third failure the
+   school becomes `SUSPENDED` immediately, with **no grace period**, and the main user is emailed.
+   Counted in our own code, so the rule holds regardless of Stripe's dashboard retry settings.
+5. **A successful charge always restores access** and resets the failure counter.
+6. **Cancellation never refunds** and never cuts access early — it sets `cancel_at_period_end`, so
+   the school keeps working until `tCurrentPeriodEnd`.
+7. **You cannot delete your only card while the subscription is live** (409). Doing so would
+   guarantee the next renewal fails and suspend the school. *This rule is not in the contract — it
+   protects the customer from locking themselves out.*
+8. **Suspended schools can still file support tickets.** Deliberately the one thing that keeps
+   working, since it is their only route to a human.
+
+### The webhook
+
+```
+POST {env}/api/v1/billing/webhook
+```
+
+Note what's missing: **no `sLang` segment and no authentication.** Stripe calls a fixed URL, sends
+no language, and carries no token — it authenticates by signing the request body, which the server
+verifies against `STRIPE_WEBHOOK_SECRET`. A forged or missing signature is rejected with 400.
+
+It handles `invoice.paid`, `invoice.payment_failed`, `customer.subscription.updated` and
+`customer.subscription.deleted`, and **always answers 200 once the signature is valid** — a non-2xx
+would make Stripe retry the same event for days, so a bug in our handling must not become a retry
+storm.
+
+**Redelivery is safe.** Stripe may send the same event more than once; payments are keyed on a
+unique Stripe transaction id, so a redelivery updates rather than duplicates. Verified by sending
+the same event three times and confirming exactly one row.
+
+### No cron job
+
+The front-end guide suggested a scheduler for the monthly charge. There isn't one, and shouldn't be:
+Stripe Subscriptions drive the recurrence themselves. A cron would duplicate that and risk
+double-charging.
+
+### How it was verified
+
+**98 checks**, of which **74 against the live Stripe API** (test-mode account, `livemode: false`):
+
+- cards & subscription (36): lazy customer creation, SetupIntent, trial measured at exactly 30 days,
+  price stored as `1170000` centavos / `mxn` / monthly, default switching propagating to the
+  subscription, last-card deletion refused, another customer's card rejected, cancel not cancelling
+  outright
+- webhooks & dunning (31): forged signature rejected; failures 1–2 → `PAST_DUE` with access intact;
+  failure 3 → `SUSPENDED` + 402 while support tickets still work; `invoice.paid` restoring access;
+  redelivery not duplicating; all four status mappings
+- tariff sync (7): 10,000 → 15,000 repriced in Stripe; limits change 11,700 → 16,200; zero proration
+  lines; a no-op change skipped
+- and 24 more with no Stripe key at all, confirming the module fails cleanly (503) when unconfigured
+
+Every Stripe object created in testing was deleted, and the database restored and re-queried.
+
+### ⚠️ Still needed before this can go live
+
+| | |
+|---|---|
+| `STRIPE_WEBHOOK_SECRET` | Not set yet. Signature logic is proven, but real deliveries need a webhook endpoint registered in the Stripe dashboard and its `whsec_…` in the environment. |
+| `NUXT_PUBLIC_STRIPE_PK` | The front-end needs the publishable key (`pk_test_…`) for Stripe.js. |
+| Live keys | Test mode charges nothing. Going live needs `sk_live_`/`pk_live_` **and a second webhook endpoint** — live and test secrets are different. |
 
 ---
 
@@ -661,5 +796,22 @@ Everything here was a conscious choice, not an oversight. Each row says **who ow
 | `SUPPORT_EMAIL` | `info@myvillage.com.mx` | P10 | Where tickets are emailed |
 | `SUPPORT_SMS_ENABLED` | *(off)* | P10 | `true` turns on the SMS heads-up |
 | `SUPPORT_PHONE` | *(none)* | P10 | Destination number for that SMS |
+| `STRIPE_PRIVATE_KEY` | *(required for P3)* | P3 | Secret key. Billing endpoints return **503** without a real one |
+| `STRIPE_PUBLIC_KEY` | *(required for P3)* | P3 | Publishable key; the frontend needs the same value as `NUXT_PUBLIC_STRIPE_PK` |
+| `STRIPE_WEBHOOK_SECRET` | *(required for P3)* | P3 | `whsec_…` from the Stripe dashboard webhook endpoint. Without it the webhook returns 503 rather than trusting unverified events |
 
-All optional — the features work with none of them set.
+P10's are all optional. **P3's three are required** for billing to function — without them the
+billing endpoints fail cleanly with 503 and nothing else is affected.
+
+### Setting up the Stripe webhook
+
+1. Stripe Dashboard → **Developers → Webhooks → Add endpoint** (with **Test mode** on)
+2. URL: `https://api.myvillage.com.mx/development/api/v1/billing/webhook` — note there is **no**
+   `/sp` or `/en` segment
+3. Events: `invoice.paid`, `invoice.payment_failed`, `customer.subscription.updated`,
+   `customer.subscription.deleted`
+4. Reveal the **Signing secret** and put it in `STRIPE_WEBHOOK_SECRET`
+5. Restart the process — `.env` is read at boot, so no rebuild is needed
+
+Locally, `stripe listen --forward-to localhost:3000/development/api/v1/billing/webhook` prints a
+temporary secret instead. **Test and live webhooks are separate endpoints with different secrets.**

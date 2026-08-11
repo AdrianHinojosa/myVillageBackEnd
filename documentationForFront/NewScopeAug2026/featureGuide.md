@@ -39,6 +39,62 @@ something useful without the frontend inspecting the error.
 
 ---
 
+# API quick reference — everything new or changed
+
+One table for the whole integration. Paths are as the frontend calls them; the axios base adds
+`{env}/api/v1/{sLang}`. All require `Authorization: Bearer <token>`.
+
+### New endpoints
+
+| Method | Path | Success | Returns | Feature |
+|---|---|---|---|---|
+| `POST` | `/support/ticket` | 200 | `message` | P10 |
+| `GET` | `/goals/:sGoalId/subGoals` | 200 | **`aData`** (array) | P7 |
+| `POST` | `/goals/:sGoalId/subGoals` | 201 | `oData` (object) | P7 |
+| `PUT` | `/subGoals/:sSubGoalId` | 200 | `oData` | P7 |
+| `DELETE` | `/subGoals/:sSubGoalId` | 200 | `message` | P7 |
+| `GET` | `/subGoals/:sSubGoalId/trackingRecords` | 200 | **`aData`** | P7 |
+
+### Existing endpoints that changed
+
+| Method | Path | What changed | Feature |
+|---|---|---|---|
+| `POST` | `/goals` | now accepts `bHasSubGoals`, `iTargetPercentage` — **previously rejected the whole payload** | P7 |
+| `PUT` | `/goals/:sGoalId` | same two fields | P7 |
+| `GET` | `/goals/:sGoalId` | now returns `bHasSubGoals` | P7 |
+| `PATCH` | `/goals/:sGoalId/complete` | `sStatus` now also accepts `PAUSED` | P7 |
+| `POST` | `/trackingRecords` | takes `sGoalId` **xor** `sSubGoalId`; accepts `aHelpTypes`; a **divided** goal refuses `sGoalId` (409) | P7 · P8 |
+| `PUT` | `/trackingRecords/:sTrackingRecordId` | accepts `aHelpTypes` (replaces the set) | P8 |
+| `GET` | `/goals/:sGoalId/trackingRecords` | every record now carries `aHelpTypes` | P8 |
+| `POST` | `/schools` | accepts `sAccountType` | P5 |
+| `PUT` | `/schools/:sSchoolId` | accepts `sAccountType`; **omitting it preserves the current value** | P5 |
+| `GET` | `/schools/:sSchoolId` | returns `sAccountType` | P5 |
+| `POST` | `/auth/login` | `oSchool.sAccountType` added | P5 |
+
+### Endpoints now blocked for `THERAPIST` accounts (403)
+
+| Method | Path | Rule |
+|---|---|---|
+| `POST` | `/schoolUsers` | single user — cannot create more |
+| `POST` | `/iep` | cannot use the IEP module |
+| `GET` | `/iep` | cannot view it either |
+| `POST` | `/goals/:sGoalId/goalFiles` | no document uploads |
+| `POST` | `/trackingRecords/:sTrackingRecordId/files` | no document uploads |
+
+Still allowed: reading/deleting existing files, student photos, account logo.
+
+### Status codes used throughout
+
+| Code | Meaning |
+|---|---|
+| `200` / `201` | success — `201` on create, `200` otherwise |
+| **`409`** | **validation failure** (this project's convention, not 400) or a business-rule refusal. `message` is localized and explains which. |
+| `403` | permission denied, or blocked for a therapist account |
+| `404` | resource not found, or not yours |
+| `401` | token missing / invalid / expired |
+
+---
+
 # Status at a glance
 
 | # | Feature | Backend state | New table? | New endpoints |
@@ -397,7 +453,7 @@ therapist currently sees a control whose endpoint now returns 403. It must be ga
 ### One thing the front-end should tidy up
 
 The student detail page calls `fetchIep()` **unconditionally**, including for therapists
-([`students/[id]/index.vue:335`](../../../myVillage/app/pages/admin/students/[id]/index.vue#L335)).
+(`app/pages/admin/students/[id]/index.vue:335`, in the frontend repo).
 That call now returns `403`. It's harmless — the request is `silent: true` with an empty
 `.catch()`, so nothing appears on screen — but it's a pointless failing request in the console.
 Skip it when in therapist mode.
@@ -459,6 +515,35 @@ jumped to **90**.
 | `POST /trackingRecords` with `sSubGoalId` | log a record against a subgoal |
 | `GET /goals/:sGoalId` | now returns `bHasSubGoals` |
 | `POST` / `PUT /goals` | now accept `bHasSubGoals` and `iTargetPercentage` |
+
+**Creating or editing a subgoal** — the body is a goal body; everything is optional:
+
+```jsonc
+// POST /goals/:sGoalId/subGoals   ·   PUT /subGoals/:sSubGoalId
+{
+  "sDescription": "Trimestre 1 — reconocer 10 palabras",
+  "tStartDate":  "2026-08-01",
+  "tTargetDate": "2026-10-31",
+  "iTargetValue": 50,
+  "iTargetPercentage": 80,        // 0–100
+  "iScaleMin": 1, "iScaleMax": 5, // ESCALA goals
+  "iBaselineValue": 10,           // when sDirection is DECREASE
+  "sDirection": "INCREASE",       // INCREASE | DECREASE
+  "iTargetOpportunities": 20,     // OPORTUNIDAD goals
+  "sFrequencyUnit": "día",
+  "sStatus": "ACTIVE",            // ACTIVE | COMPLETED | NOT_ACHIEVED | PAUSED
+  "tCompletedDate": null,         // set when closing a stage
+  "sCompletionNotes": "",
+  "aTasks": [ { "sTitle": "Tarea 1", "iOrder": 0 } ]   // TAREAS goals
+}
+```
+
+`sTitle`, `sMeasurementType`, `bHasSubGoals` and `aDocuments` may be sent — they are **accepted and
+ignored**, so reusing `GoalForm.vue` never triggers a validation error. Title and measurement type
+always come from the parent.
+
+**On `PUT`, only the fields you send are changed.** Omitted fields keep their stored values, so
+partial edits are safe.
 
 **Every subgoal carries both ids:**
 

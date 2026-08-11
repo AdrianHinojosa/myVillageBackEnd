@@ -13,11 +13,15 @@ change, actionable on its own.
 
 ---
 
-## Reference point (2026-08-02)
+## Reference point
 
-Verified against **`origin/mainCopy` @ `d560e21`** ("Cobranza automática con Stripe (P3)"), where
-all 7 points are implemented. Entries below were checked against **frontend source**, not only its
-docs — file and line references point into that commit.
+**Backend status: P10, P8, P5 and P7 are built, tested and pushed** to
+`origin/features02Aug2026`. P3 (Stripe) is the only backend point outstanding — nothing in this
+document depends on it. **You can start on these entries now.**
+
+Frontend verified against **`origin/mainCopy` @ `d560e21`** ("Cobranza automática con Stripe (P3)").
+Entries below were checked against **frontend source**, not only its docs — file and line references
+point into that commit. Last reviewed 2026-08-07.
 
 ⚠️ *Note for whoever reads this next:* a local frontend clone goes stale fast. `git fetch` before
 comparing — this backend was initially reading `21feafe` (31/mar) and wrongly concluded the

@@ -16,11 +16,11 @@
 
 | # | Punto | Backend weight | Status | Commit |
 |---|---|---|---|---|
-| 10 | Tickets de soporte | 1 endpoint + SES email + shared auth gate | ✅ Done | `915e3e0` |
-| 8 | Tipos de ayuda | child table `TrackingRecordHelps` (Model B) | ✅ Done | `d16cd4a` |
-| 5 | Modo terapeuta | 1 column + login payload + enforcement | ✅ Done | `3d9e44d` |
-| 7 | Submetas | schema + endpoints + calculated fields | ✅ Done | `c303c03` + `a891f2b` |
-| 3 | Cobranza automática (Stripe) | full module + webhooks + dunning | ⛔ Blocked — Q7/Q8/Q11/Q12 | — |
+| 10 | Tickets de soporte | 1 endpoint + SES email + shared auth gate | ✅ Done | `271e9a1` |
+| 8 | Tipos de ayuda | child table `TrackingRecordHelps` (Model B) | ✅ Done | `e1efd72` |
+| 5 | Modo terapeuta | 1 column + login payload + enforcement | ✅ Done | `4a8a577` |
+| 7 | Submetas | schema + endpoints + calculated fields | ✅ Done | `c303c03` + `58a6534` |
+| 3 | Cobranza automática (Stripe) | full module + webhooks + dunning | ⬜ Not started — buildable on test keys; **live keys needed to ship** | — |
 | 11 | Guía de creación de metas | none (frontend only) | ➖ N/A backend | — |
 | 13 | Módulo de capacitaciones | none (frontend only) | ➖ N/A backend | — |
 
@@ -37,10 +37,10 @@ Weighted by the contract's own prices (what the client actually paid per point).
 | # | Punto | Price | Backend done | Notes |
 |---|---|---|---|---|
 | 10 | Tickets de soporte | $8,000 | ✅ **100%** | shipped `271e9a1` |
-| 8 | Tipos de ayuda | $14,000 | ✅ **100%** | `d16cd4a` — child table + array wire + legacy shim, 39 checks green |
-| 5 | Modo terapeuta | $14,000 | ✅ **100%** | `3d9e44d` — column + login + enforcement, verified end-to-end |
+| 8 | Tipos de ayuda | $14,000 | ✅ **100%** | `e1efd72` — child table + array wire + legacy shim, 39 checks green |
+| 5 | Modo terapeuta | $14,000 | ✅ **100%** | `4a8a577` — column + login + enforcement, verified end-to-end |
 | 7 | Submetas | $24,000 | ✅ **100%** | `Goals` + `sParentGoalId`, 5 endpoints, 12 leak guards, 39 checks green |
-| 3 | Cobranza (Stripe) | $70,000 | ⬜ 0% | **blocked** — Q7/Q8/Q11/Q12 |
+| 3 | Cobranza (Stripe) | $70,000 | ⬜ 0% | last point; buildable now on test keys |
 | 11 | Guía de metas | $5,500 | ➖ n/a | frontend only |
 | 13 | Capacitaciones | $11,000 | ➖ n/a | frontend only |
 
@@ -51,7 +51,7 @@ Weighted by the contract's own prices (what the client actually paid per point).
 **32% is the honest figure**; 46% flatters it. Plainly: *four of five backend points done. The one
 that remains — P3 Stripe — is 54% of contract value and ~68% of the remaining backend effort.*
 
-### Overall project (frontend + backend): ~50%
+### Overall project (frontend + backend): ~62%
 
 | Side | Est. share of scope | Complete | Contribution |
 |---|---|---|---|
@@ -128,13 +128,14 @@ These are facts discovered while reading the code, kept here so nobody re-derive
    exact 8 help types of Punto 8. It is never read or written by any query. Punto 8 should adopt
    it instead of adding the frontend's proposed new `sHelpType` column.
 
-5. **`Goals.sStatus` cannot be set to `PAUSED` through the API.** DB comment allows
-   `ACTIVE | COMPLETED | NOT_ACHIEVED | PAUSED`, but `CompleteGoalBody` only validates
-   `COMPLETED | NOT_ACHIEVED | ACTIVE`. Punto 7 requires `PAUSED` for subgoals, and the
-   frontend's `ISubGoal.sStatus` type includes it.
+5. **`Goals.sStatus` could not be set to `PAUSED` through the API — FIXED in `58a6534`.** The DB
+   comment allowed `ACTIVE | COMPLETED | NOT_ACHIEVED | PAUSED` but `CompleteGoalBody` validated
+   only three, so `PAUSED` was unreachable. Added for goals, and subgoals accept all four via
+   `PUT /subGoals/:sSubGoalId`.
 
-6. **`Goals` has no `iTargetPercentage` column**, although the signed PDF lists "porcentaje
-   objetivo (0–100)" as a subgoal field, the frontend guide repeats it, and `ISubGoal` declares it.
+6. **`Goals` had no `iTargetPercentage` column — FIXED in `c303c03`.** The signed PDF lists
+   "porcentaje objetivo (0–100)" and `ISubGoal` declares it, but the column did not exist. Added to
+   `Goals` (so it serves goals and subgoals alike) and accepted on all four write endpoints.
 
 7. **Progress is denormalized and computed in one place.**
    `Goals.dProgress / dAverageValue / iRecordsCount / tLastRecord` are stored columns, recomputed
@@ -279,7 +280,7 @@ Tracked here as they are asked/answered. See the conversation for full phrasing.
 
 ### Punto 10 — Tickets de soporte ✅
 
-**Commit:** `915e3e0` · **Migration:** none (the scope explicitly excludes persistence)
+**Commit:** `271e9a1` · **Migration:** none (the scope explicitly excludes persistence)
 
 **What it does.** A logged-in user submits subject + message + optional category; the backend
 identifies them from their token, emails the support inbox, and returns a localized confirmation.
@@ -353,7 +354,7 @@ the PO, not done unilaterally.
 
 ### Punto 8 — Tipos de ayuda ✅
 
-**Commit:** `d16cd4a` · **Migration:** `3034_TrackingRecordHelps.ts` (applied to `development`)
+**Commit:** `e1efd72` · **Migration:** `3034_TrackingRecordHelps.ts` (applied to `development`)
 
 **What it does.** Each tracking record can document several kinds of support, each scored 0–10.
 Purely documental — it must never move progress, average or record count, and that is *proved*
@@ -420,7 +421,7 @@ omitting it **preserves** it.
 
 ### Punto 5 — Modo terapeuta ✅
 
-**Commit:** `3d9e44d` · **Migration:** `3033_Schools_sAccountType.ts` (applied to `development`)
+**Commit:** `4a8a577` · **Migration:** `3033_Schools_sAccountType.ts` (applied to `development`)
 
 **What it does.** An account is `SCHOOL` or `THERAPIST`. The superadmin sets it; login exposes it
 so the frontend can switch terminology; and the backend **enforces** the three restrictions the
@@ -483,7 +484,7 @@ backfilled to `SCHOOL` by the default — verified post-migration.
 
 ### Punto 7 — Submetas 🔄 (in progress)
 
-**Commits:** `c303c03` (schema + guards) · `a891f2b` (endpoints) · **Migration:** `3035_Goals_subGoals.ts`
+**Commits:** `c303c03` (schema + guards) · `58a6534` (endpoints) · **Migration:** `3035_Goals_subGoals.ts`
 
 #### Step 1 of 2 — schema + leak-proofing ✅
 
@@ -597,12 +598,12 @@ Anything we build differently from the PDF gets logged here with who approved it
 |---|---|---|
 | `db2ea9c` | — | Scope kickoff: working-agreement skill, CLAUDE.md pointers, both trackers |
 | `7a01cd7` | — | Corrected kickoff findings against the real frontend (`d560e21`); re-mirrored the guides; registered the invocable skill |
-| `915e3e0` | **10** | `POST /support/ticket` + SES template + `verifyAnyAuthenticatedUser()` gate; SMS wired but disabled |
+| `271e9a1` | **10** | `POST /support/ticket` + SES template + `verifyAnyAuthenticatedUser()` gate; SMS wired but disabled |
 | `3c5e4d8` | — | `featureGuide.md` (plain-language feature doc) + resolved decisions |
 | `07f535c` | — | Measured progress recorded in the tracker |
 | `4a8a577` | **5** | `Schools.sAccountType` + login payload + `denyTherapistAccess()` on 4 endpoints |
 | `a0dd135` | 10 | Enabled support SMS (+528181377416); fixed two latent bugs in `SMS.services.ts` |
-| `d16cd4a` | **8** | `TrackingRecordHelps` child table + `aHelpTypes` wire + legacy shim; **fixed the 500-on-validation crash shipped in P10/P5** |
+| `e1efd72` | **8** | `TrackingRecordHelps` child table + `aHelpTypes` wire + legacy shim; **fixed the 500-on-validation crash shipped in P10/P5** |
 | `d657335` | 5 / build | `@babel/runtime` dependency (deployment unblocked) + therapists blocked from record-file uploads |
 | `c303c03` | **7** | Subgoal schema + 12 leak guards across goals/students/schools |
-| `a891f2b` | **7** | SubGoals module: 5 endpoints + 3 integration fixes + business rules |
+| `58a6534` | **7** | SubGoals module: 5 endpoints + 3 integration fixes + business rules |

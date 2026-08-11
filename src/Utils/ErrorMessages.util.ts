@@ -325,6 +325,34 @@ export default {
         },
     },
 
+    // ==== Billing (P3): =======
+    Billing: {
+        stripeNotConfigured: {
+            sp: "El módulo de cobranza no está configurado. Contacta al administrador.",
+            en: "The billing module is not configured. Please contact the administrator."
+        },
+        onlyMainUser: {
+            sp: "Solo el usuario principal del colegio puede administrar los métodos de pago y la suscripción.",
+            en: "Only the school's main user can manage payment methods and the subscription."
+        },
+        paymentMethodNotFound: {
+            sp: "La tarjeta especificada no existe o no pertenece a tu colegio.",
+            en: "The specified card does not exist or does not belong to your school."
+        },
+        cannotRemoveLastCard: {
+            sp: "No puedes eliminar tu única tarjeta mientras la suscripción esté activa. Registra otra tarjeta primero o cancela la suscripción.",
+            en: "You cannot remove your only card while the subscription is active. Add another card first, or cancel the subscription."
+        },
+        noSubscription: {
+            sp: "Tu colegio no tiene una suscripción activa que cancelar.",
+            en: "Your school has no active subscription to cancel."
+        },
+        noTariff: {
+            sp: "Tu colegio no tiene una tarifa configurada. Contacta al administrador.",
+            en: "Your school has no configured tariff. Please contact the administrator."
+        },
+    },
+
     // ==== Support: =======
     Support: {
         reporterNotFound: {

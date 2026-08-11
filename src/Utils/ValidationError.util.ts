@@ -779,6 +779,14 @@ export default {
             },
         },
 
+        // P3 — Cobranza
+        Billing: {
+            sPaymentMethodId: {
+                sp: "Por favor, selecciona una tarjeta válida.",
+                en: "Please, select a valid card."
+            },
+        },
+
         // P10 — Tickets de soporte
         Support: {
             sSubject: {

@@ -58,7 +58,15 @@ const Port: number | string = process.env.NODE_PORT || 3000;
 const ProjectName: string = process.env.PROJECT_NAME;
 
 /**Middlewares */
-app.use(express.json());
+// P3 — Stripe webhooks verify a signature computed over the EXACT request bytes, which the JSON
+// parser would otherwise discard. The `verify` hook stashes them on the request for
+// stripe.webhooks.constructEvent(). Done here rather than by reordering routes so that nothing
+// about the existing middleware chain changes.
+app.use(express.json({
+    verify: (req: any, res, buf) => {
+        if (buf && buf.length) req.rawBody = buf;
+    }
+}));
 app.use(express.urlencoded({ extended: true }));
 app.use(helmet());
 app.use(logger('combined'));

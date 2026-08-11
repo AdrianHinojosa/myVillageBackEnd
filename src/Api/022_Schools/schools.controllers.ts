@@ -8,6 +8,7 @@ import ErrorMessages from '../../Utils/ErrorMessages.util';
 import Services from '../../Services/Index.services';
 import mailer from '../../Services/Mail.service';
 import StorageServices from '../../Services/Storage.services';
+import { syncSubscriptionTariff } from '../030_Billing/billing.controllers';
 
 class Controllers {
     constructor() {
@@ -141,9 +142,18 @@ class Controllers {
         // Update school
         const updatedSchool = await SchoolQueries.updateSchool(sSchoolId, { sName, sPhone, sCityId: null, iUsersLimit, iStudentsLimit, sAccountType, sBillingMode, dFixedAmount, dAmountPerTeacher, dAmountPerStudent, dDiscountPct, sLastUpdatedBy })
 
+        // P3 — a tariff or limit change must reach Stripe, or the next renewal would still charge
+        // the old amount. Applied with no proration, so the period already invoiced is untouched
+        // and the new figure takes effect from the next cycle, exactly as the contract requires.
+        // Best-effort: the database is the source of truth, so a Stripe outage must not fail the
+        // superadmin's save. The outcome is reported back rather than silently swallowed.
+        const oSync = await syncSubscriptionTariff(updatedSchool);
+
         return res.status(201).json({
             message: SuccessMessages.Schools.updateSchool[sLang],
             school: updatedSchool,
+            bStripeSynced: oSync.bSynced,
+            sStripeSyncReason: oSync.sReason || null,
             success: true
         })
     }

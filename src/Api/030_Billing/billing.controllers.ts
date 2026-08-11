@@ -239,14 +239,19 @@ class Controllers {
 
         const sCustomerId = await ensureStripeCustomer(oSchool);
 
-        await stripe.paymentMethods.attach(sPaymentMethodId, { customer: sCustomerId });
+        // Use the id from the RESPONSE, not the request. Attaching can yield a different id than
+        // the one supplied — Stripe's shared test payment methods (pm_card_visa and friends) do
+        // exactly that — and referring to the input id afterwards then fails with "the customer
+        // does not have a payment method with the ID …".
+        const oAttached: any = await stripe.paymentMethods.attach(sPaymentMethodId, { customer: sCustomerId });
+        const sAttachedId: string = oAttached?.id || sPaymentMethodId;
 
         // Is this the school's only card? If so it becomes the default.
         const oList = await stripe.paymentMethods.list({ customer: sCustomerId, type: 'card' });
         const bFirstCard = (oList.data || []).length <= 1;
         if (bFirstCard) {
             await stripe.customers.update(sCustomerId, {
-                invoice_settings: { default_payment_method: sPaymentMethodId }
+                invoice_settings: { default_payment_method: sAttachedId }
             });
         }
 
@@ -259,7 +264,7 @@ class Controllers {
             const oSub: any = await stripe.subscriptions.create({
                 customer: sCustomerId,
                 items: [{ price: sPriceId }],
-                default_payment_method: sPaymentMethodId,
+                default_payment_method: sAttachedId,
                 // 30-day free trial — PO instruction 2026-08-07. NOT in the signed scope document.
                 trial_period_days: TRIAL_PERIOD_DAYS,
                 metadata: { sSchoolId }
@@ -408,3 +413,52 @@ class Controllers {
 
 export default new Controllers();
 export { createPriceForSchool, ensureStripeCustomer };
+
+/**
+ * Push a changed tariff onto the school's live Stripe subscription.
+ *
+ * The contract is specific about timing: "Los cambios surtirán efecto a partir del siguiente ciclo
+ * de cobro, sin afectar el monto del ciclo en curso ya facturado o pendiente de cobro" — and for
+ * the variable modality, "No se contemplan ajustes proporcionales (prorrateo) durante el ciclo en
+ * curso". Hence `proration_behavior: 'none'`: the current period is left exactly as invoiced and
+ * the new amount applies from the next renewal.
+ *
+ * Best-effort by design. The database is the source of truth for the tariff, so a Stripe outage
+ * must not fail the superadmin's save; it is logged and can be re-synced. Returns what happened so
+ * the caller can surface it.
+ */
+export async function syncSubscriptionTariff(oSchool: any): Promise<{ bSynced: boolean, sReason?: string }> {
+    if (!isStripeConfigured()) return { bSynced: false, sReason: 'stripe-not-configured' };
+    // Nothing to sync until the school actually has a subscription.
+    if (!oSchool?.sStripeSubscriptionId) return { bSynced: false, sReason: 'no-subscription' };
+
+    try {
+        const dTotal = computeMonthlyTotal(oSchool);
+        if (dTotal <= 0) return { bSynced: false, sReason: 'no-chargeable-tariff' };
+
+        // Skip the round trip when the amount has not actually moved.
+        if (oSchool.sStripePriceId) {
+            const oCurrent: any = await stripe.prices.retrieve(oSchool.sStripePriceId);
+            if (oCurrent?.unit_amount === toStripeAmount(dTotal)) {
+                return { bSynced: false, sReason: 'unchanged' };
+            }
+        }
+
+        const sNewPriceId = await createPriceForSchool(oSchool, dTotal);
+        const oSub: any = await stripe.subscriptions.retrieve(oSchool.sStripeSubscriptionId);
+        const sItemId = oSub?.items?.data?.[0]?.id;
+        if (!sItemId) return { bSynced: false, sReason: 'no-subscription-item' };
+
+        await stripe.subscriptions.update(oSchool.sStripeSubscriptionId, {
+            items: [{ id: sItemId, price: sNewPriceId }],
+            // The whole point: never re-price the period already invoiced.
+            proration_behavior: 'none'
+        });
+
+        await BillingQueries.patchSchoolBilling(oSchool.sSchoolId, { sStripePriceId: sNewPriceId });
+        return { bSynced: true };
+    } catch (error: any) {
+        console.error(`syncSubscriptionTariff failed for school ${oSchool.sSchoolId}:`, error?.message);
+        return { bSynced: false, sReason: 'stripe-error' };
+    }
+}

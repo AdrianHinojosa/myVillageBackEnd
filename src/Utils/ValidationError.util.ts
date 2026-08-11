@@ -225,6 +225,28 @@ export default {
                 sp: "Por favor, ingresa un identificador de escuela correcto.",
                 en: "Please, enter a valid school id."
             },
+            // P3 — Cobranza
+            sBillingMode: {
+                sp: "Por favor, selecciona una modalidad de cobro válida (fija o variable).",
+                en: "Please, select a valid billing mode (fixed or variable)."
+            },
+            dFixedAmount: {
+                sp: "Por favor, ingresa un monto mensual válido.",
+                en: "Please, enter a valid monthly amount."
+            },
+            dAmountPerTeacher: {
+                sp: "Por favor, ingresa un monto por maestro válido.",
+                en: "Please, enter a valid amount per teacher."
+            },
+            dAmountPerStudent: {
+                sp: "Por favor, ingresa un monto por alumno válido.",
+                en: "Please, enter a valid amount per student."
+            },
+            dDiscountPct: {
+                sp: "Por favor, ingresa un porcentaje de descuento entre 0 y 100.",
+                en: "Please, enter a discount percentage between 0 and 100."
+            },
+
             // P5 — Modo terapeuta
             sAccountType: {
                 sp: "Por favor, selecciona un tipo de cuenta válido (colegio o terapeuta).",

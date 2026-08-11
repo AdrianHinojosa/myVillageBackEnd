@@ -14,7 +14,7 @@ class Queries {
     }
 
     // DONE: Insert school
-    static async insertSchool({sName, sPhone, sEmail, sAddress, sCityId, iUsersLimit, iStudentsLimit, sAccountType, sCreatedBy, sAdminName, sLastName, sSecondLastName}: any) {
+    static async insertSchool({sName, sPhone, sEmail, sAddress, sCityId, iUsersLimit, iStudentsLimit, sAccountType, sBillingMode, dFixedAmount, dAmountPerTeacher, dAmountPerStudent, dDiscountPct, sCreatedBy, sAdminName, sLastName, sSecondLastName}: any) {
         return await SchoolsModel.transaction(async (trx) => {
 
             // Insert into School table
@@ -28,6 +28,13 @@ class Queries {
                 iStudentsLimit,
                 // P5 — SCHOOL unless the superadmin explicitly asked for a therapist account
                 sAccountType: sAccountType || 'SCHOOL',
+                // P3 — tariff. sBillingStatus stays at its 'NONE' default: a school only enters
+                // billing once it also has a payment method and a subscription.
+                sBillingMode: sBillingMode || 'FIXED',
+                dFixedAmount: dFixedAmount ?? null,
+                dAmountPerTeacher: dAmountPerTeacher ?? null,
+                dAmountPerStudent: dAmountPerStudent ?? null,
+                dDiscountPct: dDiscountPct ?? null,
                 bBlocked: false,
                 sCreatedBy,
                 bActive: true
@@ -59,7 +66,7 @@ class Queries {
     }
 
     // Done: Update school
-    static async updateSchool(sSchoolId, {sName, sPhone, sCityId, iUsersLimit, iStudentsLimit, sAccountType, sLastUpdatedBy}) {
+    static async updateSchool(sSchoolId, {sName, sPhone, sCityId, iUsersLimit, iStudentsLimit, sAccountType, sBillingMode, dFixedAmount, dAmountPerTeacher, dAmountPerStudent, dDiscountPct, sLastUpdatedBy}) {
 
         return await SchoolsModel.transaction(async (trx) => {
             // Only patch sAccountType when it was actually sent — omitting it must not reset the type
@@ -74,6 +81,14 @@ class Queries {
             if (sAccountType) {
                 oPatch.sAccountType = sAccountType;
             }
+            // P3 — only patch tariff fields the caller actually sent, so a partial school edit
+            // cannot silently wipe a configured tariff. Per the contract, a change here takes
+            // effect from the NEXT billing cycle; the current period is never re-priced.
+            if (sBillingMode) oPatch.sBillingMode = sBillingMode;
+            if (dFixedAmount !== undefined) oPatch.dFixedAmount = dFixedAmount;
+            if (dAmountPerTeacher !== undefined) oPatch.dAmountPerTeacher = dAmountPerTeacher;
+            if (dAmountPerStudent !== undefined) oPatch.dAmountPerStudent = dAmountPerStudent;
+            if (dDiscountPct !== undefined) oPatch.dDiscountPct = dDiscountPct;
 
             // Update school
             let updatedSchool =  await SchoolsModel.query(trx).patchAndFetchById(sSchoolId, oPatch).where('bActive', true);

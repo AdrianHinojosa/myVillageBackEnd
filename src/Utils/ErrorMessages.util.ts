@@ -177,6 +177,11 @@ export default {
             en: "This feature is not available on therapist accounts."
         },
 
+        billingSuspended: {
+            sp: "La suscripción de tu colegio está suspendida por falta de pago. Regulariza el pago para restaurar el acceso.",
+            en: "Your school's subscription is suspended for non-payment. Settle the payment to restore access."
+        },
+
         bBlockedPermission: {
             sp: "Tu escuela no cuenta con acceso a la plataforma.",
             en: "Your school does not have access to the platform."

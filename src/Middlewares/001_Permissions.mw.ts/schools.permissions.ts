@@ -83,6 +83,15 @@ export const verifySchoolUserPermissions = (sArrModules: Permission[]) => async 
     if (mySchool.bBlocked == true) {
         return next(new MyError(404, ErrorMessages.Schools.bBlockedPermission[sLang]));
     }
+    // P3 — Suspensión por falta de pago. The contract: once the account is marked delinquent its
+    // subscription is suspended "de manera inmediata, sin periodo de gracia, restringiendo el
+    // acceso a la plataforma para TODOS los usuarios del colegio". Data is never deleted, and
+    // access returns by itself as soon as a charge succeeds and the webhook flips the status back.
+    // Only SUSPENDED blocks — NONE (never billed), TRIALING, ACTIVE, PAST_DUE (still in retries)
+    // and CANCELED (paid until the cut-off date) all keep working.
+    if (mySchool.sBillingStatus === 'SUSPENDED') {
+        return next(new MyError(402, ErrorMessages.Schools.billingSuspended[sLang]));
+    }
 
     // If NOT super school user then verify permissions.
     if (schoolUserSession.sCreatedBy !== null) {
@@ -103,7 +112,8 @@ export const verifySchoolUserPermissions = (sArrModules: Permission[]) => async 
     res.locals.sSchoolId = schoolUserSession.sSchoolId;
     res.locals.sType = schoolUserSession.sType || 'ADMINISTRATION';
     // P5 — the school was already fetched above, so denyTherapistAccess() costs no extra query
-    res.locals.sAccountType = mySchool.sAccountType || 'SCHOOL';
+    res.locals.sAccountType = (mySchool.sAccountType || 'SCHOOL') as 'SCHOOL' | 'THERAPIST';
+    res.locals.sBillingStatus = (mySchool.sBillingStatus || 'NONE') as typeof res.locals.sBillingStatus;
 
     // Refresh Token for 120 hours (5 days)
     await refreshTokenSchools(res.locals);
@@ -170,6 +180,15 @@ export const verifySchoolUserHasAnyPermissions = (sArrModules: Permission[]) => 
     if (mySchool.bBlocked == true) {
         return next(new MyError(404, ErrorMessages.Schools.bBlockedPermission[sLang]));
     }
+    // P3 — Suspensión por falta de pago. The contract: once the account is marked delinquent its
+    // subscription is suspended "de manera inmediata, sin periodo de gracia, restringiendo el
+    // acceso a la plataforma para TODOS los usuarios del colegio". Data is never deleted, and
+    // access returns by itself as soon as a charge succeeds and the webhook flips the status back.
+    // Only SUSPENDED blocks — NONE (never billed), TRIALING, ACTIVE, PAST_DUE (still in retries)
+    // and CANCELED (paid until the cut-off date) all keep working.
+    if (mySchool.sBillingStatus === 'SUSPENDED') {
+        return next(new MyError(402, ErrorMessages.Schools.billingSuspended[sLang]));
+    }
 
     // If NOT super school user then verify permissions.
     if (schoolUserSession.sCreatedBy !== null) {
@@ -192,7 +211,8 @@ export const verifySchoolUserHasAnyPermissions = (sArrModules: Permission[]) => 
     res.locals.sSchoolId = schoolUserSession.sSchoolId;
     res.locals.sType = schoolUserSession.sType || 'ADMINISTRATION';
     // P5 — the school was already fetched above, so denyTherapistAccess() costs no extra query
-    res.locals.sAccountType = mySchool.sAccountType || 'SCHOOL';
+    res.locals.sAccountType = (mySchool.sAccountType || 'SCHOOL') as 'SCHOOL' | 'THERAPIST';
+    res.locals.sBillingStatus = (mySchool.sBillingStatus || 'NONE') as typeof res.locals.sBillingStatus;
 
     // Refresh Token for 120 hours (5 days)
     await refreshTokenSchools(res.locals);

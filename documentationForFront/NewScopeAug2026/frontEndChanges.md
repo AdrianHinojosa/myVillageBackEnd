@@ -41,6 +41,8 @@ frontend work didn't exist.
 | 6 | 7 | `POST /trackingRecords` | Records on a **divided** goal must carry `sSubGoalId`; posting `sGoalId` for a divided goal now returns 409 | 🟡 adapt |
 | 7 | 7 | `SubGoalsManager.vue` | **No UI exists to change a subgoal's status** — so subgoals can never close and the rollup is permanently 0/N | 🔴 gap |
 | 8 | 7 | `POST /goals`, `PUT /goals/:id` | `bHasSubGoals` + `iTargetPercentage` now accepted — `POST /goals` previously **rejected** the frontend payload | 🟢 fixed backend-side |
+| 9 | 3 | **Every school endpoint** | New **HTTP 402** when the school is `SUSPENDED` for non-payment — handle it like a block, not a generic error | 🟡 adapt |
+| 10 | 3 | `POST/PUT /schools`, login | Tariff fields + `sBillingStatus` accepted/returned — already matches what the frontend sends | 🟢 none |
 
 Severity: 🔴 breaking (integration fails without it) · 🟡 rename/adapt · 🟢 nice-to-have
 
@@ -235,6 +237,58 @@ Now accepted on both `POST /goals` and `PUT /goals/:sGoalId`, together with `iTa
 (in the signed PDF, previously missing from the schema entirely). `GET /goals/:sGoalId` returns
 `bHasSubGoals`, which is what tells the frontend to show the subgoal manager instead of the normal
 detail. **No frontend change required** — this entry exists so the fix is traceable.
+
+### 9. P3 — HTTP 402 when a school is suspended for non-payment 🟡
+
+**Business rule (signed PDF p.1-2):** once an account is marked delinquent its subscription is
+suspended *"de manera inmediata, sin periodo de gracia, restringiendo el acceso a la plataforma
+para **todos los usuarios** del colegio"*. Data is preserved; access returns automatically once a
+charge succeeds.
+
+**What the backend does now.** Every school endpoint returns **402 Payment Required** with a
+localized message when `Schools.sBillingStatus = 'SUSPENDED'`:
+
+> *"La suscripción de tu colegio está suspendida por falta de pago. Regulariza el pago para
+> restaurar el acceso."*
+
+**Which statuses block — only one:**
+
+| Status | Access | Meaning |
+|---|---|---|
+| `NONE` | ✅ allowed | never billed — **every school that exists today** |
+| `TRIALING` | ✅ allowed | inside the 30-day free trial |
+| `ACTIVE` | ✅ allowed | paid up |
+| `PAST_DUE` | ✅ allowed | a charge failed, retries still running — warn, don't lock out |
+| `CANCELED` | ✅ allowed | cancelled but paid until the cut-off date |
+| **`SUSPENDED`** | ⛔ **402** | retries exhausted |
+
+**Frontend impact.** The frontend already gates at login by reading
+`oResults.oSchool.sBillingStatus` and redirecting to `/admin/suspended`, which is the primary
+mechanism. The 402 is defence in depth for a session that was already open when suspension
+happened. Two things worth doing:
+
+1. Treat **402** as "suspended" in the axios interceptor — redirect to `/admin/suspended` rather
+   than showing a generic error toast.
+2. **Support tickets keep working while suspended** (`POST /support/ticket` still returns 200), so
+   leave the support button reachable on the suspended screen — that is deliberately the one way
+   out for a locked-out school.
+
+### 10. P3 — Tariff fields and billing status: already compatible 🟢
+
+No change needed. Recorded so nobody re-checks:
+
+- `POST /schools` and `PUT /schools/:sSchoolId` accept `sBillingMode` (`FIXED` | `VARIABLE`),
+  `dFixedAmount`, `dAmountPerTeacher`, `dAmountPerStudent`, `dDiscountPct` — exactly the names
+  `schools/[id]/edit.vue` already sends.
+- **Omitting them on `PUT` preserves the stored tariff**, so partial school edits are safe.
+- Invalid values return **409** with a localized message (`sBillingMode: 'MONTHLY'` and
+  `dDiscountPct: 150` both verified).
+- `GET /schools/:sSchoolId` returns the tariff **and** `sBillingStatus` for the superadmin chip.
+- Login returns `oSchool.sBillingStatus`, where `auth.ts` already declares it.
+- **The backend's `dMonthlyTotal` is the official amount.** Its formula is a deliberate mirror of
+  your `computeMonthlyTotal()` in `app/utils/billing.ts` — same discount clamping, same rounding,
+  and VARIABLE computed on `iUsersLimit`/`iStudentsLimit`, never the real user count. Verified
+  identical: 500×10 + 200×40 − 10% = **11,700**. Keep using yours for the preview.
 
 ---
 

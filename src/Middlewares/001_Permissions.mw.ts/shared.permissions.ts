@@ -40,8 +40,10 @@ const verifyToken = async (token: string): Promise<any | false> => {
  * enforces module permissions and the school block.
  *
  * NOTE: unlike `verifySchoolUserPermissions`, this gate deliberately does NOT reject users of a
- * blocked school. A blocked school can still authenticate but every other endpoint returns 404,
- * so refusing support tickets too would leave them with no way to ask for help.
+ * blocked school, nor of a school SUSPENDED for non-payment (P3). Either state locks the school out
+ * of every other endpoint, so refusing support tickets too would leave them with no way to ask for
+ * help — precisely when they most need it, since "my account is suspended" is the likeliest reason
+ * they are writing in. A valid session is still required, and the endpoint only sends an email.
  */
 export const verifyAnyAuthenticatedUser = () => async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { sLang } = res.locals;
@@ -73,7 +75,7 @@ export const verifyAnyAuthenticatedUser = () => async (req: Request, res: Respon
         res.locals.sSchoolId = schoolUserSession.sSchoolId;
         res.locals.sType = schoolUserSession.sType || 'ADMINISTRATION';
         // P5 — account type, for parity with the school-only middlewares
-        res.locals.sAccountType = mySchool.sAccountType || 'SCHOOL';
+        res.locals.sAccountType = (mySchool.sAccountType || 'SCHOOL') as 'SCHOOL' | 'THERAPIST';
 
         // Refresh Token for 120 hours (5 days)
         await SessionQueries.updateTokenExpirationSchools(res.locals.sSessionId);

@@ -1,2 +1,94 @@
 # shipoBack
 Back-End of My Village
+
+---
+
+## Testing
+
+```bash
+npm run test:stripe              # all files  (~75s, 183 assertions)
+npm run test:stripe -- 01        # a single file
+npm run test:stripe -- 01 05     # several
+```
+
+Exit code is `0` only if every assertion passed **and** the suite left no residue in the database.
+
+### What exists today
+
+| Suite | Location | Covers |
+|---|---|---|
+| **Punto 3 — Cobranza automática (Stripe)** | `src/unitTests/StripeSubscriptions/` | Billing: tariff config, the suspension gate, card management, subscriptions, webhooks, dunning, and the trial→charge lifecycle |
+
+Full breakdown of every file in
+[`src/unitTests/StripeSubscriptions/README.md`](src/unitTests/StripeSubscriptions/README.md).
+
+### These are integration tests
+
+They drive the **real Express app** (via supertest, so requests pass through auth → celebrate →
+controller → error handler), the **real development database**, and the **real Stripe sandbox** —
+actual customers, prices, subscriptions and signed webhook payloads.
+
+That is deliberate. The bugs this feature actually had were only findable this way: a Joi validation
+label with no entry in `ValidationError.util.ts` returned **HTTP 500** instead of a clean error, and
+`stripe.paymentMethods.attach()` returns a *different* id than the one passed in. Neither would
+surface against a mock.
+
+### ⚠️ Safety — read before running
+
+The suite **mutates real rows**: it patches school tariffs, sets `sBillingStatus` (including
+`SUSPENDED`, which locks every user of that school out), inserts payment history, and creates Stripe
+objects. Two guards run before anything else:
+
+| Guard | Behaviour |
+|---|---|
+| Database | **Aborts unless `current_database() === 'development'`.** `.env` in this project has pointed at `production` before — this guard is not theoretical. |
+| Stripe | **Aborts if `STRIPE_PRIVATE_KEY` starts with `sk_live_`.** |
+
+Teardown is guaranteed: each file snapshots the school row it touches and restores all 15
+billing-related columns in a `finally` block; the runner then deletes minted sessions, removes every
+Stripe object it created, and **re-queries the database to prove nothing was left behind**. A dirty
+result fails the run, so repeated use cannot quietly corrupt the development data.
+
+Fixtures are selected from existing rows, never created, so the database does not grow on each run.
+
+### Requirements
+
+| | |
+|---|---|
+| `DB_NAME=development` | Required — the suite refuses any other database |
+| `STRIPE_PRIVATE_KEY` | A `sk_test_…` key. **Without it, files 04–07 skip themselves** and 01–03 still run |
+| `STRIPE_WEBHOOK_SECRET` | Optional. If absent, a local secret is generated for the process; payloads are still signed with Stripe's own helper, so the real verification path runs |
+
+### Not covered
+
+- **Real webhook delivery.** Signatures are verified with Stripe's own signing algorithm, so the
+  handler is genuinely tested — but Stripe's servers reaching the deployed URL is dashboard
+  configuration, not code.
+- **Actual email delivery.** `Mail.service.ts` is fire-and-forget: SES errors are logged, never
+  surfaced. The tests prove an email was *dispatched*, not that it *arrived*.
+- **The browser card step.** `stripe.confirmCardSetup()` runs in the frontend; here a payment method
+  is created server-side from a test token, which yields the same kind of id.
+
+### Adding another suite
+
+1. Create `src/unitTests/<Feature>/` with numbered files, each default-exporting
+   `async function run(): Promise<void>`.
+2. Use the `check` / `checkTrue` / `section` / `skip` helpers so results roll into one summary.
+3. Snapshot and restore anything you mutate, in a `finally` block.
+4. Add a `test:<feature>` script to `package.json`.
+
+`src/unitTests/StripeSubscriptions/helpers.ts` is a working reference — safety guards, fixture
+selection, token minting and cleanup tracking are all reusable.
+
+> **Note:** these live under `src/`, so `npm run build` compiles them into `dist/` too. They are never
+> imported by `server.ts` and are inert in production. To exclude them, add `--ignore src/unitTests`
+> to the `build` script.
+
+### Other verification in this scope
+
+The Aug-2026 scope extension (P5, P7, P8, P10) was verified with roughly 130 further assertions run
+as throwaway scripts — subgoal leak guards, the measurement-engine invariance proof, help-type
+storage, therapist enforcement. **Those were not kept**, so they do not protect against regressions.
+Only the billing suite above is permanent. See
+`documentationForFront/NewScopeAug2026/implementationTracket.md` for what each point was checked
+against.

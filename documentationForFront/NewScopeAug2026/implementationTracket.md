@@ -263,6 +263,11 @@ These are facts discovered while reading the code, kept here so nobody re-derive
 | — | P7 inherited fields | Subgoal schema **strips** `sTitle`, `sMeasurementType`, `bHasSubGoals`, `aDocuments` instead of rejecting them | The frontend reuses `GoalForm.vue` for subgoals and always sends all four. Rejecting would 409 the form; ignoring keeps title/measurement inherited as the contract requires. | 2026-08-07 |
 | — | P7 `PAUSED` | Added to `CompleteGoalBody` so it is reachable for goals too | Finding 5: the DB allowed `PAUSED` but the API never did. Subgoals need all four states, and there was no reason for goals to lack one. | 2026-08-07 |
 | — | Docs | Added **`featureGuide.md`** — plain-language explanation of each feature for the frontend team | PO request: explain in understandable terms what was built (tables, endpoints, behaviour), not just what changed. | 2026-08-02 |
+| Q16 | P7 rollup rule | **Parent `dProgress` = average of ALL active subgoals; an empty subgoal counts as 0** | PO decision. ⚠️ The frontend's `getSubGoalsRollup()` averages only *started* subgoals, so the two disagree the moment a stage is left empty — registered as entry 13 in `frontEndChanges.md`. Rationale: a yearly goal split into 4 stages with only the first finished is at 25%, not 100%; averaging started-only makes progress *drop* when a new stage begins. | 2026-08-14 |
+| — | P7 rollup storage | **Stored on the parent** (`dProgress`, `dAverageValue`, `iRecordsCount`, `tLastRecord`) and recalculated in the same transaction as any change, **not** computed on read | Four separate read paths (goal card, student list, report, `/schools/analytics`) all read those columns. Fixing the write path fixes all four at once, with no per-request recomputation and no rule duplicated in four endpoints. | 2026-08-17 |
+| — | P7 subgoal title | **Accepted when non-empty, inherited when blank**; a blank title on update never wipes the stored one | PO decision (own title per subgoal). The deployed `GoalForm.vue` hides the title input in subgoal mode and still sends `sTitle: ''`, so taking a blank value literally would leave every subgoal with an empty heading. | 2026-08-17 |
+| — | P7 report attribution | Subgoal records are grouped under the parent, but each record keeps `sGoalId` = its real owner and gains `sSubGoalId` / `sSubGoalTitle` | Rewriting `sGoalId` to the parent would make the payload lie about which row the record belongs to. Grouping is a presentation concern and belongs in the response shape. `useReportPdfGenerator` consumes `aRecords` as a plain array, so nothing breaks. | 2026-08-17 |
+| — | Backfill as a migration | The historical recomputation ships as **migration `3038`**, not a one-off script | A script would have to be remembered and run by hand on every environment. As a migration it runs itself on deploy, including production, and is idempotent. | 2026-08-17 |
 
 ---
 
@@ -605,6 +610,83 @@ Anything we build differently from the PDF gets logged here with who approved it
 
 ---
 
+## Post-release feedback — Lucy, 17/agosto/2026
+
+Source: [`newFixesAug17/feedback-lucy-agosto2026-backend.md`](newFixesAug17/feedback-lucy-agosto2026-backend.md)
+Reply sent to the frontend team: [`newFixesAug17/respuesta-backend-17ago2026.md`](newFixesAug17/respuesta-backend-17ago2026.md)
+
+| # | Item | Status |
+|---|---|---|
+| 1 | Parent goal shows 0% instead of aggregating its subgoals | ✅ Fixed + backfill migration + 66-assertion suite |
+| 2 | Subgoal's own `sTitle` not persisted | ✅ Fixed |
+| 3 | S3 CORS for the school logo in the IEP PDF | 🟡 Exact console steps written — **MyVillage applies them in AWS** |
+| 5 | Subgoal records missing from the PDF | ➖ Confirmed not a backend bug; report now also sends `sSubGoalId` / `sSubGoalTitle` |
+| — | "All Stripe endpoints return 401/403/404" | ✅ Diagnosed — **not a bug**, see below |
+
+### Item 1 — how the rollup was fixed
+
+`dProgress` is **stored, not computed on read**. `recalculateParentRollup()` runs inside the same
+transaction as anything that can move it (record create/update/exclude/delete, subgoal create,
+subgoal delete), so the goal card, the student dashboard, the report and `iGoalProgress` in
+`/schools/analytics` are all fixed by one write path instead of four read paths.
+
+The report needed a second fix, worse than reported: it fetched records with
+`whereIn('sGoalId', <top-level ids>)`, so a subgoal's records were never found — and since the report
+keeps only goals that *have* records, **a divided goal vanished from the report entirely**. It now
+queries the subgoals' ids too and attributes each record to the parent.
+
+`/schools/analytics` needed no change: its SQL already excludes subgoals with
+`sParentGoalId IS NULL` (a P7 leak guard) and averages the stored `dProgress`, which is now the
+aggregate.
+
+**Migration `3038_Goals_backfillSubGoalRollup`** recomputes the goals that existed before. Applied to
+`development`: `0.00% → 91.67%`, `0.00% → 70.37%`, `0.00% → 46.67%`. Idempotent, `down()` is a no-op
+(the values are derived; zeroing them would only restore the bug).
+
+⚠️ **Open rule conflict.** The feedback document defines the rollup as the average of *started*
+subgoals; the PO decided on 2026-08-14 that it is the average of **ALL** subgoals with an empty one
+counting as 0. The PO's rule is what is implemented. On current dev data both give the same number
+(all three divided goals have every stage started). Registered as entry 13 in `frontEndChanges.md`.
+
+### Item 2 — subgoal title
+
+`sTitle` is accepted and persisted on create and update. Two compatibility rules, because the
+deployed `GoalForm.vue` hides the title input in subgoal mode and still sends `sTitle: ''`: a blank
+title on **create** inherits the parent's, and a blank title on **update** leaves the stored one
+alone. `sMeasurementType` stays inherited and immutable.
+
+### Item 3 — CORS findings (verified against the S3 API, 2026-08-17)
+
+| Bucket | Role | CORS |
+|---|---|---|
+| `myvillagedevelopment` | the bucket that actually serves the logo in dev (`AWS_BUCKET_NAME`) | exists, but only allows `https://schools.myvillage.com.mx` + `http://localhost:3000` |
+| `myvillagedevelopmentstatic` | named in the feedback | **none at all** |
+| `myvillageproduction` | will serve the logo in production | **none at all** — same bug is waiting in prod |
+
+Two separate causes: the deployed origin
+(`http://admin.myvillage.com.mx.s3-website-us-east-1.amazonaws.com`) is not listed, and CORS matches
+the **scheme** exactly, so an `https://` entry does not cover an `http://` S3 website endpoint. The
+logo is served through a **presigned URL**, so `GET`/`HEAD` is enough. JSON and console steps are in
+the reply document; MyVillage applies them.
+
+### "All Stripe endpoints return 401/403/404"
+
+Not a code defect — `npm run test:stripe` is green (183 assertions against real Stripe test mode).
+
+* **404** — the whole billing module lives on `features02Aug2026`, which is **21 commits ahead of
+  `main` and has never been merged or deployed**. `main` has no `src/Api/030_Billing/` at all. This
+  is consistent with the rest of the feedback: subgoals *do* answer on dev, and subgoals landed
+  earlier on the same branch, so dev is running an intermediate build — P7 yes, P3 no.
+  **Action: deploy `features02Aug2026` to `/development`.**
+* **401** — `/billing/*` are school routes; a platform-superadmin token has no school-user session,
+  so the middleware returns 401. Also 401 with a missing or expired `Authorization` header.
+* **403** — by contract only the school's **main user** (`Users.sCreatedBy IS NULL`) may mutate
+  cards or cancel; other school users get 403 on those, and FACULTY gets 403 on all of `/billing/*`.
+  Checked in dev: all 11 active schools have exactly one main user, so logging in as that user
+  clears the 403s.
+
+---
+
 ## Commit log
 
 *(one row per commit on `features02Aug2026`)*
@@ -622,3 +704,13 @@ Anything we build differently from the PDF gets logged here with who approved it
 | `d657335` | 5 / build | `@babel/runtime` dependency (deployment unblocked) + therapists blocked from record-file uploads |
 | `c303c03` | **7** | Subgoal schema + 12 leak guards across goals/students/schools |
 | `58a6534` | **7** | SubGoals module: 5 endpoints + 3 integration fixes + business rules |
+| `99c7f90` | — | Restored CRLF line endings on three files (a whitespace flip had inflated the diffs) |
+| `63cecf0` | — | Corrected stale commit hashes and resolved findings in the tracker |
+| `1abf7c4` | — | Made the frontend docs send-ready |
+| `b98ffb3` | **3** | Billing schema + Stripe service (money/status logic tested) |
+| `4c2e9dc` | **3** | Tariff config, billing status in login, suspension gate (402) |
+| `abffaf8` | **3** | Billing module: 8 endpoints + Stripe webhooks |
+| `59c0a55` | **3** | Verified against real Stripe; tariff changes sync with no proration |
+| `0dfd973` | — | Fixed the `db:migrations` script + documented P3 across the three trackers |
+| `dc77e2e` | **3** | Re-runnable test suite for P3 (`src/unitTests/StripeSubscriptions`, 183 assertions) |
+| `76a6aff` | — | Testing section in the root README |

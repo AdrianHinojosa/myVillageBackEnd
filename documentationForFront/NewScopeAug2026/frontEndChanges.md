@@ -45,6 +45,9 @@ frontend work didn't exist.
 | 10 | 3 | `POST/PUT /schools`, login | Tariff fields + `sBillingStatus` accepted/returned — already matches what the frontend sends | 🟢 none |
 | 11 | 3 | **Environment** | Set `NUXT_PUBLIC_STRIPE_PK` to the publishable key, or card entry cannot work | 🔴 breaking |
 | 12 | 3 | `/billing/*` | All 8 endpoints live and match the guide — no change needed | 🟢 none |
+| 13 | 7 | `app/utils/subGoals.ts` → `getSubGoalsRollup()` | Backend averages **ALL** subgoals (empty = 0); the frontend averages only the started ones — the two will disagree | 🟡 adapt |
+| 14 | 7 | `GoalForm.vue:9` | The title input is hidden in subgoal mode (`v-if="!bIsSubGoal"`) — show it, the backend now persists `sTitle` | 🔴 breaking |
+| 15 | 7 | `GET /students/:id/report` | Divided goals now appear (they used to vanish) and each record carries `sSubGoalId` / `sSubGoalTitle` | 🟢 none |
 
 Severity: 🔴 breaking (integration fails without it) · 🟡 rename/adapt · 🟢 nice-to-have
 
@@ -337,6 +340,83 @@ type. `dMonthlyTotal` in the summary is the **official** amount; keep using your
    guarantee the next renewal fails and suspend the school. Show the message; the way out is Cancel.
 3. **`503` means billing is unconfigured on the server** (no Stripe key), not a user error. Worth
    distinguishing in the UI from a real failure.
+
+---
+
+### 13. P7 — The rollup rule differs from `getSubGoalsRollup()` 🟡
+
+*(From Lucy's feedback, 2026-08-17. Full context in
+[`newFixesAug17/respuesta-backend-17ago2026.md`](newFixesAug17/respuesta-backend-17ago2026.md).)*
+
+A divided goal's `dProgress` is now **aggregated from its subgoals** and stored on the goal itself,
+so `GET /goals/:id`, `GET /goals/student/:id`, the report and `/schools/analytics` all show it
+without any frontend change. **But the two sides compute it differently:**
+
+| | Rule | Etapa 1 = 90%, Etapa 2 with no records |
+|---|---|---|
+| **Backend** (PO decision 2026-08-14) | average of **ALL** active subgoals, an empty one counts as **0** | **45%** |
+| **Frontend** `app/utils/subGoals.ts` → `getSubGoalsRollup()` | average of subgoals with **≥1 record**, 0 if none started | 90% |
+
+They agree whenever every stage has at least one record — which is the case for all three divided
+goals currently in dev — so this is not urgent, but the subgoal manager will contradict the goal card
+the moment a stage is created and left empty.
+
+**What to change:** make `getSubGoalsRollup()` average every active subgoal, counting one with no
+records as 0. Or, better, just display `oGoal.dProgress` from the API and delete the client-side
+calculation — one source of truth.
+
+**If you disagree with the rule**, say so and the backend flips to started-only: it is one condition
+in `recalculateParentRollup()` plus re-running the backfill migration. What must not happen is the
+two staying different.
+
+---
+
+### 14. P7 — The subgoal title input is hidden 🔴
+
+*(From Lucy's feedback, 2026-08-17.)*
+
+**Business rule:** *"quiere ponerle un título a cada submeta (hoy solo dice 'Etapa 1')"*. Backend now
+**accepts and persists** `sTitle` on `POST /goals/:sGoalId/subGoals` and `PUT /subGoals/:sSubGoalId`,
+and returns each subgoal's own title from `GET /goals/:sGoalId/subGoals`.
+
+**What to change:** `GoalForm.vue:9` still hides the title field with `v-if="!bIsSubGoal"`, so in
+subgoal mode the form sends `sTitle: ''`. Show the input for subgoals and the feature works.
+
+**Backwards compatible on purpose** — nothing breaks while that ships:
+
+| Sent | Result |
+|---|---|
+| `sTitle` with content, on create | saved as the subgoal's own title |
+| `sTitle: ''` or absent, on create | **inherits the parent's title** (today's behaviour) |
+| `sTitle` with content, on update | replaces the stored title |
+| `sTitle: ''`, on update | **leaves the stored title alone** — never blanks it |
+
+`sMeasurementType` stays inherited and immutable: every stage of a goal measures the same thing.
+
+---
+
+### 15. P7 — Subgoal records now reach the student report 🟢
+
+*(From Lucy's feedback, 2026-08-17. No frontend change required.)*
+
+`GET /students/:sStudentId/report` used to look for records under the top-level goal ids only. A
+divided goal's records carry the **subgoal's** id, so none were found — and because the report keeps
+only goals that have records, **the divided goal disappeared from the report entirely** (not 0%,
+absent).
+
+Now the report also queries the subgoals' records and attributes each one to its parent goal, so it
+lands in that goal's `aRecords`. Two extra fields per record, both `null` for a normal goal's
+records:
+
+| Field | Meaning |
+|---|---|
+| `sSubGoalId` | the stage that produced the record |
+| `sSubGoalTitle` | that stage's title |
+
+`sGoalId` still points at the row's real owner (the subgoal) rather than being rewritten to the
+parent — grouping happens in the response, not by falsifying the field. `aRecords` is consumed as a
+plain array by `useReportPdfGenerator`, so nothing needs to change; the two new fields are there if
+the PDF wants to label each row with its stage.
 
 ---
 

@@ -577,8 +577,10 @@ partial edits are safe.
    The front-end also disables its button, but that's cosmetic — this is the real limit.
 2. **One level only.** Creating a subgoal *of a subgoal* returns 409. The contract is explicit:
    *"una submeta no podrá contener a su vez otras submetas."*
-3. **Title and measurement type are inherited and cannot be overridden.** Whatever you send for
-   those is ignored — so all stages of a goal always measure the same thing.
+3. **Each subgoal can have its OWN title; the measurement type is inherited and immutable.**
+   *(Changed 2026-08-17 — see "Each stage can be named" below.)* Send `sTitle` and it is saved; send
+   nothing, or an empty string, and the parent's title is inherited. Whatever you send for
+   `sMeasurementType` is ignored, so all stages of a goal always measure the same thing.
 4. **Independent statuses, no sequencing.** Every subgoal starts `ACTIVE` and can be set to
    `COMPLETED`, `NOT_ACHIEVED` or `PAUSED` at any time. ⚠️ *This deviates from the signed PDF,
    which specified a locked sequence — approved by the PO.*
@@ -594,11 +596,60 @@ partial edits are safe.
 Same rules as goals: the subgoal's student must belong to your school, and a **FACULTY** user must
 be assigned to that student. Otherwise 403.
 
-### The roll-up is computed by the front-end
+### The parent goal now carries the roll-up itself *(changed 2026-08-17)*
 
-The backend supplies accurate `dProgress` and `iRecordsCount` per subgoal; the front-end's
-`getSubGoalsRollup()` averages the **started** ones (≥1 record) and counts closed stages. Empty
-subgoals are excluded from the average so they don't drag it to a false zero.
+**Before:** a divided goal had no records of its own, so its `dProgress` sat at 0 forever and the
+goal card, the student dashboard, the PDF report and `/schools/analytics` all showed 0% for a goal
+whose stages were at 91%.
+
+**Now:** the parent's `dProgress`, `dAverageValue`, `iRecordsCount` and `tLastRecord` are
+**aggregated from its subgoals and stored on the goal**, recalculated in the same transaction as
+anything that can move them — a record created, edited, excluded or deleted; a subgoal created; a
+subgoal deleted. Nothing to compute on the client: just read `dProgress`.
+
+| Field on the parent | Value |
+|---|---|
+| `dProgress` | average of `dProgress` across **all active subgoals**, capped at 100 |
+| `dAverageValue` | same average over `dAverageValue` |
+| `iRecordsCount` | **sum** across subgoals — "how much has been logged" answered at the goal |
+| `tLastRecord` | the most recent of them |
+
+**The rule:** an empty subgoal counts as **0**, it is not skipped. Two stages at 90% and 0% give a
+parent at **45%** (PO decision, 2026-08-14). A yearly goal split into four stages with only the
+first one finished is at 25%, not 100%.
+
+⚠️ **The frontend's `getSubGoalsRollup()` uses a different rule** — it averages only the *started*
+subgoals. The two agree whenever every stage has at least one record, and disagree the moment a
+stage is created and left empty. See [`frontEndChanges.md`](frontEndChanges.md) entry 13; the
+simplest fix is to display `oGoal.dProgress` from the API and drop the client-side calculation.
+
+Goals that existed before this change were recomputed once by migration
+`3038_Goals_backfillSubGoalRollup`, already applied to `development`.
+
+### Each stage can be named *(changed 2026-08-17)*
+
+`POST /goals/:sGoalId/subGoals` and `PUT /subGoals/:sSubGoalId` accept `sTitle`, and
+`GET /goals/:sGoalId/subGoals` returns each subgoal's own title instead of the parent's.
+
+| What you send | What is stored |
+|---|---|
+| `sTitle` with content, on create | that title |
+| `sTitle: ''` or omitted, on create | the parent's title (previous behaviour) |
+| `sTitle` with content, on update | replaces the stored title |
+| `sTitle: ''`, on update | nothing — the stored title survives |
+
+The blank-value rules exist because `GoalForm.vue` hides its title input in subgoal mode and still
+sends `sTitle: ''`. Show that input and per-stage titles start working; until then nothing changes.
+
+### The student report includes divided goals *(fixed 2026-08-17)*
+
+`GET /students/:sStudentId/report` looked for records under the top-level goal ids only. A subgoal's
+records carry the **subgoal's** id, so none were found — and because the report keeps only goals with
+records, a divided goal **disappeared from the report** rather than showing 0%.
+
+It now queries the subgoals too and attributes each record to its parent goal, so the goal's
+`aRecords` holds everything logged across its stages. Each record also carries `sSubGoalId` and
+`sSubGoalTitle` (both `null` for a normal goal's records) if the PDF wants to label rows by stage.
 
 ### ⚠️ One gap on the front-end side
 
@@ -617,6 +668,12 @@ records via `sSubGoalId` producing real progress (80%), the divided-parent 409, 
 preserving untouched fields, `PAUSED` accepted, delete cascading to records, and 404s for unknown
 ids and for using a goal id on a subgoal route. Test data removed afterwards; zero leftover subgoal
 rows and zero counter drift.
+
+The 2026-08-17 changes add a re-runnable suite — **`npm run test:subgoals`, 66 assertions, all
+passing** (`src/unitTests/SubGoalsRollup/`): own titles on create and update, blank-title
+inheritance, the roll-up after every kind of change, `GET /goals/:id` and `GET /goals/student/:id`
+serving the aggregate, and the divided goal appearing in the student report with its stages'
+records. It refuses to run against any database but `development` and deletes everything it creates.
 
 # ✅ Punto 3 — Billing with Stripe
 

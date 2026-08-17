@@ -9,6 +9,9 @@ Back-End of My Village
 npm run test:stripe              # all files  (~75s, 183 assertions)
 npm run test:stripe -- 01        # a single file
 npm run test:stripe -- 01 05     # several
+
+npm run test:subgoals            # all files  (~32s, 66 assertions)
+npm run test:subgoals -- 02      # a single file
 ```
 
 Exit code is `0` only if every assertion passed **and** the suite left no residue in the database.
@@ -18,9 +21,11 @@ Exit code is `0` only if every assertion passed **and** the suite left no residu
 | Suite | Location | Covers |
 |---|---|---|
 | **Punto 3 — Cobranza automática (Stripe)** | `src/unitTests/StripeSubscriptions/` | Billing: tariff config, the suspension gate, card management, subscriptions, webhooks, dunning, and the trial→charge lifecycle |
+| **Punto 7 — Rollup de submetas** | `src/unitTests/SubGoalsRollup/` | A divided goal aggregating its subgoals' progress, each subgoal's own title, and the student report finding subgoal records |
 
 Full breakdown of every file in
-[`src/unitTests/StripeSubscriptions/README.md`](src/unitTests/StripeSubscriptions/README.md).
+[`src/unitTests/StripeSubscriptions/README.md`](src/unitTests/StripeSubscriptions/README.md) and
+[`src/unitTests/SubGoalsRollup/README.md`](src/unitTests/SubGoalsRollup/README.md).
 
 ### These are integration tests
 
@@ -35,7 +40,11 @@ surface against a mock.
 
 ### ⚠️ Safety — read before running
 
-The suite **mutates real rows**: it patches school tariffs, sets `sBillingStatus` (including
+Both suites refuse to run against any database but `development`, and both fail the run if they
+leave anything behind. `test:subgoals` creates goals, subgoals and tracking records titled
+`ZZTEST-P7…` and hard-deletes them in teardown; it never touches pre-existing rows.
+
+The Stripe suite **mutates real rows**: it patches school tariffs, sets `sBillingStatus` (including
 `SUSPENDED`, which locks every user of that school out), inserts payment history, and creates Stripe
 objects. Two guards run before anything else:
 

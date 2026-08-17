@@ -8,20 +8,23 @@ import * as Validations from '../../../Middlewares/Validations.mw';
  * sends the same body shape. Four of those fields are accepted and then **ignored** rather than
  * rejected, because the frontend always sends them and a 409 would break the form:
  *
- *   sTitle            — inherited from the parent goal (the input is hidden in subgoal mode, so it
- *                       arrives empty anyway)
  *   sMeasurementType  — inherited and immutable; the contract fixes it for all subgoals of a goal
  *   bHasSubGoals      — meaningless on a subgoal: only one level of nesting is allowed
  *   aDocuments        — handled by the separate goalFiles upload endpoint
  */
 const IgnoredInheritedFields = {
-    sTitle: Joi.any().strip(),
     sMeasurementType: Joi.any().strip(),
     bHasSubGoals: Joi.any().strip(),
     aDocuments: Joi.any().strip(),
 };
 
 const SubGoalConfigFields = {
+    /**
+     * A subgoal may have its OWN title (PO decision 2026-08-14). Optional: when absent or blank the
+     * parent's title is inherited, which is what the contract originally specified and what the
+     * current frontend relies on, since GoalForm hides this input in subgoal mode.
+     */
+    sTitle: Validations.String("SubGoals sTitle"),
     sDescription: Validations.String("SubGoals sDescription"),
     tStartDate: Validations.Date("SubGoals tStartDate"),
     tTargetDate: Validations.Date("SubGoals tTargetDate"),

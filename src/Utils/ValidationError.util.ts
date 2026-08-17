@@ -709,6 +709,10 @@ export default {
 
         // P7 — Submetas
         SubGoals: {
+            sTitle: {
+                sp: "Por favor, ingresa un título válido para la submeta.",
+                en: "Please, enter a valid subgoal title."
+            },
             sSubGoalId: {
                 sp: "Por favor, ingresa un identificador de submeta correcto.",
                 en: "Please, enter a valid subgoal id."

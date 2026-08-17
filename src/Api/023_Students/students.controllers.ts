@@ -8,6 +8,7 @@ import StudentQueries from './students.queries';
 import SchoolQueries from '../022_Schools/schools.queries';
 import GoalQueries from '../024_Goals/goals.queries';
 import StudentAssignmentQueries from '../028_StudentAssignments/studentAssignments.queries';
+import { GoalsModel } from '../024_Goals/goals.model';
 import { TrackingRecordsModel } from '../024_Goals/003_TrackingRecords/trackingRecords.model';
 import { TrackingRecordTasksModel } from '../024_Goals/003_TrackingRecords/trackingRecordTasks.model';
 import { db } from '../../Config/Db.config';
@@ -241,15 +242,39 @@ class Controllers {
             ? (tEndDate instanceof Date ? tEndDate.toISOString().split('T')[0] : String(tEndDate))
             : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-        // Get all goals for student with their tasks
+        // Get all goals for student with their tasks. This deliberately returns only top-level
+        // goals — subgoals are never reported as goals of their own.
         const goalsResult = await GoalQueries.findGoalsByStudent(sStudentId, 1, 1000, null, null);
         const allGoalIds = goalsResult.results.map((g: any) => g.sGoalId);
 
+        /**
+         * P7 — a divided goal keeps its records in its SUBGOALS, never on itself. Querying only
+         * `allGoalIds` therefore found nothing for those goals, and since the report keeps only
+         * goals that have records, a divided goal disappeared from the report altogether.
+         *
+         * Fix: also query the subgoals' records, and attribute each one to its PARENT so it lands
+         * in the parent's card. Every record additionally carries `sSubGoalId`/`sSubGoalTitle` so
+         * the PDF can tell which stage produced it.
+         */
+        const oSubGoalToParent: Record<string, string> = {};
+        const oSubGoalTitles: Record<string, string> = {};
+        if (allGoalIds.length > 0) {
+            const aSubGoals = await GoalsModel.query()
+                .select('sGoalId', 'sParentGoalId', 'sTitle')
+                .whereIn('sParentGoalId', allGoalIds)
+                .where('bActive', true);
+            for (const oSub of aSubGoals as any[]) {
+                oSubGoalToParent[oSub.sGoalId] = oSub.sParentGoalId;
+                oSubGoalTitles[oSub.sGoalId] = oSub.sTitle;
+            }
+        }
+        const aQueryableGoalIds = [...allGoalIds, ...Object.keys(oSubGoalToParent)];
+
         // Get all records within date range, then use them to determine which goals had activity
         let allRecords: any[] = [];
-        if (allGoalIds.length > 0) {
+        if (aQueryableGoalIds.length > 0) {
             allRecords = await TrackingRecordsModel.query()
-                .whereIn('sGoalId', allGoalIds)
+                .whereIn('sGoalId', aQueryableGoalIds)
                 .where('bActive', true)
                 .whereNull('tDeletedAt')
                 .modify(function(qb: any) {
@@ -259,8 +284,11 @@ class Controllers {
                 .orderBy('tRecordDate', 'desc');
         }
 
-        // Only include goals that have at least one record in the date range
-        const sGoalIdsWithRecords = new Set(allRecords.map((r: any) => r.sGoalId));
+        // Only include goals that have at least one record in the date range — counting a subgoal's
+        // records as records of its parent.
+        const sGoalIdsWithRecords = new Set(
+            allRecords.map((r: any) => oSubGoalToParent[r.sGoalId] || r.sGoalId)
+        );
         const aGoals = goalsResult.results.filter((g: any) => sGoalIdsWithRecords.has(g.sGoalId));
 
         // Calculate summary — all stats scoped to the date range
@@ -291,8 +319,14 @@ class Controllers {
                 .where('sTrackingRecordId', r.sTrackingRecordId);
             aTasksCompleted = taskCompletions.map((t: any) => t.sGoalTaskId);
 
+            // P7 — when the record belongs to a subgoal, say which one. `sGoalId` keeps pointing at
+            // the row's real owner; the grouping below is what moves it into the parent's card.
+            const sParentOfRecord = oSubGoalToParent[r.sGoalId] || null;
+
             formattedRecords.push({
                 ...r,
+                sSubGoalId: sParentOfRecord ? r.sGoalId : null,
+                sSubGoalTitle: sParentOfRecord ? (oSubGoalTitles[r.sGoalId] || null) : null,
                 sRecordId: r.sTrackingRecordId,
                 dtDate: r.tRecordDate,
                 sNotes: r.sObservations,
@@ -305,11 +339,13 @@ class Controllers {
             });
         }
 
-        // Group records by goalId
+        // Group records by goalId — a subgoal's records are grouped under its PARENT (P7), so a
+        // divided goal's card shows every record logged across its stages.
         const recordsByGoal = {};
         for (const r of formattedRecords) {
-            if (!recordsByGoal[r.sGoalId]) recordsByGoal[r.sGoalId] = [];
-            recordsByGoal[r.sGoalId].push(r);
+            const sBucket = oSubGoalToParent[r.sGoalId] || r.sGoalId;
+            if (!recordsByGoal[sBucket]) recordsByGoal[sBucket] = [];
+            recordsByGoal[sBucket].push(r);
         }
 
         // Build goal response with records

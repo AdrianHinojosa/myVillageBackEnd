@@ -363,6 +363,64 @@ class Queries {
     }
 
     /**
+     * P7 — roll a divided goal's figures up from its subgoals.
+     *
+     * A goal that is split has NO records of its own (the contract forbids them), so its stored
+     * dProgress/iRecordsCount would sit at 0 forever and the goal card, the student dashboard and
+     * the PDF report — all of which read those stored columns — would show nothing.
+     *
+     * RULE (PO decision 2026-08-14): dProgress is the average across **ALL** active subgoals, with
+     * a subgoal that has no records counting as 0. iRecordsCount is the SUM, and tLastRecord the
+     * most recent, so "how much has been logged" is answered at the parent.
+     *
+     * ⚠️ The frontend's getSubGoalsRollup() in app/utils/subGoals.ts averages only the *started*
+     * subgoals. Until it is changed to match, the subgoal manager will show a different percentage
+     * than the card for the same goal. Registered in frontEndChanges.md.
+     */
+    static async recalculateParentRollup(sParentGoalId: string, trx?) {
+        if (!sParentGoalId) return null;
+
+        const aSubGoals = await GoalsModel.query(trx)
+            .select('dProgress', 'dAverageValue', 'iRecordsCount', 'tLastRecord')
+            .where('sParentGoalId', sParentGoalId)
+            .where('bActive', true);
+
+        // No subgoals left: the parent behaves like an ordinary goal again.
+        if (aSubGoals.length === 0) {
+            await GoalsModel.query(trx)
+                .patch({ dProgress: 0, dAverageValue: 0, iRecordsCount: 0, tLastRecord: null })
+                .where('sGoalId', sParentGoalId);
+            return 0;
+        }
+
+        let dProgressSum = 0;
+        let dAverageSum = 0;
+        let iRecordsTotal = 0;
+        let tLatest: string | null = null;
+
+        for (const oSub of aSubGoals as any[]) {
+            dProgressSum += Number(oSub.dProgress) || 0;
+            dAverageSum += Number(oSub.dAverageValue) || 0;
+            iRecordsTotal += Number(oSub.iRecordsCount) || 0;
+            if (oSub.tLastRecord && (!tLatest || new Date(oSub.tLastRecord) > new Date(tLatest))) {
+                tLatest = oSub.tLastRecord;
+            }
+        }
+
+        const dProgress = Math.min(Math.round((dProgressSum / aSubGoals.length) * 100) / 100, 100);
+        const dAverageValue = Math.round((dAverageSum / aSubGoals.length) * 100) / 100;
+
+        await GoalsModel.query(trx).patch({
+            dProgress,
+            dAverageValue,
+            iRecordsCount: iRecordsTotal,
+            tLastRecord: tLatest
+        }).where('sGoalId', sParentGoalId);
+
+        return dProgress;
+    }
+
+    /**
      * PROGRESS RECALCULATION
      * Uses the last 3 non-excluded records to calculate goal progress.
      */
@@ -384,6 +442,9 @@ class Queries {
 
         if (records.length === 0) {
             await GoalsModel.query(trx).patch({ dProgress: 0, dAverageValue: 0 }).where('sGoalId', sGoalId);
+            if (goal.sParentGoalId) {
+                await Queries.recalculateParentRollup(goal.sParentGoalId, trx);
+            }
             return 0;
         }
 
@@ -500,6 +561,11 @@ class Queries {
             dProgress,
             dAverageValue: Math.round(avgPct * 100) / 100
         }).where('sGoalId', sGoalId);
+
+        // P7 — if this is a subgoal, the parent's rolled-up figures just went stale.
+        if (goal.sParentGoalId) {
+            await Queries.recalculateParentRollup(goal.sParentGoalId, trx);
+        }
 
         return dProgress;
     }

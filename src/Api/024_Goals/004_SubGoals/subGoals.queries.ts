@@ -1,6 +1,7 @@
 import { GoalsModel } from '../goals.model';
 import { GoalTasksModel } from '../001_GoalTasks/goalTasks.model';
 import { TrackingRecordsModel } from '../003_TrackingRecords/trackingRecords.model';
+import TrackingRecordQueries from '../003_TrackingRecords/trackingRecords.queries';
 
 /**
  * Punto 7 — Submetas.
@@ -68,8 +69,16 @@ class Queries {
             const newSubGoal = await GoalsModel.query(trx).insert({
                 sStudentId: oParent.sStudentId,
                 sParentGoalId: sGoalId,
-                // Inherited, immutable
-                sTitle: oParent.sTitle,
+                /**
+                 * P7 — the subgoal may carry its OWN title (PO decision 2026-08-14), but only when
+                 * one is actually supplied. `GoalForm.vue` hides the title input in subgoal mode and
+                 * still sends `sTitle: ''`, so accepting a blank value verbatim would leave every
+                 * subgoal with an empty heading. Falling back to the parent keeps the contract's
+                 * inheritance rule working until the frontend adds the field.
+                 */
+                sTitle: (oBody.sTitle && String(oBody.sTitle).trim()) ? String(oBody.sTitle).trim() : oParent.sTitle,
+                // Measurement type stays inherited and immutable — the contract fixes it for all
+                // subgoals of a goal so every stage measures the same thing.
                 sMeasurementType: oParent.sMeasurementType,
                 // Own configuration
                 sDescription: oBody.sDescription,
@@ -110,6 +119,10 @@ class Queries {
                 }
             }
 
+            // P7 — a new (empty) subgoal changes the parent's average, since the rollup counts
+            // every subgoal including those with no records yet.
+            await TrackingRecordQueries.recalculateParentRollup(sGoalId, trx);
+
             return { ...newSubGoal, GoalTasks: aInsertedTasks };
         });
     }
@@ -130,6 +143,11 @@ class Queries {
             const oPatch: any = { sLastUpdatedBy: sUserId };
             for (const sField of aPatchable) {
                 if (oBody[sField] !== undefined) oPatch[sField] = oBody[sField];
+            }
+            // Own title, only when a real value is sent. A blank one leaves the current title
+            // alone rather than wiping it — see the note in insertSubGoal.
+            if (oBody.sTitle !== undefined && String(oBody.sTitle).trim()) {
+                oPatch.sTitle = String(oBody.sTitle).trim();
             }
 
             const updatedSubGoal = await GoalsModel.query(trx)
@@ -175,6 +193,11 @@ class Queries {
                 .patch({ bActive: false, tDeletedAt: new Date().toISOString() })
                 .where('sGoalId', sSubGoalId)
                 .where('bActive', true);
+
+            // P7 — removing a stage changes the parent's average and its record total.
+            if (deletedSubGoal?.sParentGoalId) {
+                await TrackingRecordQueries.recalculateParentRollup(deletedSubGoal.sParentGoalId, trx);
+            }
 
             return deletedSubGoal;
         });

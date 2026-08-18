@@ -10,7 +10,7 @@ npm run test:subgoals          # everything
 npm run test:subgoals -- 02    # only 02_sequentialStages
 ```
 
-**109 assertions, 0 failures, ~45 s.**
+**133 assertions, 0 failures, ~60 s.**
 
 ---
 
@@ -38,6 +38,7 @@ Rule 2 only makes sense if "the stage in progress" has a single answer, so the b
 | `02_sequentialStages` | The whole sequential machine **and** the mirror: new stages queue as `PAUSED`, closing one promotes the next, reopening one demotes the current, deleting the current hands the baton on — and the goal's `dProgress` follows the stage in progress at every step, including the drop to **0%** when a stage is closed and the next has no records |
 | `03_studentReport` | `GET /students/:id/report` includes the divided goal (it used to **vanish**), with its stages' records in its card, each labelled with `sSubGoalId` / `sSubGoalTitle` |
 | `04_averageWindow` | The average uses the **whole** history: 4 records of 100/100/100/0 give **75%**, not the 100% the last-3 rule would give. Checked on an ordinary goal *and* on a subgoal, to prove the rule is one and the same |
+| `05_frontendContract` | The exact fields the **frontend** reads, asserted **on the wire** rather than in the table: `sStatus` and `sSubGoalId` on `GET /goals/:id/subGoals` (the whole sequential UI derives the current stage from them), `dProgress` on `GET /goals/:id`, and `aHelpTypes` / `sSubGoalTitle` on the student report. Plus a structural check that `bIsMainUser` sits at the root of the login payload |
 
 ## The sequential machine, in a table
 
@@ -96,6 +97,18 @@ that already invalidated one result in this project.
 
 These tests cover the live path (create / log / close / delete); the migration covers history. Both
 use **the same engine**, so they cannot disagree.
+
+## Why `05_frontendContract` exists separately
+
+The other files check business rules by reading the database directly, so they would all still pass if
+a **response envelope or a field name** changed. That gap was real: `sStatus` on the subgoals response,
+`aHelpTypes` on the report and `bIsMainUser` on login were each wired into the frontend before anything
+asserted they were actually on the wire. Every assertion in that file corresponds to a specific line of
+frontend code — the comment at the top names them.
+
+It also earned its keep immediately: it was the first file here to create a record **with help types**,
+which exposed that `releaseGoals()` did not delete `TrackingRecordHelps`. That FK blocked the records
+delete, which blocked the goals delete, and the run left 7 rows behind. The residue check caught it.
 
 ## A trap that already caught us once
 

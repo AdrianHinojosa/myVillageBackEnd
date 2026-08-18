@@ -164,6 +164,12 @@ export async function releaseGoals(): Promise<number> {
         `select "sGoalId" from myvillageschema."Goals" where "sParentGoalId" = any(?)`, [aIds]);
     const aAll = [...new Set([...aIds, ...oChildren.rows.map((r: any) => r.sGoalId)])];
 
+    // Children of the records first. `TrackingRecordHelps` (P8) is a real FK: leaving it out made the
+    // records delete fail silently, which then blocked the goals delete and left residue behind —
+    // caught by 05_frontendContract, the first file here to create a record WITH help types.
+    await db.raw(`delete from myvillageschema."TrackingRecordHelps" where "sTrackingRecordId" in (
+                     select "sTrackingRecordId" from myvillageschema."TrackingRecords"
+                     where "sGoalId" = any(?))`, [aAll]).catch(() => {});
     await db.raw(`delete from myvillageschema."TrackingRecordTasks" where "sTrackingRecordId" in (
                      select "sTrackingRecordId" from myvillageschema."TrackingRecords"
                      where "sGoalId" = any(?))`, [aAll]).catch(() => {});

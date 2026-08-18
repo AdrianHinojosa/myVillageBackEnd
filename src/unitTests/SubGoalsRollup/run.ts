@@ -23,6 +23,7 @@ const aSuites: ISuite[] = [
     { sName: '02_sequentialStages', run: require('./02_sequentialStages').default },
     { sName: '03_studentReport',    run: require('./03_studentReport').default },
     { sName: '04_averageWindow',    run: require('./04_averageWindow').default },
+    { sName: '05_frontendContract', run: require('./05_frontendContract').default },
 ];
 
 (async () => {

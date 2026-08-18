@@ -72,7 +72,7 @@ npm run test:stripe              # all files  (~75s, 183 assertions)
 npm run test:stripe -- 01        # a single file
 npm run test:stripe -- 01 05     # several
 
-npm run test:subgoals            # all files  (~45s, 109 assertions)
+npm run test:subgoals            # all files  (~60s, 133 assertions)
 npm run test:subgoals -- 02      # a single file
 ```
 

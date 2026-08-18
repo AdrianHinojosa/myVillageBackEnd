@@ -13,6 +13,60 @@ change, actionable on its own.
 
 ---
 
+## 📋 AUDIT — 2026-08-18, frontend at `origin/dev` 98a9a91 (`adrianDev18Aug`, tree clean)
+
+Every entry in this document was checked against the real frontend code, and **each verdict was then
+re-checked by a second reviewer whose job was to refute it**. 45 findings, 11 verdicts changed by that
+second pass — so read the *Verified* column, not the first one. Six items that looked DONE were
+downgraded once a missed code path turned up.
+
+### 🔴 Blocking — integration is visibly wrong until these land
+
+| # | What is wrong | Where |
+|---|---|---|
+| 19 | **`bIsMainUser` is not used anywhere** — all four locations still gate on `sUserType === 'SchoolAdmin'`. This IS the unexplained 403 | `auth.ts`, `admin.vue:339`, `billing/index.vue:86`, `components/billing/*` |
+| 16 | **The divided goal's % is still computed client-side by averaging the stages** — the rule the client rejected is still what the screen shows | `subGoals.ts` `getSubGoalsRollup()`, `SubGoalsManager.vue:529-536` |
+| 18 | **The frontend has its own 3-record progress engine**, and it — not `oGoal.dProgress` — feeds the number and the progress-bar width. Any goal with >3 records disagrees with the API | `goals.ts:290,294,553,617`; rendered at `GoalDetail.vue:57,71` |
+| 17 | **No re-fetch after `PUT /subGoals/:id { sStatus }`** — local state is patched instead, so the promoted stage and the goal's new % never appear | `[subGoalId].vue:412-418` |
+| 11 | **No env file supplies the Stripe key**, and `NUXT_PUBLIC_BILLING_ENABLED` is unset, so the tariff payload is dropped entirely and no subscription can start | frontend `.env`, `nuxt.config.ts:33` |
+| 9 | **The 402 handler bounces the user out of `/admin/billing`** — it redirects away from the one page they need in order to pay and un-suspend | `plugins/axios.ts:77-81` |
+| — | **Reopening does not work at all**, for stages or goals: `reopen-goal` is declared in `emits` but never emitted, so both listeners are dead | `GoalDetail.vue:589` |
+
+### 🟡 Important
+
+| # | What is wrong |
+|---|---|
+| 12 | **503 (Stripe unconfigured) is not distinguished** from a real failure — it is swallowed or shown as a generic error |
+| 9 | **No support button on the suspended screen**, though that is the documented way out |
+| 1 | The student report view and PDF **lose help types for DIVIDED goals** — it fetches `/goals/:id/trackingRecords`, which is empty for a divided goal |
+| 10 | Tariff field names are exact, but **the whole tariff payload is dropped** by the `billingEnabled` flag |
+| 7 | Subgoal status UI: closing and pausing work, **reopening a closed stage does not** |
+| 17 | **No `oCurrentStage` / `bCanCapture` derived from `sStatus === 'ACTIVE'`** — nothing stops a capture into a stage that is not in progress (the backend answers 409) |
+| — | **A language switch silently wipes all 49 therapist terminology overrides** — found by the second reviewer; the first pass had this as DONE |
+
+### 🟢 Verified done
+
+P8 help types (capture payload, legacy field dropped, vocabulary matches the 8 backend codes) · P5
+therapist mode (IEP skip, `sAccountType` wiring, file-attach hidden, goal-file upload hidden) ·
+records on a divided goal carry `sSubGoalId` · `sStatus` no longer sent on subgoal create · all 8
+`/billing/*` envelopes and field names · the report consumes `aRecords` as a plain array ·
+`bHasSubGoals` payload is Joi-clean.
+
+Partially done, and only in narrow cases: help-type chips render in lists, the chart colours by the
+dominant help type and the PDFs print all of them — each with one path the first pass missed.
+
+### 🧹 Cleanup worth doing
+
+**`SubGoalsManager.vue`'s stage modal is dead code** — `bShowStage` is initialised `false` and only
+ever re-assigned `false`; `oActiveStage` is initialised `null` and its only re-assignment is from
+itself; `openStage()` navigates to the stage page instead of opening the modal. ~130 lines never
+execute, including status controls and record capture. **The first version of the 18-Aug guide sent the
+frontend team to edit exactly this file** — delete it or wire it, or it will happen again.
+
+Full detail, with the fix for each: [`newFixesAug17/guia-frontend-submetas-secuenciales-18ago2026.md`](newFixesAug17/guia-frontend-submetas-secuenciales-18ago2026.md).
+
+---
+
 ## Reference point
 
 **Backend status: P10, P8, P5 and P7 are built, tested and pushed** to

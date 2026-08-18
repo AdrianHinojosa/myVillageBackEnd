@@ -106,39 +106,75 @@ campo nuevo ni endpoint nuevo.
 
 ---
 
+## ⚠️ ANTES DE EMPEZAR — el modal de etapa de `SubGoalsManager.vue` es CÓDIGO MUERTO
+
+Corrección a la primera versión de esta guía: apuntaba a los archivos equivocados. Lo verifiqué línea
+por línea y el resultado es que **~130 líneas de `SubGoalsManager.vue` no se ejecutan nunca**:
+
+| Prueba | Resultado |
+|---|---|
+| `bShowStage` (el `v-model:open` del modal, línea 339) | se inicializa en `false` (501) y **solo se vuelve a asignar `false`** (350, 730). **Nunca se pone en `true`.** |
+| `oActiveStage` | se inicializa en `null` (502) y la única reasignación es desde sí mismo (741). **Siempre es `null`.** |
+| `openStage()` (693) | **no abre el modal: navega** a `/admin/students/:id/goals/:goalId/subgoals/:sSubGoalId` |
+
+Como `oActiveStage` es siempre `null`, todo lo que está detrás de
+`v-if="oGoal.sStatus === 'ACTIVE' && oActiveStage"` (líneas 369-415) no se renderiza, `updateStageStatus()`
+sale en su primer `if`, y `oActiveStageAsGoal`, `handleSaveRecord()` y `fetchStageRecords()` no se
+alcanzan.
+
+**El archivo vivo es la página** `app/pages/admin/students/[id]/goals/[goalId]/subgoals/[subGoalId].vue`.
+Ahí están de verdad la captura de registros y los controles de estatus.
+
+> **Decisión para el equipo de frontend:** borrar ese bloque muerto o cablearlo. Mientras exista, todo
+> el que lea `SubGoalsManager.vue` va a "arreglar" el archivo equivocado — de hecho es lo que hizo la
+> primera versión de esta guía. Las referencias de abajo ya están corregidas a los archivos vivos.
+
+---
+
 ## 3 🔴 — "La etapa en curso" es un dato del backend, no una selección de UI
 
-**Qué hay hoy:** `oActiveStage` (línea 502) es simplemente la etapa que el usuario abrió con
-`openStage()` (línea 693). Cualquier etapa se puede abrir y capturar.
+**Qué hay hoy:** el usuario abre cualquier etapa (`openStage()` navega a su página) y ahí puede
+capturar. Nada distingue la etapa **en curso** de una etapa que solo se está mirando.
 
-**Por qué ya no sirve:** el backend ahora garantiza que **solo UNA etapa está `ACTIVE`** y la meta
-refleja esa. Si el usuario abre la Etapa 3 y captura ahí, el backend responde **409**.
+**Por qué ya no sirve:** el backend garantiza que **solo UNA etapa está `ACTIVE`**, la meta refleja esa,
+y capturar en cualquier otra devuelve **409**.
 
-**Qué hacer:** separar los dos conceptos.
+**Qué hacer** — en la página `[subGoalId].vue`, que es la que captura:
 
 ```js
 computed: {
-  // La etapa EN CURSO — dato de negocio. El backend garantiza que hay 0 o 1.
-  oCurrentStage() {
-    return this.aSubGoals.find(o => o.sStatus === 'ACTIVE') || null;
-  },
-  // ¿La etapa que el usuario tiene abierta es la que acepta capturas?
+  // ¿Esta etapa es la que está en curso? Es lo único que habilita capturar.
   bCanCapture() {
-    return !!this.oActiveStage
-        && !!this.oCurrentStage
-        && this.oActiveStage.sSubGoalId === this.oCurrentStage.sSubGoalId;
+    return this.oSubGoal?.sStatus === 'ACTIVE';
   },
 },
 ```
 
-Y en la plantilla, el botón de capturar registro (`v-if="oGoal.sStatus === 'ACTIVE' && oActiveStage
-&& oActiveStage.sStatus === 'ACTIVE'"`, línea 358) ya casi lo hace bien: `oActiveStage.sStatus ===
-'ACTIVE'` es exactamente la condición correcta. **Solo hay que asegurarse de que `aSubGoals` esté
-fresco** después de cualquier cambio de estatus (ver punto 5), porque ese `sStatus` viene de la copia
-local.
+y condicionar con `bCanCapture` el botón de agregar registro (`@add-record`) y el modal de captura.
+Cuando sea falso, en lugar del botón conviene un mensaje: *"esta etapa está en espera / cerrada; los
+registros se capturan en la etapa en curso"*.
 
 Abrir una etapa cerrada o en espera para **verla** sigue siendo válido y útil (su historial, su
 gráfica). Lo único que no se puede es capturar ahí.
+
+---
+
+## 3b 🔴 — Reabrir una etapa cerrada no funciona (y tampoco reabrir una meta)
+
+Encontrado al revisar: `GoalDetail.vue` **declara** `reopen-goal` en su lista de `emits` (línea 589)
+pero **nunca lo emite**. Emite 10 eventos y ese no está entre ellos. Los dos escuchas quedan muertos:
+
+* `app/pages/admin/students/[id]/goals/[goalId]/index.vue:62` → `@reopen-goal="handleReopenGoal"`
+* `app/pages/.../subgoals/[subGoalId].vue:50` → `@reopen-goal="handleReopenSubGoal"`
+
+Los manejadores están bien escritos y hacen exactamente lo correcto
+(`updateStatus('ACTIVE', { tCompletedDate: null, sCompletionNotes: '' })`), pero nadie los dispara.
+**Hoy una etapa cerrada por error no se puede reabrir, y tampoco una meta.**
+
+Con la máquina secuencial esto pesa más que antes: reabrir es la forma de corregir un cierre
+equivocado, y el backend ya lo soporta (al reabrir una etapa, pausa sola la que estaba en curso).
+**Falta el `$emit('reopen-goal')` en `GoalDetail.vue`**, detrás de un botón visible cuando
+`sStatus` sea `COMPLETED` o `NOT_ACHIEVED`.
 
 ---
 
@@ -162,28 +198,37 @@ etapa. Eso no cambió.
 
 ## 5 🔴 — Después de cambiar el estatus, re-fetch obligatorio
 
-Este es el más fácil de pasar por alto. Hoy `updateStageStatus()` (línea 735) hace:
+Este es el más fácil de pasar por alto. En la página viva, `[subGoalId].vue:412-418`, `updateStatus()`
+hace:
 
 ```js
-$api.put('/subGoals/' + this.oActiveStage.sSubGoalId, { sStatus, ...oExtra })
+$api.put('/subGoals/' + this.oSubGoal.sSubGoalId, { sStatus, ...oExtra })
   .then(() => {
-    this.oActiveStage = { ...this.oActiveStage, sStatus, ...oExtra };  // ⚠️ parche local
-    this.fetchSubGoals();
+    this.oSubGoal = { ...this.oSubGoal, sStatus, ...oExtra };   // ⚠️ parche local, línea 418
   })
 ```
 
 **El problema:** un `PUT` a UNA etapa ahora modifica **otras filas**. Cerrar la Etapa 1 hace que el
-backend ponga la Etapa 2 en `ACTIVE`, y cambia el `dProgress` de la **meta**. El parche local de la
-línea 741 deja la pantalla mintiendo hasta que llegue el `fetchSubGoals()`.
+backend ponga la Etapa 2 en `ACTIVE` y cambia el `dProgress` de la **meta**. El parche local escribe
+solo el campo que se mandó, sobre la copia en memoria de **esta** etapa: la promoción de la siguiente
+y el nuevo porcentaje de la meta **nunca se leen**, y la pantalla se queda mintiendo hasta que el
+usuario recargue.
 
-**Qué hacer:** quitar el parche local y refrescar **las etapas y la meta**:
+**Qué hacer:** quitar el parche y volver a leer del servidor.
 
 ```js
 .then(async () => {
-  await this.fetchSubGoals();          // el backend ya promovió la siguiente etapa
-  this.$emit('goal-updated');          // que el padre vuelva a leer GET /goals/:id
+  await this.fetchSubGoal();     // esta etapa, con el sStatus real
+  await this.fetchGoal();        // la meta: su dProgress lo movió el backend
 })
 ```
+
+Si al cerrar la etapa la pantalla vuelve al detalle de la meta, basta con que **esa** vista relea
+`GET /goals/:sGoalId` y `GET /goals/:sGoalId/subGoals` al montarse; lo que no puede sobrevivir es el
+parche local.
+
+> El mismo parche existe en el `updateStageStatus()` de `SubGoalsManager.vue:735-741`, pero ese código
+> está muerto (ver el aviso de arriba). El que hay que corregir es el de `[subGoalId].vue`.
 
 Lo que el backend mueve solo, en la misma transacción:
 

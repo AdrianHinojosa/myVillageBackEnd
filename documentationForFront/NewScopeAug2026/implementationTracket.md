@@ -796,4 +796,4 @@ averaging is happening. `npm run test:stripe` re-run: **183 assertions, still gr
 | `76a6aff` | — | Testing section in the root README |
 | `a2a59d8` | **7** | Lucy 17/ago: parent goals aggregate their subgoals + subgoal own title + report fix; migration `3038`; suite `SubGoalsRollup` (66 assertions) |
 | `88d9666` | — | Reply document for the 17/ago feedback + CORS findings + Stripe 401/403/404 diagnosis; three trackers updated |
-| _(this)_ | **7** | Lucy 18/ago: sequential stages + goal mirrors the active stage + average over ALL records; migration `3039`; `recalc:progress`; suite grown to 109 assertions; frontend guide |
+| `366a3b4` | **7** | Lucy 18/ago: sequential stages + goal mirrors the active stage + average over ALL records; migration `3039`; `recalc:progress`; suite grown to 109 assertions; frontend guide |

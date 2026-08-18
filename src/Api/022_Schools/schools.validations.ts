@@ -8,13 +8,22 @@ export const AccountType = Joi.string().valid('SCHOOL', 'THERAPIST')
 /**
  * P3 — tariff configuration, set by the superadmin. All optional: a school with no tariff simply
  * stays out of billing (sBillingStatus 'NONE'), which is how every pre-existing school behaves.
+ *
+ * Every monetary field must `.allow(null)`, and that is not cosmetic: the amounts are mutually
+ * exclusive by mode, so the form always sends the ones that do not apply as `null` — `VARIABLE` posts
+ * `dFixedAmount: null`, `FIXED` posts `dAmountPerTeacher: null, dAmountPerStudent: null`. Without it,
+ * `Joi.number()` rejects the null and the whole save fails with 409 *"ingresa un monto mensual
+ * válido"*, which made the tariff impossible to set from the UI in EITHER mode. "Optional" has to
+ * mean "may be explicitly empty", not merely "may be absent from the payload".
+ *
+ * `dDiscountPct` had it from the start; the three amounts did not. Inconsistency of my own making.
  */
 export const BillingFields = {
     sBillingMode: Joi.string().valid('FIXED', 'VARIABLE').allow(null).allow('')
         .error(new Error("Schools sBillingMode")),
-    dFixedAmount: Validations.PositiveMonetaryValue("Schools dFixedAmount"),
-    dAmountPerTeacher: Validations.PositiveMonetaryValue("Schools dAmountPerTeacher"),
-    dAmountPerStudent: Validations.PositiveMonetaryValue("Schools dAmountPerStudent"),
+    dFixedAmount: Validations.PositiveMonetaryValue("Schools dFixedAmount").allow(null),
+    dAmountPerTeacher: Validations.PositiveMonetaryValue("Schools dAmountPerTeacher").allow(null),
+    dAmountPerStudent: Validations.PositiveMonetaryValue("Schools dAmountPerStudent").allow(null),
     // 0-100; the service clamps as well, but reject nonsense at the edge.
     dDiscountPct: Joi.number().min(0).max(100).allow(null)
         .error(new Error("Schools dDiscountPct")),

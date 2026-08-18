@@ -11,6 +11,8 @@ import StudentAssignmentQueries from '../028_StudentAssignments/studentAssignmen
 import { GoalsModel } from '../024_Goals/goals.model';
 import { TrackingRecordsModel } from '../024_Goals/003_TrackingRecords/trackingRecords.model';
 import { TrackingRecordTasksModel } from '../024_Goals/003_TrackingRecords/trackingRecordTasks.model';
+import { TrackingRecordHelpsModel } from '../024_Goals/003_TrackingRecords/trackingRecordHelps.model';
+import { formatHelpTypesForFrontend } from '../024_Goals/003_TrackingRecords/helpTypes';
 import { db } from '../../Config/Db.config';
 import StorageServices from '../../Services/Storage.services';
 
@@ -309,6 +311,27 @@ class Controllers {
             : 0;
         const iOverdueGoals = aGoals.filter((g: any) => g.sStatus === 'ACTIVE' && g.tTargetDate && new Date(g.tTargetDate) < now).length;
 
+        /**
+         * P8 — help types for every record of the report, in ONE query.
+         *
+         * The report used to omit `aHelpTypes` entirely, so the frontend patched around it by calling
+         * `GET /goals/:id/trackingRecords` once per goal and merging by record id
+         * (`students/[id]/index.vue`). That patch cost N extra requests **and** lost the help types of
+         * every DIVIDED goal, because a divided goal's records live in its subgoals and that endpoint
+         * returns none of them. Returning them here fixes both at once and lets the patch go away.
+         */
+        const aReportRecordIds = allRecords.map((r: any) => r.sTrackingRecordId);
+        const oHelpsByRecord: { [key: string]: any[] } = {};
+        if (aReportRecordIds.length > 0) {
+            const aAllHelps = await TrackingRecordHelpsModel.query()
+                .whereIn('sTrackingRecordId', aReportRecordIds)
+                .orderBy('iHelpAmount', 'desc');
+            for (const oHelp of aAllHelps as any[]) {
+                if (!oHelpsByRecord[oHelp.sTrackingRecordId]) oHelpsByRecord[oHelp.sTrackingRecordId] = [];
+                oHelpsByRecord[oHelp.sTrackingRecordId].push(oHelp);
+            }
+        }
+
         // Format records with frontend field names + aTasksCompleted for TAREAS goals
         const formattedRecords = [];
         for (const r of allRecords) {
@@ -327,6 +350,8 @@ class Controllers {
                 ...r,
                 sSubGoalId: sParentOfRecord ? r.sGoalId : null,
                 sSubGoalTitle: sParentOfRecord ? (oSubGoalTitles[r.sGoalId] || null) : null,
+                // P8 — same shape the record endpoints return, so the frontend needs no special case.
+                aHelpTypes: formatHelpTypesForFrontend(oHelpsByRecord[r.sTrackingRecordId] || []),
                 sRecordId: r.sTrackingRecordId,
                 dtDate: r.tRecordDate,
                 sNotes: r.sObservations,

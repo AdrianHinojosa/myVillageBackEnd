@@ -350,6 +350,60 @@ dev, esta secuencia recorre toda la máquina:
 
 ---
 
+## 🔴 BLOQUEANTE de build — la cobranza está APAGADA por una variable de entorno
+
+Esto no se arregla con código: **hoy el frontend tiene la cobranza desactivada por bandera**, y ningún
+cambio de backend lo enciende.
+
+`nuxt.config.ts:33` define:
+
+```js
+billingEnabled: process.env.NUXT_PUBLIC_BILLING_ENABLED === 'true',
+```
+
+El `.env` del frontend define **una sola** variable, `NUXT_PUBLIC_API_BASE`. Entonces
+`NUXT_PUBLIC_BILLING_ENABLED` está sin definir → `billingEnabled === false` → en
+`schools/add.vue:352` y `schools/[id]/edit.vue:352` los campos de tarifa **no se mandan**:
+
+```js
+// Cobranza (P3): solo se envía cuando el backend ya la acepta.
+if (this.bBillingEnabled) {
+  oPayload.sBillingMode = ...; oPayload.dFixedAmount = ...; /* etc. */
+}
+```
+
+**Consecuencia en cadena:** ningún colegio recibe tarifa → `GET /billing/summary` responde 200 pero
+con `sBillingMode: 'FIXED'`, montos en `null`, `dMonthlyTotal: 0` y `sBillingStatus: 'NONE'` → el panel
+se ve vacío y **ninguna suscripción puede arrancar**. No es un error del API; es que nunca se
+configuró la tarifa.
+
+Y `stripePublishableKey` queda en `''` porque tampoco está ninguna de sus variables, así que
+`useStripe()` reporta `bConfigured = false` y el formulario de tarjeta se queda en el placeholder de
+"pendiente de configuración" — a propósito, sin truenos, pero sin funcionar.
+
+### Variables que hay que definir al **construir** el frontend
+
+| Variable | Valor | Para qué |
+|---|---|---|
+| `NUXT_PUBLIC_BILLING_ENABLED` | `true` | enciende el envío de los campos de tarifa. **Sin esto nada de cobranza funciona** |
+| `NUXT_PUBLIC_STRIPE_PK_TEST` | la `pk_test_…` de MyVillage | Stripe.js para capturar tarjeta. Está en el `.env` del backend como `STRIPE_PUBLIC_KEY` |
+| `NUXT_PUBLIC_STRIPE_MODE` | `test` (default) o `live` | elige entre `..._PK_TEST` y `..._PK_LIVE` |
+| `NUXT_PUBLIC_API_BASE` | la URL del API de dev desplegado | hoy el `.env` local dice `http://localhost:3000/development/api/v1/sp` |
+
+`NUXT_PUBLIC_STRIPE_PK` sigue existiendo como override directo si se prefiere una sola variable.
+
+> ### ⚠️ `nuxt.config.ts:7` tiene `ssr: false`
+>
+> La app es un **SPA estático** (se sube a un bucket de S3). Eso significa que estas variables se
+> **congelan en el momento del build**: ponerlas en un servidor después no hace nada, y cambiarlas
+> exige **volver a construir y volver a subir**. Es el error clásico de este tipo de despliegue:
+> "ya puse la variable" pero el bundle sigue trayendo el valor viejo.
+>
+> Verificación rápida después de subir: buscar la `pk_test_` dentro de los assets publicados. Si no
+> aparece, el build no la tomó.
+
+---
+
 ## Aparte — un dato de cuentas que NO es de código
 
 En `development` hay **13 usuarios de colegio con `bPlatformAccess = false`**, y esos **no pueden ni

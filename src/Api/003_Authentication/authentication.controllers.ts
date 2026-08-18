@@ -51,6 +51,8 @@ class Controllers {
         let sUserType: 'SuperAdmin' | 'SchoolAdmin' | 'FACULTY';
         let oSchool: any = null;
         let iTokenExpiryMinutes: number;
+        // P3 — true only for the school's main user; see where it is set below.
+        let bIsMainUser = false;
 
         // Check if user is an Administrator
         const myAdmin = await AdministratorQueries.verifyAdministratorExists(User.sUserId);
@@ -65,6 +67,20 @@ class Controllers {
             if (mySchoolUser) {
                 sUserType = User.sType === 'FACULTY' ? 'FACULTY' : 'SchoolAdmin';
                 iTokenExpiryMinutes = 7200; // 120 hours
+
+                /**
+                 * P3 — is this the school's MAIN user?
+                 *
+                 * The contract limits card and subscription management to *"el usuario principal del
+                 * colegio"*, and `/billing/*` enforces it with a 403. But the login payload only ever
+                 * said `SchoolAdmin` / `FACULTY`, so the frontend could not tell a main user from a
+                 * secondary one: it showed the billing page and the card buttons to every SchoolAdmin,
+                 * and the secondary ones hit an unexplained 403 on every mutation.
+                 *
+                 * "Main" is `Users.sCreatedBy IS NULL` — the account created together with the school,
+                 * as opposed to one invited later by somebody. No extra query: `User` is already loaded.
+                 */
+                bIsMainUser = User.sCreatedBy === null || User.sCreatedBy === undefined;
 
                 // Get school info (verifySchoolExists checks bActive=true AND bBlocked=false)
                 const school = await SchoolQueries.verifySchoolExists(mySchoolUser.sSchoolId);
@@ -136,6 +152,9 @@ class Controllers {
             sFullName: `${User.sName} ${User.sLastName}`,
             sPhone: User.sPhoneNumber || '',
             sUserType,
+            // P3 — lets the frontend show the billing panel and the card controls only to the user
+            // who can actually use them. Always false for a SuperAdmin, who has no school billing.
+            bIsMainUser,
             aPermissions
         };
 

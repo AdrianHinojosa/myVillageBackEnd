@@ -151,6 +151,8 @@ class Queries {
                 sMeasurementType: oParent.sMeasurementType,
                 // Own configuration
                 sDescription: oBody.sDescription,
+                // Was `sStatus: oBody.sStatus || 'ACTIVE'` until 2026-08-18 — kept as a comment
+                // because that line is exactly why three stages could all be in progress at once.
                 sStatus,
                 tStartDate: oBody.tStartDate,
                 tTargetDate: oBody.tTargetDate,

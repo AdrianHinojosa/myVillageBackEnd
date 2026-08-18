@@ -14,6 +14,42 @@ porcentaje en todo el sistema y cómo se comportan las etapas de una meta dividi
 
 ---
 
+## 🔴 LA REGLA QUE MANDA: SOLO UNA SUBMETA ACTIVA A LA VEZ
+
+> ### **Una meta dividida tiene, como máximo, UNA submeta con `sStatus = 'ACTIVE'`.**
+> ### Nunca dos. Nunca tres. El backend lo garantiza.
+
+Todo lo demás en este documento sale de aquí, así que vale la pena leerlo dos veces:
+
+* **La meta muestra el % de esa única submeta activa.** Si pudiera haber dos activas, la frase "el
+  porcentaje de la submeta activa" no tendría una sola respuesta y la regla del cliente sería
+  imposible de implementar. Por eso el invariante no es un detalle técnico: **es lo que hace que el
+  número de la meta signifique algo.**
+* **Solo esa submeta acepta registros.** Capturar en cualquier otra devuelve **409**.
+* **Las demás submetas están `PAUSED` (en espera) o cerradas** (`COMPLETED` / `NOT_ACHIEVED`).
+* **El frontend no elige cuál es la activa.** La lee: `aSubGoals.find(o => o.sStatus === 'ACTIVE')`.
+  No es la tarjeta que el usuario abrió, no es la primera de la lista, no es la última creada.
+* **El frontend no puede "activar" dos.** Si manda `PUT { sStatus: 'ACTIVE' }` a una submeta, el
+  backend **pausa automáticamente** la que estaba activa. No es un error, es la regla aplicándose:
+  activar una es, por definición, desactivar la otra.
+* **Al cerrar la activa, el backend activa la siguiente sin cerrar, por orden.** El frontend no tiene
+  que mandar un segundo `PUT` para eso — y si lo manda, sobra.
+
+Esto era lo que decía el PDF firmado desde el principio (*"solo una activa a la vez, hay que cerrar
+una para avanzar"*). El frontend se construyó con estados independientes y el cliente confirmó que la
+versión correcta es la secuencial, así que ese diseño se revierte.
+
+**Cómo se ve en pantalla, siempre:**
+
+```
+Meta anual: 20%                     ← igual a la etapa EN CURSO, nunca un promedio
+├─ Etapa 1  ✅ Completada    90%     ← historia; su % ya no mueve la meta
+├─ Etapa 2  ▶️ En curso      20%     ← LA ÚNICA que acepta registros
+└─ Etapa 3  ⏸️ En espera      0%     ← arranca sola cuando se cierre la Etapa 2
+```
+
+---
+
 ## Lo que ya está bien y NO hay que tocar
 
 Revisé `adrianDev18Aug` (= `origin/dev` 98a9a91). Dos pendientes anteriores ya están resueltos:
@@ -243,6 +279,54 @@ dev, esta secuencia recorre toda la máquina:
 6. Capturar 2 registros de 2/10 en la Etapa 2 → Etapa 2 **20%**, meta **20%** (no 55%).
 7. Reabrir la Etapa 1 → la Etapa 2 vuelve a **En espera**, y la meta regresa a **90%**.
 8. Cerrar todas → la meta se queda con el % de la **última** etapa cerrada.
+
+---
+
+## Aparte — por qué Stripe devuelve 401 y 403
+
+No es un bug del módulo de cobranza (`npm run test:stripe`: 183 aserciones verdes). Verificado el
+18/ago levantando la app real y probando los 8 endpoints con cada tipo de usuario:
+
+| Endpoint | Usuario **principal** | Otro admin del colegio | FACULTY | Superadmin | Sin token |
+|---|---|---|---|---|---|
+| `GET /billing/summary` · `/payments` · `/payment-methods` | **200** | 200 | **403** | **401** | **401** |
+| `POST /setup-intent`, `POST/PUT/DELETE payment-methods`, `POST /cancel` | **200** | **403** | **403** | **401** | **401** |
+
+**El 401** sale cuando el token no es de un usuario de colegio: superadmin de plataforma, token
+vencido, o header ausente. `/billing/*` son rutas de colegio; el middleware busca una sesión de
+usuario de colegio y con un token de admin no la encuentra.
+
+**El 403** sale por rol. Y aquí estaba el hueco real: **el login nunca decía si el usuario es el
+principal del colegio.** Solo mandaba `sUserType: 'SchoolAdmin' | 'FACULTY' | 'SuperAdmin'`, así que
+el frontend mostraba la página de cobranza y los botones de tarjeta a **cualquier** SchoolAdmin — y
+los que no son el principal chocaban con un 403 sin explicación.
+
+**Ya está resuelto en backend:** el login ahora devuelve `bIsMainUser`.
+
+```js
+// app/stores/auth.ts — agregar al tipo del usuario
+bIsMainUser?: boolean;
+
+// getter nuevo
+bCanManageBilling: (state) => state.oUser?.sUserType === 'SchoolAdmin' && state.oUser?.bIsMainUser === true,
+```
+
+Con eso:
+
+* `app/layouts/admin.vue:339` — la entrada del menú `/admin/billing` pasa de
+  `aAllowedUserTypes: ['SchoolAdmin']` a exigir además `bIsMainUser`.
+* `app/pages/admin/billing/index.vue:86` — igual en el `definePageMeta`.
+* `BillingCardForm` / `BillingCardList` — ocultar agregar / predeterminar / eliminar tarjeta y
+  cancelar suscripción cuando `bIsMainUser` sea falso. Las lecturas (resumen, historial, tarjetas)
+  pueden seguir visibles: el backend las permite a cualquier admin del colegio.
+
+**Un dato que conviene revisar del lado de MyVillage, no de código:** en `development` hay **13
+usuarios de colegio con `bPlatformAccess = false`**, y esos **no pueden ni iniciar sesión** (el login
+devuelve 401 *"bloqueado de la plataforma"*). Entre ellos aparece `lucypotes@hotmail.com` **dos
+veces**: como usuario principal de "MV Rosa" y como FACULTY de "Test School Postman2", ambos en
+`false`. Si Lucy está probando con ese correo, el 401 no viene de cobranza — viene de que la cuenta
+está sin acceso, y hay dos cuentas con el mismo correo. Vale la pena activar la correcta y borrar o
+renombrar la otra.
 
 ---
 

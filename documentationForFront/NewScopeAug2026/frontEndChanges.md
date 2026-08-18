@@ -51,6 +51,7 @@ frontend work didn't exist.
 | 16 | 7 | `subGoals.ts`, `SubGoalsManager.vue:529-536` | **The goal's % = its stage in progress, never an average.** Stop computing it client-side; read `oGoal.dProgress` | 🔴 breaking |
 | 17 | 7 | `SubGoalsManager.vue` | **Subgoals are now SEQUENTIAL** — only one stage is `ACTIVE`, only that one accepts records (409 otherwise), and a status change moves OTHER rows so a re-fetch is mandatory | 🔴 breaking |
 | 18 | 7 / all | Every goal percentage | The % now averages **all** records, not the last 3 — every existing number changes, in divided and ordinary goals alike | 🟡 adapt |
+| 19 | 3 | login → `bIsMainUser` | **New field.** Gate the billing menu, the billing page and the card controls on it — that is what the unexplained **403** was | 🔴 breaking |
 
 Severity: 🔴 breaking (integration fails without it) · 🟡 rename/adapt · 🟢 nice-to-have
 
@@ -379,6 +380,46 @@ queue as `PAUSED`, closing one promotes the next automatically.
 went 10% → 90% used to read 90% (the recent three) and now reads the average of its whole history.
 `development` was already recomputed by migration `3039`; e.g. the goal "Organización" went from
 91.67% to 75%. Marking a record as **excluded** is now the only way to keep an outlier out.
+
+---
+
+### 19. P3 — Login now returns `bIsMainUser` 🔴
+
+*(Added 2026-08-18 while diagnosing the reported 401s and 403s on `/billing/*`.)*
+
+The contract limits card and subscription management to *"el usuario principal del colegio"*, and the
+backend has always enforced it with a **403**. But the login payload only said
+`sUserType: 'SchoolAdmin' | 'FACULTY' | 'SuperAdmin'` — there was **no way for the frontend to tell a
+main user from a secondary one**. So the billing page and every card button were shown to any
+SchoolAdmin, and the secondary ones hit a 403 with no explanation. That is the 403 that was reported.
+
+**Backend fix (already in):** `results.bIsMainUser` — `true` only for the account created together
+with the school (`Users.sCreatedBy IS NULL`), always `false` for a SuperAdmin.
+
+**What to change:**
+
+```js
+// app/stores/auth.ts
+bIsMainUser?: boolean;
+bCanManageBilling: (state) => state.oUser?.sUserType === 'SchoolAdmin' && state.oUser?.bIsMainUser === true,
+```
+
+| Where | Change |
+|---|---|
+| `app/layouts/admin.vue:339` | the `/admin/billing` entry needs `bIsMainUser`, not just `aAllowedUserTypes: ['SchoolAdmin']` |
+| `app/pages/admin/billing/index.vue:86` | same in `definePageMeta` |
+| `BillingCardForm`, `BillingCardList` | hide add / set-default / delete card and cancel subscription when `bIsMainUser` is false |
+
+**Reads stay open to any school admin** — summary, payment history and the card list all return 200
+for them; only the mutations are restricted. Verified against the running app, all 8 endpoints:
+
+| Endpoint group | Main user | Other school admin | FACULTY | SuperAdmin | No token |
+|---|---|---|---|---|---|
+| reads (`summary`, `payments`, `payment-methods`) | 200 | 200 | 403 | 401 | 401 |
+| mutations (`setup-intent`, card CRUD, `cancel`) | 200 | **403** | 403 | 401 | 401 |
+
+The **401** column is not a bug either: `/billing/*` are school routes, so a platform-superadmin token
+has no school-user session. Same for a missing or expired `Authorization` header.
 
 ---
 

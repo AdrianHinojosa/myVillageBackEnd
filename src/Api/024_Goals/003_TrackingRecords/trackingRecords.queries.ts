@@ -414,7 +414,23 @@ class Queries {
             }
         }
 
-        // The percentage comes from ONE stage — never from a blend.
+        /**
+         * The percentage comes from ONE stage — never from a blend.
+         *
+         * SUPERSEDED on 2026-08-18, kept commented so the reversal stays traceable. Until then the
+         * PO's rule (2026-08-14) averaged every stage, counting an empty one as 0:
+         *
+         *   let dProgressSum = 0, dAverageSum = 0;
+         *   for (const oSub of aSubGoals as any[]) {
+         *       dProgressSum += Number(oSub.dProgress) || 0;
+         *       dAverageSum  += Number(oSub.dAverageValue) || 0;
+         *   }
+         *   const dProgress     = Math.min(Math.round((dProgressSum / aSubGoals.length) * 100) / 100, 100);
+         *   const dAverageValue = Math.round((dAverageSum / aSubGoals.length) * 100) / 100;
+         *
+         * The client rejected it: two stages at 90% and 0% reported 45%, and *"no es real"*.
+         * Its test lives in `src/unitTests/SubGoalsRollup/02_parentRollup.SUPERSEDED.ts`.
+         */
         const aClosed = (aSubGoals as any[]).filter(o => o.sStatus === 'COMPLETED' || o.sStatus === 'NOT_ACHIEVED');
         const oSource = (aSubGoals as any[]).find(o => o.sStatus === 'ACTIVE')
             || (aClosed.length ? aClosed[aClosed.length - 1] : null);
@@ -458,6 +474,12 @@ class Queries {
         if (!goal) return 0;
 
         // Every non-excluded record. Still ordered newest-first so the set is deterministic.
+        //
+        // The previous rule was the same query with `.limit(3)` on the end — kept here as a comment
+        // rather than erased, because it was a documented decision of the original system
+        // (`docs/REGLAS_DE_NEGOCIO.md` §7.4, §13.2) and someone will eventually ask what changed:
+        //     .orderBy('tRecordDate', 'desc')
+        //     .limit(3);          // ← removed 2026-08-18: "se promedia toda la submeta"
         const records = await TrackingRecordsModel.query(trx)
             .where('sGoalId', sGoalId)
             .where('bActive', true)

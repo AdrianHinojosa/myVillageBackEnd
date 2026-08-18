@@ -73,6 +73,7 @@ Revisé `adrianDev18Aug` (= `origin/dev` 98a9a91). Dos pendientes anteriores ya 
 | 6 | UI de etapas | Mostrar la fila como cola: **en curso / en espera / cerrada** | 🟡 |
 | 7 | Tarjeta y gráfica | Explicar el **0%** cuando la etapa nueva no tiene capturas, para que no parezca bug | 🟡 |
 | 8 | Manejo de errores | Nuevo **409** al capturar en una etapa que no está en curso | 🟡 |
+| 9 | `auth.ts`, `admin.vue:339`, `billing/index.vue:86`, `components/billing/*` | **El login ahora devuelve `bIsMainUser`.** Solo el usuario principal del colegio puede administrar tarjetas — esto es el **403** que se estaba viendo en Stripe | 🔴 |
 
 ---
 
@@ -237,6 +238,73 @@ corrección, no avance en una etapa terminada.
 
 ---
 
+## 9 🔴 — El login ahora devuelve `bIsMainUser` (esto es el 403 de Stripe)
+
+**El problema, en una frase:** el contrato dice que *"únicamente el usuario principal del colegio
+tendrá acceso para registrar, modificar o eliminar tarjetas"*, el backend siempre lo ha exigido con un
+**403**… y el login nunca decía quién es el usuario principal. Solo mandaba
+`sUserType: 'SchoolAdmin' | 'FACULTY' | 'SuperAdmin'`, así que el frontend mostraba la página de
+cobranza y todos los botones de tarjeta a **cualquier** SchoolAdmin. Los que no son el principal
+chocaban con un 403 sin explicación. **Ese es el 403 que se reportó.**
+
+**Ya está resuelto en backend.** `POST /auth/login` ahora incluye en `results`:
+
+| Campo | Tipo | Valor |
+|---|---|---|
+| `bIsMainUser` | boolean | `true` solo para la cuenta creada junto con el colegio (`Users.sCreatedBy IS NULL`). Siempre `false` para un SuperAdmin, que no tiene cobranza |
+
+### Qué cambiar
+
+**1. El store** — `app/stores/auth.ts`:
+
+```js
+// en el tipo del usuario
+bIsMainUser?: boolean;
+
+// getter nuevo, junto a bIsSuperAdmin / bIsSchoolAdmin
+bCanManageBilling: (state): boolean =>
+  state.oUser?.sUserType === 'SchoolAdmin' && state.oUser?.bIsMainUser === true,
+```
+
+**2. El menú** — `app/layouts/admin.vue:339`. Hoy la entrada de cobranza es:
+
+```js
+{ sUrl: '/admin/billing', ..., aAllowedUserTypes: ['SchoolAdmin'] },
+```
+
+`SchoolAdmin` incluye a los usuarios administrativos secundarios, así que hay que exigir además
+`bIsMainUser` (con un `v-if` sobre `bCanManageBilling`, o agregando la condición al filtro que arma
+`aMenuItems`).
+
+**3. La página** — `app/pages/admin/billing/index.vue:86`. El `definePageMeta` tiene
+`allowedUserTypes: ['SchoolAdmin']` y el comentario ya dice *"Solo el usuario principal del colegio
+gestiona la suscripción"* — pero no lo puede cumplir sin este campo. Hay que bloquear la entrada
+cuando `bCanManageBilling` sea falso (o redirigir).
+
+**4. Los componentes de tarjeta** — `app/components/billing/`. Ocultar cuando `bIsMainUser` sea falso:
+
+| Componente | Qué ocultar |
+|---|---|
+| `BillingCardForm` | agregar tarjeta |
+| `BillingCardList` | predeterminar y eliminar tarjeta |
+| `BillingPlanCard` | cancelar suscripción |
+
+**Las lecturas pueden seguir visibles para cualquier admin del colegio** — el backend las permite:
+
+| Endpoint | Principal | Otro admin | FACULTY | Superadmin | Sin token |
+|---|---|---|---|---|---|
+| `GET /billing/summary` · `/payments` · `/payment-methods` | **200** | **200** | 403 | 401 | 401 |
+| `POST /setup-intent`, `POST/PUT/DELETE payment-methods`, `POST /cancel` | **200** | **403** | 403 | 401 | 401 |
+
+Medido el 18/ago levantando la aplicación real y probando los 8 endpoints con cada tipo de token, no
+inferido de la lectura del código.
+
+**El 401 no es un bug:** `/billing/*` son rutas de colegio, así que un token de superadmin de
+plataforma no tiene sesión de usuario de colegio. Igual con un header `Authorization` ausente o
+vencido. Si se está probando con Postman y un token de admin, 401 es la respuesta correcta.
+
+---
+
 ## Efecto de la otra regla: los porcentajes cambian en TODA la app
 
 Esto no requiere cambios de frontend, pero hay que saberlo antes de que alguien reporte un "bug":
@@ -282,51 +350,19 @@ dev, esta secuencia recorre toda la máquina:
 
 ---
 
-## Aparte — por qué Stripe devuelve 401 y 403
+## Aparte — un dato de cuentas que NO es de código
 
-No es un bug del módulo de cobranza (`npm run test:stripe`: 183 aserciones verdes). Verificado el
-18/ago levantando la app real y probando los 8 endpoints con cada tipo de usuario:
+En `development` hay **13 usuarios de colegio con `bPlatformAccess = false`**, y esos **no pueden ni
+iniciar sesión**: el login los rechaza con **401** *"bloqueado de la plataforma"*
+(`authentication.controllers.ts:41`).
 
-| Endpoint | Usuario **principal** | Otro admin del colegio | FACULTY | Superadmin | Sin token |
-|---|---|---|---|---|---|
-| `GET /billing/summary` · `/payments` · `/payment-methods` | **200** | 200 | **403** | **401** | **401** |
-| `POST /setup-intent`, `POST/PUT/DELETE payment-methods`, `POST /cancel` | **200** | **403** | **403** | **401** | **401** |
+Entre ellos aparece **`lucypotes@hotmail.com` dos veces**: como usuario **principal** de "MV Rosa" y
+como **FACULTY** de "Test School Postman2", ambos en `false`. Si Lucy está probando con ese correo, el
+401 no viene de cobranza — viene de que la cuenta está sin acceso; y como hay **dos** filas con el
+mismo correo, el login toma una de las dos sin que se pueda elegir.
 
-**El 401** sale cuando el token no es de un usuario de colegio: superadmin de plataforma, token
-vencido, o header ausente. `/billing/*` son rutas de colegio; el middleware busca una sesión de
-usuario de colegio y con un token de admin no la encuentra.
-
-**El 403** sale por rol. Y aquí estaba el hueco real: **el login nunca decía si el usuario es el
-principal del colegio.** Solo mandaba `sUserType: 'SchoolAdmin' | 'FACULTY' | 'SuperAdmin'`, así que
-el frontend mostraba la página de cobranza y los botones de tarjeta a **cualquier** SchoolAdmin — y
-los que no son el principal chocaban con un 403 sin explicación.
-
-**Ya está resuelto en backend:** el login ahora devuelve `bIsMainUser`.
-
-```js
-// app/stores/auth.ts — agregar al tipo del usuario
-bIsMainUser?: boolean;
-
-// getter nuevo
-bCanManageBilling: (state) => state.oUser?.sUserType === 'SchoolAdmin' && state.oUser?.bIsMainUser === true,
-```
-
-Con eso:
-
-* `app/layouts/admin.vue:339` — la entrada del menú `/admin/billing` pasa de
-  `aAllowedUserTypes: ['SchoolAdmin']` a exigir además `bIsMainUser`.
-* `app/pages/admin/billing/index.vue:86` — igual en el `definePageMeta`.
-* `BillingCardForm` / `BillingCardList` — ocultar agregar / predeterminar / eliminar tarjeta y
-  cancelar suscripción cuando `bIsMainUser` sea falso. Las lecturas (resumen, historial, tarjetas)
-  pueden seguir visibles: el backend las permite a cualquier admin del colegio.
-
-**Un dato que conviene revisar del lado de MyVillage, no de código:** en `development` hay **13
-usuarios de colegio con `bPlatformAccess = false`**, y esos **no pueden ni iniciar sesión** (el login
-devuelve 401 *"bloqueado de la plataforma"*). Entre ellos aparece `lucypotes@hotmail.com` **dos
-veces**: como usuario principal de "MV Rosa" y como FACULTY de "Test School Postman2", ambos en
-`false`. Si Lucy está probando con ese correo, el 401 no viene de cobranza — viene de que la cuenta
-está sin acceso, y hay dos cuentas con el mismo correo. Vale la pena activar la correcta y borrar o
-renombrar la otra.
+Conviene activar la cuenta correcta y borrar o renombrar la otra. El módulo de cobranza está verde:
+`npm run test:stripe`, 183 aserciones.
 
 ---
 

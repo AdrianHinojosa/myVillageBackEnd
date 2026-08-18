@@ -3,6 +3,68 @@ Back-End of My Village
 
 ---
 
+## Deploying
+
+There is **no CI configuration in this repository** — no workflow files, no Docker, no Procfile, no
+`.ebextensions`. Deployment is manual, and these are the steps in order. Skipping step 3 is the usual
+way a deploy looks fine and serves wrong data.
+
+```bash
+git fetch origin
+git checkout <branch>          # the branch this environment serves
+git pull
+
+npm ci                         # not `npm install` — see the @babel/runtime note below
+npm run build                  # babel src -> dist
+npm run db:migrations          # apply pending migrations (uses NODE_ENV from .env)
+npm start                      # node dist/server.js
+```
+
+### 1. `npm ci`, not `npm install`
+
+`.babelrc` enables `@babel/plugin-transform-runtime`, which emits `require('@babel/runtime/...')`, so
+the package must be present **and pinned to `^7`**. `npm install @babel/runtime` resolves to `^8`,
+which dropped the `./regenerator` subpath the Babel 7 transform emits, and the app fails to boot. The
+pin is in `package.json`; `npm ci` respects the lockfile and cannot drift.
+
+### 2. Migrations per environment
+
+| Target | Command |
+|---|---|
+| the environment named in `.env` (`NODE_ENV`) | `npm run db:migrations` |
+| production explicitly | `npm run db:migrations:prod` |
+
+> `npm run update-prod-migrations` is **not** a migration runner. It is a one-off utility that
+> renumbers rows in `knex_migrations` when migration file prefixes collide. Do not use it to deploy.
+
+### 3. Recompute derived progress when the rules change
+
+`Goals.dProgress`, `dAverageValue`, `iRecordsCount` and `tLastRecord` are a **cache** of a
+calculation. Migration `3039` recomputes them by calling `src/scripts/recalculateProgress.ts`, which
+means it needs the TypeScript sources present — true for a normal repo deploy, not true if only
+`dist/` was shipped. The call is wrapped in a `try`, so a failure is a warning, not a crash:
+
+```
+3039: could not run the progress recomputation (...). Run "npm run recalc:progress" to complete it.
+```
+
+If you see that line, run `npm run recalc:progress`. If you do not, nothing is pending. Either way the
+script is safe to re-run.
+
+### 4. Environment variables that change behaviour silently
+
+| Variable | If missing |
+|---|---|
+| `STRIPE_PRIVATE_KEY` | every `/billing/*` endpoint that talks to Stripe returns **503**; the rest still work |
+| `STRIPE_WEBHOOK_SECRET` | webhook signature verification fails, so subscription state changes (paid, failed, suspended) **never arrive** |
+| `SUPPORT_SMS_ENABLED`, `SUPPORT_PHONE` | support tickets stop sending SMS — silently, by design |
+| the AWS/SES ones | dunning and support email is fire-and-forget: SES errors are logged, never surfaced |
+
+None of these stop the server from booting, which is exactly why they are worth checking after a
+deploy rather than assuming.
+
+---
+
 ## Testing
 
 ```bash

@@ -184,16 +184,43 @@ export function CorrectPassword(error: string): typeof Joi {
     return Joi.string().required().trim().regex(/(^[a-zA-Z0-9])*(^[a-zA-Z0-9?_$`~;:!#%*+=@&.^()!]+$)/).min(6).error(new Error(error));
 }
 
+/**
+ * Email validation. Joi's own `.email()` does the work — deliberately WITHOUT a hand-rolled regex.
+ *
+ * There used to be `.regex(/^([\w\.\-]+)@([\w\-]+)((\.(\w){2,3}){1,2})$/)` on top of `.email()`, and
+ * it only ever NARROWED a correct validator, wrongly. It allowed 1–2 dot-segments after the first
+ * domain label, each of exactly 2–3 characters, so it rejected:
+ *
+ *   catalina.bermea@correo.himalayamonterrey.com   subdomain longer than 3 chars
+ *   a@mail.google.com                             same reason
+ *   a@domain.info / .online / .school / .tech      TLD longer than 3 chars
+ *   a@b.c.d.com                                   more than 2 segments
+ *
+ * That blocked the address in `POST /schoolUsers`, `POST /schools` **and `POST /auth/login`**, so an
+ * affected user could not be created and could not have signed in even if the row were inserted by
+ * hand. Reported from production use, 2026-08-18.
+ *
+ * `minDomainSegments: 2` still requires a real domain (`a@b` is refused). `tlds: { allow: false }`
+ * skips checking the TLD against a fixed list, so new and country TLDs are not rejected for being
+ * unfamiliar — the shape is what matters here, and deliverability is proven by the confirmation mail.
+ *
+ * `max(254)` is the RFC 5321 limit. The previous `max(70)` was arbitrary and tighter than the column
+ * itself (`Users.sEmail` and `Schools.sEmail` are both `varchar(255)`), so it rejected long but
+ * perfectly valid corporate addresses.
+ *
+ * `convert: true` with `.trim()` and `.lowercase()` keeps normalising input, so " A@Domain.COM "
+ * still stores as "a@domain.com" — that behaviour is unchanged and several lookups depend on it.
+ */
 export function RequiredCorrectEmail(error: string): typeof Joi {
-    return Joi.string().trim().email().lowercase().options({
+    return Joi.string().trim().email({ minDomainSegments: 2, tlds: { allow: false } }).lowercase().options({
         convert: true
-    }).max(70).regex(/^([\w\.\-]+)@([\w\-]+)((\.(\w){2,3}){1,2})$/).required().error(new Error(error));
+    }).max(254).required().error(new Error(error));
 }
 
 export function CorrectEmail(error: string): typeof Joi {
-    return Joi.string().trim().allow("").allow(null).email().lowercase().options({
+    return Joi.string().trim().allow("").allow(null).email({ minDomainSegments: 2, tlds: { allow: false } }).lowercase().options({
         convert: true
-    }).max(70).regex(/^([\w\.\-]+)@([\w\-]+)((\.(\w){2,3}){1,2})$/).error(new Error(error));
+    }).max(254).error(new Error(error));
 }
 
 export function CorrectPhoneNumber(error: string): typeof Joi {

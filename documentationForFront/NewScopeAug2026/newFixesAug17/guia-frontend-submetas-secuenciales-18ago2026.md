@@ -74,6 +74,9 @@ Revisé `adrianDev18Aug` (= `origin/dev` 98a9a91). Dos pendientes anteriores ya 
 | 7 | Tarjeta y gráfica | Explicar el **0%** cuando la etapa nueva no tiene capturas, para que no parezca bug | 🟡 |
 | 8 | Manejo de errores | Nuevo **409** al capturar en una etapa que no está en curso | 🟡 |
 | 9 | `auth.ts`, `admin.vue:339`, `billing/index.vue:86`, `components/billing/*` | **El login ahora devuelve `bIsMainUser`.** Solo el usuario principal del colegio puede administrar tarjetas — esto es el **403** que se estaba viendo en Stripe | 🔴 |
+| 10 | `app/utils/goals.ts:290,294,553,617` | **El frontend promedia los últimos 3 registros por su cuenta** y eso es lo que pinta el detalle, el resumen y el reporte — no `oGoal.dProgress`. Con >3 registros la pantalla y el API van a discrepar | 🔴 |
+| 11 | `GoalDetail.vue:589` | **Reabrir no funciona**: `reopen-goal` está declarado en `emits` pero nunca se emite. Afecta etapas **y** metas | 🔴 |
+| 12 | `SubGoalsManager.vue` (modal de etapa) | **Código muerto** — `bShowStage` nunca se pone en `true`, `oActiveStage` siempre es `null`. Borrar o cablear | 🟡 |
 
 ---
 
@@ -350,11 +353,67 @@ vencido. Si se está probando con Postman y un token de admin, 401 es la respues
 
 ---
 
-## Efecto de la otra regla: los porcentajes cambian en TODA la app
+## 10 🔴 — El frontend calcula el % por su cuenta con los últimos 3 registros
 
-Esto no requiere cambios de frontend, pero hay que saberlo antes de que alguien reporte un "bug":
+Corrección importante a la primera versión de esta guía: dije que el cambio de ventana "no requiere
+cambios de frontend". **Es falso, y es bloqueante.** El frontend tiene su propio motor de cálculo y
+sigue usando una ventana de 3.
 
-* El % ya no es el promedio de los **últimos 3** registros, es el promedio de **todos**.
+`app/utils/goals.ts`:
+
+```js
+// línea 290
+iRecordsToAverage: number;  // Number of recent records to use (default: 3)
+// línea 294
+const DEFAULT_PROGRESS_CONFIG: IProgressConfig = { iRecordsToAverage: 3 };
+// líneas 553 y 617 — el default entra por firma
+export function calculateAverage(aRecords, sMeasurementType, oGoal?, iRecordsToAverage = 3)
+export function getProgressDisplay(aRecords, oGoal, iRecordsToAverage = 3)
+```
+
+Y `getProgressDisplay(...)` se llama **sin** el tercer argumento, así que siempre promedia 3, desde:
+
+| Archivo | Línea | Qué pinta |
+|---|---|---|
+| `GoalDetail.vue` | 645 | el detalle de la meta |
+| `GoalSummary.vue` | 271 | la tarjeta de resumen |
+| `GoalReportCard.vue` | 157 | la tarjeta del reporte |
+| `goals.ts` | 781 | helper interno |
+
+Y lo que se muestra sale de ahí, **no** de `oGoal.dProgress` — en `GoalDetail.vue`:
+
+```html
+<span ...>{{ oProgressDisplay.sAverageValue }}</span>            <!-- línea 57 -->
+<div  ... :style="{ width: `${oProgressDisplay.dBarFillPercent}%` }" />   <!-- línea 71 -->
+```
+
+**Consecuencia:** cualquier meta con **más de 3 registros** va a mostrar un número y una barra
+distintos de los que devuelve el API. Con 4 registros de 100/100/100/0, el backend dice **75%** y la
+pantalla dice **100%**.
+
+### El arreglo
+
+No es "leer `dProgress`": `getProgressDisplay()` devuelve más que un porcentaje (promedio en las
+unidades de la medición, etiqueta y valor del objetivo, ancho de barra), así que sigue siendo útil. Lo
+que hay que cambiar es **la ventana**: que promedie todos los registros incluidos, no 3.
+
+```js
+// app/utils/goals.ts — 0 (o Infinity) significa "todos", y ese pasa a ser el default
+const DEFAULT_PROGRESS_CONFIG: IProgressConfig = { iRecordsToAverage: 0 };
+
+export function calculateAverage(aRecords, sMeasurementType, oGoal?, iRecordsToAverage = 0) {
+  const aIncluded = getIncludedRecords(aRecords);
+  const aWindow = iRecordsToAverage > 0 ? aIncluded.slice(0, iRecordsToAverage) : aIncluded;
+  // ...promediar aWindow
+}
+```
+
+Conviene además **cotejar el resultado contra `oGoal.dProgress`** en desarrollo: si los dos números
+no coinciden para la misma meta, algo quedó fuera de sincronía y es mejor enterarse ahí que en una
+junta con el cliente.
+
+### Lo demás que trae este cambio
+
 * Aplica a metas normales **y** a submetas, para que dos metas con los mismos registros no puedan dar
   números distintos.
 * Contradice `docs/REGLAS_DE_NEGOCIO.md` §7.4 y §13.2 de este repo, que documentaban los últimos 3

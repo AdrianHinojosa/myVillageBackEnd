@@ -45,9 +45,12 @@ frontend work didn't exist.
 | 10 | 3 | `POST/PUT /schools`, login | Tariff fields + `sBillingStatus` accepted/returned — already matches what the frontend sends | 🟢 none |
 | 11 | 3 | **Environment** | Set `NUXT_PUBLIC_STRIPE_PK` to the publishable key, or card entry cannot work | 🔴 breaking |
 | 12 | 3 | `/billing/*` | All 8 endpoints live and match the guide — no change needed | 🟢 none |
-| 13 | 7 | `app/utils/subGoals.ts` → `getSubGoalsRollup()` | Backend averages **ALL** subgoals (empty = 0); the frontend averages only the started ones — the two will disagree | 🟡 adapt |
-| 14 | 7 | `GoalForm.vue:9` | The title input is hidden in subgoal mode (`v-if="!bIsSubGoal"`) — show it, the backend now persists `sTitle` | 🔴 breaking |
+| 13 | 7 | `app/utils/subGoals.ts` → `getSubGoalsRollup()` | ~~Rollup rule mismatch~~ → **superseded by 16**: the goal no longer averages anything | 🔄 replaced |
+| 14 | 7 | `GoalForm.vue:9` | ~~Title input hidden in subgoal mode~~ → ✅ **resolved** in `origin/dev` 98a9a91 | ✅ done |
 | 15 | 7 | `GET /students/:id/report` | Divided goals now appear (they used to vanish) and each record carries `sSubGoalId` / `sSubGoalTitle` | 🟢 none |
+| 16 | 7 | `subGoals.ts`, `SubGoalsManager.vue:529-536` | **The goal's % = its stage in progress, never an average.** Stop computing it client-side; read `oGoal.dProgress` | 🔴 breaking |
+| 17 | 7 | `SubGoalsManager.vue` | **Subgoals are now SEQUENTIAL** — only one stage is `ACTIVE`, only that one accepts records (409 otherwise), and a status change moves OTHER rows so a re-fetch is mandatory | 🔴 breaking |
+| 18 | 7 / all | Every goal percentage | The % now averages **all** records, not the last 3 — every existing number changes, in divided and ordinary goals alike | 🟡 adapt |
 
 Severity: 🔴 breaking (integration fails without it) · 🟡 rename/adapt · 🟢 nice-to-have
 
@@ -343,7 +346,47 @@ type. `dMonthlyTotal` in the summary is the **official** amount; keep using your
 
 ---
 
-### 13. P7 — The rollup rule differs from `getSubGoalsRollup()` 🟡
+### 16, 17, 18. P7 — Sequential stages + new average window 🔴
+
+*(Client decision, Lucy, 2026-08-18. **The full guide is
+[`newFixesAug17/guia-frontend-submetas-secuenciales-18ago2026.md`](newFixesAug17/guia-frontend-submetas-secuenciales-18ago2026.md)**
+— it lists every file and line to touch, with snippets. Summarised here so the table is not
+misleading.)*
+
+Two business rules were corrected by the client, and they replace entry 13 entirely:
+
+1. **A goal's % averages ALL its records**, not the last 3. Applies to goals and subgoals alike.
+2. **A divided goal's % IS its stage in progress.** It averages nothing. With no stage in progress it
+   shows the last closed stage; with nothing started, 0.
+
+Rule 2 only has one answer if only one stage can be in progress, so the backend now enforces the
+**sequential machine** the signed PDF originally described: at most one subgoal is `ACTIVE`, new ones
+queue as `PAUSED`, closing one promotes the next automatically.
+
+**Minimum the frontend must change** (details and snippets in the guide):
+
+| | |
+|---|---|
+| 🔴 | `dOverallProgress` → `Number(this.oGoal.dProgress)`. Strip `dProgress` out of `getSubGoalsRollup()`; keep it only for `iCompleted / iTotal` and `bAllClosed` |
+| 🔴 | "the stage in progress" = `aSubGoals.find(o => o.sStatus === 'ACTIVE')`, **not** the card the user opened. Only that stage accepts records — the rest return **409** |
+| 🔴 | After `PUT /subGoals/:id { sStatus }`, drop the local patch at `SubGoalsManager.vue:741` and re-fetch the stages **and** the goal — the backend moved other rows |
+| 🟡 | Stop sending `sStatus` on `POST /goals/:id/subGoals` (it is stripped; the machine assigns it) |
+| 🟡 | Label the list as a queue: **en curso / en espera / completada / no alcanzada** |
+| 🟡 | Explain the **0%** right after closing a stage — it is correct, confirmed with the client, but looks like a bug without context |
+| 🟡 | Update `docs/REGLAS_DE_NEGOCIO.md` §7.4 and §13.2 — they still document "últimos 3 registros" |
+
+**Heads-up on rule 1:** every existing percentage changes, not only in divided goals. A goal that
+went 10% → 90% used to read 90% (the recent three) and now reads the average of its whole history.
+`development` was already recomputed by migration `3039`; e.g. the goal "Organización" went from
+91.67% to 75%. Marking a record as **excluded** is now the only way to keep an outlier out.
+
+---
+
+### 13. ~~P7 — The rollup rule differs from `getSubGoalsRollup()`~~ 🔄 SUPERSEDED BY 16
+
+> Kept for the record. The rule described below (average of all subgoals, empty counting as 0) was
+> the PO's decision of 2026-08-14 and was **replaced on 2026-08-18** by the client: the goal mirrors
+> its stage in progress and averages nothing. Do not implement what follows.
 
 *(From Lucy's feedback, 2026-08-17. Full context in
 [`newFixesAug17/respuesta-backend-17ago2026.md`](newFixesAug17/respuesta-backend-17ago2026.md).)*
@@ -371,9 +414,11 @@ two staying different.
 
 ---
 
-### 14. P7 — The subgoal title input is hidden 🔴
+### 14. P7 — The subgoal title input is hidden ✅ RESOLVED
 
-*(From Lucy's feedback, 2026-08-17.)*
+*(From Lucy's feedback, 2026-08-17. **Fixed in `origin/dev` 98a9a91**: `GoalForm.vue:11-14` now
+renders the field in subgoal mode with `:b-required="!bIsSubGoal"`. Nothing left to do; the backend
+rules below are kept because they explain the blank-title fallbacks.)*
 
 **Business rule:** *"quiere ponerle un título a cada submeta (hoy solo dice 'Etapa 1')"*. Backend now
 **accepts and persists** `sTitle` on `POST /goals/:sGoalId/subGoals` and `PUT /subGoals/:sSubGoalId`,

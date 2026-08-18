@@ -1,5 +1,6 @@
 /**
- * Punto 7 — runner for the subgoal rollup / own-title tests (feedback de Lucy, 17/agosto/2026).
+ * P7 — runner for the sequential-stage / own-title / average-window tests
+ * (Lucy's feedback, 2026-08-17 and 2026-08-18).
  *
  *   npm run test:subgoals            all files
  *   npm run test:subgoals -- 02      only files whose name starts with 02
@@ -18,16 +19,17 @@ import {
 interface ISuite { sName: string; run: () => Promise<void>; }
 
 const aSuites: ISuite[] = [
-    { sName: '01_subGoalTitle',  run: require('./01_subGoalTitle').default },
-    { sName: '02_parentRollup',  run: require('./02_parentRollup').default },
-    { sName: '03_studentReport', run: require('./03_studentReport').default },
+    { sName: '01_subGoalTitle',     run: require('./01_subGoalTitle').default },
+    { sName: '02_sequentialStages', run: require('./02_sequentialStages').default },
+    { sName: '03_studentReport',    run: require('./03_studentReport').default },
+    { sName: '04_averageWindow',    run: require('./04_averageWindow').default },
 ];
 
 (async () => {
     const aFilters = process.argv.slice(2).filter(a => !a.startsWith('-'));
     const iStarted = Date.now();
 
-    console.log('\n═══ MyVillage — Punto 7: rollup de submetas y título propio ═══\n');
+    console.log('\n═══ MyVillage — P7: sequential stages, own title, average window ═══\n');
 
     try {
         await assertSafeDatabase();

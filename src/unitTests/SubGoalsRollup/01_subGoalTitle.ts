@@ -1,5 +1,5 @@
 /**
- * Punto 7 — la submeta guarda su PROPIO título.
+ * P7 — a subgoal stores its OWN title.
  *
  * Lucy's report: "al crear una submeta enviando sTitle:'Etapa 1', el backend guarda el título de la
  * meta padre e ignora el enviado."
@@ -27,7 +27,7 @@ export default async function run(): Promise<void> {
 
     // ---------------------------------------------------------------------
     section('a divided goal, created through the API');
-    const sParentTitle = `${TEST_PREFIX} meta anual de lectura`;
+    const sParentTitle = `${TEST_PREFIX} yearly reading goal`;
     const oGoal = await request(app).post(`${BASE}/goals`).set(oAuth).send({
         sStudentId: oFix.sStudentId,
         sTitle: sParentTitle,

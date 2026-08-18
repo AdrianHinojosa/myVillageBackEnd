@@ -581,12 +581,15 @@ partial edits are safe.
    *(Changed 2026-08-17 — see "Each stage can be named" below.)* Send `sTitle` and it is saved; send
    nothing, or an empty string, and the parent's title is inherited. Whatever you send for
    `sMeasurementType` is ignored, so all stages of a goal always measure the same thing.
-4. **Independent statuses, no sequencing.** Every subgoal starts `ACTIVE` and can be set to
-   `COMPLETED`, `NOT_ACHIEVED` or `PAUSED` at any time. ⚠️ *This deviates from the signed PDF,
-   which specified a locked sequence — approved by the PO.*
-5. **A divided goal takes no records of its own.** Posting a record with `sGoalId` to a divided goal
-   returns 409; it must go to a subgoal. Otherwise the parent's progress and the roll-up would each
-   count the same work and the student's advance would be double-reported.
+4. **Sequential stages: only one is in progress at a time.** *(Changed 2026-08-18 — see "Stages are
+   sequential" below.)* The first stage created starts `ACTIVE`, the rest queue as `PAUSED`, and
+   closing one promotes the next automatically. `sStatus` sent on **create** is ignored; on **update**
+   it is how a stage is closed, paused or reopened. This is what the signed PDF specified; the earlier
+   "independent statuses" decision was reversed by the client.
+5. **A divided goal takes no records of its own, and only its stage in progress does.** Posting a
+   record with `sGoalId` to a divided goal returns 409 — it must go to a stage. Posting to a stage
+   that is queued or closed also returns 409: the goal's percentage follows the stage in progress, so
+   capturing anywhere else would move a number nobody is looking at.
 6. **Deleting a subgoal deletes its records too** (soft delete, both recoverable).
 7. **Creating a subgoal marks the parent as divided** automatically, so `bHasSubGoals` can never
    drift from reality even if the goal wasn't created with the flag.
@@ -596,35 +599,71 @@ partial edits are safe.
 Same rules as goals: the subgoal's student must belong to your school, and a **FACULTY** user must
 be assigned to that student. Otherwise 403.
 
-### The parent goal now carries the roll-up itself *(changed 2026-08-17)*
+### The goal's percentage IS its stage in progress *(rule set by the client 2026-08-18)*
 
 **Before:** a divided goal had no records of its own, so its `dProgress` sat at 0 forever and the
 goal card, the student dashboard, the PDF report and `/schools/analytics` all showed 0% for a goal
 whose stages were at 91%.
 
-**Now:** the parent's `dProgress`, `dAverageValue`, `iRecordsCount` and `tLastRecord` are
-**aggregated from its subgoals and stored on the goal**, recalculated in the same transaction as
-anything that can move them — a record created, edited, excluded or deleted; a subgoal created; a
-subgoal deleted. Nothing to compute on the client: just read `dProgress`.
+**Now:** the goal's figures are **stored on the goal** and recalculated in the same transaction as
+anything that can move them — a record created, edited, excluded or deleted; a stage created, closed,
+reopened, paused or deleted. Nothing to compute on the client: read `dProgress`.
 
-| Field on the parent | Value |
+| Field on the goal | Value |
 |---|---|
-| `dProgress` | average of `dProgress` across **all active subgoals**, capped at 100 |
-| `dAverageValue` | same average over `dAverageValue` |
-| `iRecordsCount` | **sum** across subgoals — "how much has been logged" answered at the goal |
-| `tLastRecord` | the most recent of them |
+| `dProgress` | **the same number as the stage in progress.** No averaging |
+| `dAverageValue` | that stage's `dAverageValue` |
+| `iRecordsCount` | **sum** across every stage — "how much has been logged on this goal" |
+| `tLastRecord` | the most recent across every stage |
 
-**The rule:** an empty subgoal counts as **0**, it is not skipped. Two stages at 90% and 0% give a
-parent at **45%** (PO decision, 2026-08-14). A yearly goal split into four stages with only the
-first one finished is at 25%, not 100%.
+**The rule, in the client's words:** *"La submeta activa y la meta siempre son el mismo porcentaje.
+Lo que no quiero es que se promedien la submeta 1 y la submeta 2 para que en la meta me dé un 50%,
+porque no es real."*
 
-⚠️ **The frontend's `getSubGoalsRollup()` uses a different rule** — it averages only the *started*
-subgoals. The two agree whenever every stage has at least one record, and disagree the moment a
-stage is created and left empty. See [`frontEndChanges.md`](frontEndChanges.md) entry 13; the
-simplest fix is to display `oGoal.dProgress` from the API and drop the client-side calculation.
+Fallbacks, in order: the `ACTIVE` stage → the **last closed** stage by order → `0`.
 
-Goals that existed before this change were recomputed once by migration
-`3038_Goals_backfillSubGoalRollup`, already applied to `development`.
+**Consequence the client confirmed explicitly:** close Etapa 1 at 80% and Etapa 2 becomes the stage
+in progress with no records, so **the goal reads 0%** until its first capture. That is intended — the
+goal reports where the student is *right now*, not a blended history.
+
+> ⚠️ This replaces the rule documented here on 2026-08-14 (average of all subgoals, empty counting as
+> 0). Anything still describing the goal as an average of its stages is out of date.
+
+Goals that existed before were recomputed by migration `3039_Goals_sequentialSubGoals`, already
+applied to `development`.
+
+### Stages are sequential
+
+The percentage rule above needs "the stage in progress" to have exactly one answer, so the backend
+enforces it: **at most ONE subgoal of a goal is `ACTIVE`.** This is what the signed scope document
+specified all along.
+
+| What the user does | What the backend does as well |
+|---|---|
+| Creates a stage | `ACTIVE` if no stage is in progress, otherwise `PAUSED` (queued). `sStatus` in the request body is **ignored on create** |
+| `PUT /subGoals/:id { sStatus: 'COMPLETED' }` (or `NOT_ACHIEVED`) | promotes the next unfinished stage, by order, to `ACTIVE` |
+| `PUT { sStatus: 'ACTIVE' }` — reopening or jumping ahead | demotes whichever stage was in progress to `PAUSED` |
+| `PUT { sStatus: 'PAUSED' }` on the stage in progress | leaves the goal with none in progress → it shows the last closed stage |
+| Deletes the stage in progress | promotes the next unfinished stage |
+| Posts a record to a stage that is **not** in progress | refuses with **409** — *"solo se pueden capturar registros en la etapa en curso"* |
+
+Editing or deleting a record that already exists on a closed stage stays allowed: that is a
+correction, not progress on a finished stage.
+
+The goal is **not** closed automatically when every stage closes — that stays a manual action.
+
+### The percentage averages ALL records, not the last 3 *(changed 2026-08-18)*
+
+Client: *"se promedia toda la submeta"*. The old rule took the three most recent non-excluded records;
+now every non-excluded record counts, and the PO extended it to **ordinary goals as well** so one rule
+holds everywhere and two goals with identical records can never show different numbers.
+
+What changes in practice: a bad start is no longer forgotten. A goal that went 10% → 90% used to read
+90% and now reads the average of its whole history, so it climbs more slowly. Marking a record as
+**excluded** is now the only way to keep an outlier out of the number.
+
+⚠️ This contradicts the frontend repo's `docs/REGLAS_DE_NEGOCIO.md` §7.4 and §13.2, which still
+document the last-3 window as a decision of the original system. That document needs updating.
 
 ### Each stage can be named *(changed 2026-08-17)*
 
@@ -669,11 +708,13 @@ preserving untouched fields, `PAUSED` accepted, delete cascading to records, and
 ids and for using a goal id on a subgoal route. Test data removed afterwards; zero leftover subgoal
 rows and zero counter drift.
 
-The 2026-08-17 changes add a re-runnable suite — **`npm run test:subgoals`, 66 assertions, all
-passing** (`src/unitTests/SubGoalsRollup/`): own titles on create and update, blank-title
-inheritance, the roll-up after every kind of change, `GET /goals/:id` and `GET /goals/student/:id`
-serving the aggregate, and the divided goal appearing in the student report with its stages'
-records. It refuses to run against any database but `development` and deletes everything it creates.
+The 2026-08-17 and 2026-08-18 changes add a re-runnable suite — **`npm run test:subgoals`, 109
+assertions, all passing** (`src/unitTests/SubGoalsRollup/`): own titles on create and update,
+blank-title inheritance, all ten transitions of the sequential machine with the goal's figure checked
+after each one, the divided goal appearing in the student report with its stages' records, and the
+average window proved with a case where the old and new rules cannot both pass (4 records of
+100/100/100/0 → **75%**, where last-3 would say 100%). It refuses to run against any database but
+`development` and deletes everything it creates.
 
 # ✅ Punto 3 — Billing with Stripe
 

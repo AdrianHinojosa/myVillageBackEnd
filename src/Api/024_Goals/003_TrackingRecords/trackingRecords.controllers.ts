@@ -47,6 +47,20 @@ class Controllers {
             return next(new MyError(409, ErrorMessages.SubGoals.parentHasSubGoals[sLang]));
         }
 
+        /**
+         * P7 sequential (client decision 2026-08-18) — only the stage IN PROGRESS takes new records.
+         *
+         * The goal's percentage mirrors its current stage, so letting a queued or closed stage
+         * accept records would move a number nobody is looking at while the goal stayed still. It is
+         * also what "hay que cerrar una etapa para avanzar" means in practice.
+         *
+         * Editing or deleting an EXISTING record of a closed stage stays allowed — that is a
+         * correction, not progress on a finished stage.
+         */
+        if (bIsSubGoalRecord && myGoal.sStatus !== 'ACTIVE') {
+            return next(new MyError(409, ErrorMessages.SubGoals.notActiveStage[sLang]));
+        }
+
         // Verify goal is active (not completed)
         if (myGoal.sStatus !== 'ACTIVE') {
             return next(new MyError(400, ErrorMessages.TrackingRecords.goalNotActive[sLang]));

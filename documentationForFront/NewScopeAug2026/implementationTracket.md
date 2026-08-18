@@ -263,7 +263,12 @@ These are facts discovered while reading the code, kept here so nobody re-derive
 | — | P7 inherited fields | Subgoal schema **strips** `sTitle`, `sMeasurementType`, `bHasSubGoals`, `aDocuments` instead of rejecting them | The frontend reuses `GoalForm.vue` for subgoals and always sends all four. Rejecting would 409 the form; ignoring keeps title/measurement inherited as the contract requires. | 2026-08-07 |
 | — | P7 `PAUSED` | Added to `CompleteGoalBody` so it is reachable for goals too | Finding 5: the DB allowed `PAUSED` but the API never did. Subgoals need all four states, and there was no reason for goals to lack one. | 2026-08-07 |
 | — | Docs | Added **`featureGuide.md`** — plain-language explanation of each feature for the frontend team | PO request: explain in understandable terms what was built (tables, endpoints, behaviour), not just what changed. | 2026-08-02 |
-| Q16 | P7 rollup rule | **Parent `dProgress` = average of ALL active subgoals; an empty subgoal counts as 0** | PO decision. ⚠️ The frontend's `getSubGoalsRollup()` averages only *started* subgoals, so the two disagree the moment a stage is left empty — registered as entry 13 in `frontEndChanges.md`. Rationale: a yearly goal split into 4 stages with only the first finished is at 25%, not 100%; averaging started-only makes progress *drop* when a new stage begins. | 2026-08-14 |
+| Q16 | P7 rollup rule | ~~Parent `dProgress` = average of ALL active subgoals~~ — **SUPERSEDED by Q17 on 2026-08-18** | PO decision at the time. The client rejected any averaging four days later. Kept for the record so the reversal is traceable. | 2026-08-14 |
+| Q17 | P7 progress rule | **A divided goal's `dProgress` MIRRORS its stage in progress** (no averaging); with no stage in progress, the last closed one; with nothing started, 0 | Client (Lucy) decision, verbatim: *"la submeta activa y la meta siempre son el mismo porcentaje… lo que no quiero es que se promedien la submeta 1 y la submeta 2 para que en la meta me dé un 50%, porque no es real."* Reverses Q16. | 2026-08-18 |
+| Q18 | Average window | **A goal's % averages ALL its non-excluded records**, not the last 3 — for goals AND subgoals | Client: *"se promedia toda la submeta"*; PO extended it to ordinary goals so one rule holds everywhere. ⚠️ Contradicts the frontend's `docs/REGLAS_DE_NEGOCIO.md` §7.4 / §13.2, which documented the last-3 window as a decision of the original system, and it moves every existing percentage in the app. Excluding a record is now the only way to drop an outlier. | 2026-08-18 |
+| Q19 | P7 sequencing | **Sequential enforced**: at most ONE subgoal `ACTIVE`; new stages queue as `PAUSED`; closing one promotes the next; only the stage in progress accepts records (409) | PO decision, reversing Q3 (independent statuses) and restoring what the signed PDF specified. Required by Q17 — "the stage in progress" needs a single answer. `sStatus` is stripped on create because `GoalForm` sends `ACTIVE` for every stage. | 2026-08-18 |
+| — | Q17 edge cases | Closing a stage when the next is empty **drops the goal to 0%**; all stages closed → the **last closed** stage's %; the goal is **not** auto-completed | PO answers, given explicitly. The 0% is intentional: the goal reports where the student is *now*, not a blended history. Auto-completion was left out as a product decision — the frontend already has `bCanCompleteGoal` to offer the button. | 2026-08-18 |
+| — | Backfill engine reuse | Migration `3039` **calls the app's own engine** (`src/scripts/recalculateProgress.ts`) instead of reimplementing the maths in SQL, wrapped in try/catch | Rewriting a 140-line engine (6 measurement types × 2 directions) as SQL `CASE` guarantees eventual divergence between backfilled and freshly-captured values. The cost is a migration coupled to app code, so a failed import logs a warning and the migration still passes — a fresh database has nothing to recompute, and `npm run recalc:progress` fixes an existing one. | 2026-08-18 |
 | — | P7 rollup storage | **Stored on the parent** (`dProgress`, `dAverageValue`, `iRecordsCount`, `tLastRecord`) and recalculated in the same transaction as any change, **not** computed on read | Four separate read paths (goal card, student list, report, `/schools/analytics`) all read those columns. Fixing the write path fixes all four at once, with no per-request recomputation and no rule duplicated in four endpoints. | 2026-08-17 |
 | — | P7 subgoal title | **Accepted when non-empty, inherited when blank**; a blank title on update never wipes the stored one | PO decision (own title per subgoal). The deployed `GoalForm.vue` hides the title input in subgoal mode and still sends `sTitle: ''`, so taking a blank value literally would leave every subgoal with an empty heading. | 2026-08-17 |
 | — | P7 report attribution | Subgoal records are grouped under the parent, but each record keeps `sGoalId` = its real owner and gains `sSubGoalId` / `sSubGoalTitle` | Rewriting `sGoalId` to the parent would make the payload lie about which row the record belongs to. Grouping is a presentation concern and belongs in the response shape. `useReportPdfGenerator` consumes `aRecords` as a plain array, so nothing breaks. | 2026-08-17 |
@@ -603,7 +608,7 @@ Anything we build differently from the PDF gets logged here with who approved it
 
 | Punto | PDF says | We build | Approved by | Date |
 |---|---|---|---|---|
-| 7 | Submetas are **sequential**: only one active at a time, must close one to advance; main goal progress = active subgoal (PDF p.3) | Frontend built independent statuses, no sequencing; main progress = average of *started* subgoals, completes when all closed | ⛔ **Pending client confirmation** (Q3) | — |
+| 7 | Submetas are **sequential**: only one active at a time, must close one to advance; main goal progress = active subgoal (PDF p.3) | ✅ **Resolved — no longer a deviation.** The client confirmed the PDF was right; the backend now enforces the sequential machine and mirrors the active stage (Q17, Q19). The frontend still needs to catch up — see the 18/ago guide | ✅ Client (Lucy) | 2026-08-18 |
 | 3 | The two modalities are *"alternativas y NO acumulables — el cliente deberá seleccionar una sola"*; only the variable one is priced ($70,000) | Frontend built a per-school selector supporting **both** `FIXED` and `VARIABLE` | ⛔ **Pending confirmation** (Q7) — superset, so contract is satisfied, but acknowledge the change | — |
 | 11 | Static **image** provided by client, editable only in frontend code | Frontend built a programmed guided builder (8 coloured segments) instead | Noted — frontend-only, no backend impact | 2026-08-02 |
 | 13 | Videos uploaded **statically**, modifiable only from frontend code | Frontend ships `public/data/trainings.json` + `app/utils/trainings.ts` | Noted — frontend-only, no backend impact | 2026-08-02 |
@@ -687,6 +692,81 @@ Not a code defect — `npm run test:stripe` is green (183 assertions against rea
 
 ---
 
+## Client rule correction — Lucy, 18/agosto/2026
+
+Source: WhatsApp conversation relayed by Adrian. Guide written for the frontend team:
+[`newFixesAug17/guia-frontend-submetas-secuenciales-18ago2026.md`](newFixesAug17/guia-frontend-submetas-secuenciales-18ago2026.md)
+
+The client rejected **both** halves of how progress was being calculated — including the rule the PO
+had approved four days earlier:
+
+| | Before (17/ago) | After (18/ago) |
+|---|---|---|
+| Inside a goal or subgoal | average of the **last 3** non-excluded records | average of **ALL** non-excluded records |
+| A divided goal's figure | **average** of all its subgoals, empty ones counting as 0 | **the stage in progress**, mirrored exactly — no averaging |
+
+Client's words: *"se promedia toda la submeta"* and *"la submeta activa y la meta siempre son el mismo
+porcentaje… lo que no quiero es que se promedien la submeta 1 y la submeta 2 para que en la meta me dé
+un 50%, porque no es real."*
+
+### The sequential machine came back
+
+"The goal mirrors the stage in progress" only has one answer if only one stage can be in progress.
+The PO chose **secuencial obligatorio**, which restores what the signed PDF said all along
+(*"solo una activa a la vez, hay que cerrar una para avanzar"*) and reverses decision **Q3** of
+2026-08-02 (independent statuses, which the frontend had built).
+
+**Invariant now enforced by the backend:** at most ONE subgoal of a goal is `ACTIVE`.
+
+| Trigger | Backend side-effect |
+|---|---|
+| Create a subgoal | `ACTIVE` if no stage is in progress, else `PAUSED`. `sStatus` from the body is **stripped** on create — `GoalForm` sends `ACTIVE` for every stage |
+| `PUT { sStatus: COMPLETED / NOT_ACHIEVED }` | the next unfinished stage (by `iOrder`) is promoted to `ACTIVE` |
+| `PUT { sStatus: ACTIVE }` | any other stage in progress is demoted to `PAUSED` |
+| `PUT { sStatus: PAUSED }` | the goal is left with no stage in progress → it shows the last closed stage |
+| `DELETE` the stage in progress | the next unfinished stage is promoted |
+| `POST /trackingRecords` on a stage that is not `ACTIVE` | **409** `SubGoals.notActiveStage` |
+
+### Answers the PO gave (2026-08-18)
+
+| Question | Answer |
+|---|---|
+| Which stage is "the active one"? | **Sequential enforced** — the backend guarantees one |
+| Closing a stage at 80% when the next has no records → goal drops to 0%? | **Yes**, on purpose. The goal shows where the student is *now* |
+| All stages closed → what does the goal show? | The **last closed** stage's %, by order. The goal is **not** auto-completed |
+| Does "average all records" apply to ordinary goals too? | **Yes** — one rule for the whole system |
+
+### Data repair
+
+`3039_Goals_sequentialSubGoals` (no schema change) does two things: normalises existing subgoal
+statuses to the invariant (first unfinished stage keeps `ACTIVE`, the rest become `PAUSED`), and
+recomputes every cached percentage with the new rules. Applied to `development`: **26 goals, 9
+subgoals, 3 divided goals — 11 values changed**, zero invariant violations afterwards. Example: the
+goal "Organización" went 91.67% → 75%.
+
+The recomputation **calls the application's own engine** via
+[`src/scripts/recalculateProgress.ts`](../../src/scripts/recalculateProgress.ts) (`npm run
+recalc:progress`) instead of reimplementing it in SQL — a 140-line engine branching on 6 measurement
+types × 2 directions, rewritten as SQL `CASE`, is how two sources of truth start disagreeing. The
+cost of that choice is a migration coupled to app code, so the call is wrapped: if the module cannot
+be loaded, the migration logs a warning and passes (a fresh database has nothing to recompute).
+
+### ⚠️ A frontend document is now wrong
+
+`docs/REGLAS_DE_NEGOCIO.md` in the frontend repo documents the last-3 window as a decision of the
+original system, in §7.4 (*"Default: Últimos 3 registros"*) and §13.2. It needs updating — flagged in
+the guide.
+
+### Verification
+
+`npm run test:subgoals` → **109 assertions, 0 failures** (was 66). The new `04_averageWindow` proves
+the window change with a case where the two rules cannot both pass: 4 records of 100/100/100/0 give
+**75%**, where last-3 would give 100%. `02_sequentialStages` walks all ten transitions of the machine
+and asserts the goal's figure after each, including explicit `!== 30` / `!== 55` assertions that no
+averaging is happening. `npm run test:stripe` re-run: **183 assertions, still green.**
+
+---
+
 ## Commit log
 
 *(one row per commit on `features02Aug2026`)*
@@ -714,3 +794,6 @@ Not a code defect — `npm run test:stripe` is green (183 assertions against rea
 | `0dfd973` | — | Fixed the `db:migrations` script + documented P3 across the three trackers |
 | `dc77e2e` | **3** | Re-runnable test suite for P3 (`src/unitTests/StripeSubscriptions`, 183 assertions) |
 | `76a6aff` | — | Testing section in the root README |
+| `a2a59d8` | **7** | Lucy 17/ago: parent goals aggregate their subgoals + subgoal own title + report fix; migration `3038`; suite `SubGoalsRollup` (66 assertions) |
+| `88d9666` | — | Reply document for the 17/ago feedback + CORS findings + Stripe 401/403/404 diagnosis; three trackers updated |
+| _(this)_ | **7** | Lucy 18/ago: sequential stages + goal mirrors the active stage + average over ALL records; migration `3039`; `recalc:progress`; suite grown to 109 assertions; frontend guide |

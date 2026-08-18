@@ -10,9 +10,21 @@ npm run test:stripe              # all files  (~75s, 183 assertions)
 npm run test:stripe -- 01        # a single file
 npm run test:stripe -- 01 05     # several
 
-npm run test:subgoals            # all files  (~32s, 66 assertions)
+npm run test:subgoals            # all files  (~45s, 109 assertions)
 npm run test:subgoals -- 02      # a single file
 ```
+
+There is also a maintenance script, not a test:
+
+```bash
+npm run recalc:progress          # recompute every goal's stored progress with the current rules
+```
+
+`Goals.dProgress` and friends are a **cache** of a calculation. When the calculation itself changes,
+rows written under the old rules stay stale until something touches that goal again — which for a
+finished goal is never. This recomputes them all, calling the real engine rather than reimplementing
+it, and is safe to re-run. Migration `3039` invokes it automatically, so a deploy does not depend on
+anyone remembering.
 
 Exit code is `0` only if every assertion passed **and** the suite left no residue in the database.
 
@@ -21,7 +33,7 @@ Exit code is `0` only if every assertion passed **and** the suite left no residu
 | Suite | Location | Covers |
 |---|---|---|
 | **Punto 3 — Cobranza automática (Stripe)** | `src/unitTests/StripeSubscriptions/` | Billing: tariff config, the suspension gate, card management, subscriptions, webhooks, dunning, and the trial→charge lifecycle |
-| **Punto 7 — Rollup de submetas** | `src/unitTests/SubGoalsRollup/` | A divided goal aggregating its subgoals' progress, each subgoal's own title, and the student report finding subgoal records |
+| **Punto 7 — Sequential subgoals** | `src/unitTests/SubGoalsRollup/` | The sequential stage machine, a divided goal mirroring its stage in progress, each subgoal's own title, the average window (all records, not the last 3), and the student report finding subgoal records |
 
 Full breakdown of every file in
 [`src/unitTests/StripeSubscriptions/README.md`](src/unitTests/StripeSubscriptions/README.md) and

@@ -14,7 +14,22 @@ Pruebas re-ejecutables: `npm run test:subgoals` → **66 aserciones, 0 fallos**.
 
 ---
 
-## 1. ✅ Rollup de progreso — resuelto
+> ## ⚠️ AVISO — 18/agosto/2026
+>
+> Lucy corrigió la regla del punto 1 al día siguiente: la meta **no promedia** sus submetas, la meta
+> **es** el porcentaje de la submeta activa. Y el porcentaje de cada submeta ahora promedia **todos**
+> sus registros, no los últimos 3.
+>
+> **Lo que está implementado hoy es la regla nueva.** Todo lo que dice esta sección 1 sobre "promedio
+> de TODAS las submetas" quedó superado — se conserva solo para que el cambio sea trazable.
+>
+> 👉 Regla vigente y cambios de frontend:
+> [`guia-frontend-submetas-secuenciales-18ago2026.md`](guia-frontend-submetas-secuenciales-18ago2026.md)
+>
+> Las secciones **2 (título)**, **3 (CORS)**, **5 (PDF)** y la de **Stripe 401/403/404** siguen
+> vigentes tal cual.
+
+## 1. ⚠️ Rollup de progreso — resuelto, pero la regla cambió el 18/ago
 
 ### Qué se hizo
 

@@ -41,9 +41,6 @@ const SubGoalConfigFields = {
     // Listed in the signed scope document: "porcentaje objetivo (numérico, valor de 0 a 100)"
     iTargetPercentage: Joi.number().integer().min(0).max(100).allow(null)
         .error(new Error("SubGoals iTargetPercentage")),
-    // Independent per subgoal (PO decision — no sequential machine). ACTIVE by default.
-    sStatus: Joi.string().valid('ACTIVE', 'COMPLETED', 'NOT_ACHIEVED', 'PAUSED').allow(null)
-        .error(new Error("SubGoals sStatus")),
     aTasks: Joi.array().items(Joi.object({
         sTitle: Joi.string().required(),
         bCompleted: Joi.boolean(),
@@ -61,9 +58,22 @@ export const CreateSubGoalParams = Validations.JoiObjectKeys({
     sLang: Joi.string(),
 });
 
+/**
+ * The stage's state. Accepted on UPDATE — that is how a stage is closed, paused or reopened — and
+ * deliberately **stripped on CREATE**: the sequential machine decides whether a new stage starts in
+ * progress or queues behind the current one (client decision 2026-08-18). `GoalForm` sends `ACTIVE`
+ * for every stage, and honouring that would put two stages in progress at once, leaving "the goal's
+ * percentage" with no single answer.
+ */
+const StatusField = {
+    sStatus: Joi.string().valid('ACTIVE', 'COMPLETED', 'NOT_ACHIEVED', 'PAUSED').allow(null)
+        .error(new Error("SubGoals sStatus")),
+};
+
 export const CreateSubGoalBody = Validations.JoiObjectKeys({
     ...SubGoalConfigFields,
     ...IgnoredInheritedFields,
+    sStatus: Joi.any().strip(),
 });
 
 export const UpdateSubGoalParams = Validations.JoiObjectKeys({
@@ -74,6 +84,7 @@ export const UpdateSubGoalParams = Validations.JoiObjectKeys({
 export const UpdateSubGoalBody = Validations.JoiObjectKeys({
     ...SubGoalConfigFields,
     ...IgnoredInheritedFields,
+    ...StatusField,
 });
 
 export const DeleteSubGoalParams = Validations.JoiObjectKeys({

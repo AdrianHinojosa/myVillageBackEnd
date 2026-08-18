@@ -1,7 +1,7 @@
 import * as Knex from "knex";
 
 /**
- * Punto 7 — Backfill del rollup de submetas (feedback de Lucy, 17/agosto/2026).
+ * P7 — backfill of the subgoal roll-up (Lucy's feedback, 2026-08-17).
  *
  * A divided goal keeps its tracking records in its SUBGOALS, so its own `dProgress`,
  * `iRecordsCount` and `tLastRecord` stayed at their defaults forever. Every screen that reads those

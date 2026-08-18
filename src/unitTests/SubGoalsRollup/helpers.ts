@@ -1,6 +1,6 @@
 /**
- * Punto 7 — shared harness for the subgoal rollup / own-title tests
- * (feedback de Lucy, 17/agosto/2026).
+ * P7 — shared harness for the sequential-stage / own-title / average-window tests
+ * (Lucy's feedback, 2026-08-17 and 2026-08-18).
  *
  * Same shape as the StripeSubscriptions harness — dependency-free, ordered, serial — but with its
  * own fixtures, because this suite needs a school with an ACTIVE student rather than a school with a
@@ -189,18 +189,22 @@ export async function countResidue(): Promise<number> {
 // ---------------------------------------------------------------------------
 export async function readGoalRow(sGoalId: string): Promise<any> {
     const oRow = await db.raw(
-        `select "sGoalId", "sTitle", "sParentGoalId", "bHasSubGoals", "dProgress", "dAverageValue",
-                "iRecordsCount", "tLastRecord"
+        `select "sGoalId", "sTitle", "sStatus", "sParentGoalId", "bHasSubGoals", "dProgress",
+                "dAverageValue", "iRecordsCount", "tLastRecord"
          from myvillageschema."Goals" where "sGoalId" = ?`, [sGoalId]);
     return oRow.rows[0];
 }
 
+/**
+ * The goal's stages, in the order the sequential machine walks them. `sStatus` is essential here:
+ * omitting it once made four assertions read `undefined` and one of them pass by accident.
+ */
 export async function readSubGoalRows(sParentGoalId: string): Promise<any[]> {
     const oRows = await db.raw(
-        `select "sGoalId", "sTitle", "dProgress", "iRecordsCount"
+        `select "sGoalId", "sTitle", "sStatus", "iOrder", "dProgress", "iRecordsCount"
          from myvillageschema."Goals"
          where "sParentGoalId" = ? and "bActive" = true
-         order by "iOrder" asc`, [sParentGoalId]);
+         order by "iOrder" asc, "created_at" asc`, [sParentGoalId]);
     return oRows.rows;
 }
 

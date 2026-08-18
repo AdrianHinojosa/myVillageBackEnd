@@ -1,5 +1,5 @@
 /**
- * Punto 7 — el reporte del alumno cuenta los registros de las submetas.
+ * P7 — the student report counts the records logged in the subgoals.
  *
  * Lucy's report: the progress report said "no hay metas" for a divided goal.
  *
@@ -34,7 +34,7 @@ export default async function run(): Promise<void> {
     section('a divided goal whose only records live in its stages');
     const oGoal = await request(app).post(`${BASE}/goals`).set(oAuth).send({
         sStudentId: oFix.sStudentId,
-        sTitle: `${TEST_PREFIX} reporte`,
+        sTitle: `${TEST_PREFIX} report`,
         sMeasurementType: 'EXACTITUD',
         sDirection: 'INCREASE',
         iTargetValue: 100,
@@ -45,7 +45,7 @@ export default async function run(): Promise<void> {
     trackGoal(sGoalId);
     if (!sGoalId) return;
 
-    const sStageTitle = 'Etapa 1 — comprensión';
+    const sStageTitle = 'Stage 1 — comprehension';
     const oSub = await request(app).post(`${BASE}/goals/${sGoalId}/subGoals`).set(oAuth)
         .send({ sTitle: sStageTitle, iTargetValue: 100 });
     check('POST subGoal -> 201', oSub.status, 201);

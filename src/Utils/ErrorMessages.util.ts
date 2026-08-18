@@ -323,6 +323,11 @@ export default {
             sp: "Esta meta está dividida en submetas: los registros se capturan en la submeta, no en la meta principal.",
             en: "This goal is divided into subgoals: records must be captured on a subgoal, not on the main goal."
         },
+        // P7 sequential (client decision 2026-08-18): only the stage in progress accepts records.
+        notActiveStage: {
+            sp: "Solo se pueden capturar registros en la etapa en curso. Reactiva esta etapa o captura en la etapa activa.",
+            en: "Records can only be captured on the stage in progress. Reactivate this stage, or capture on the active one."
+        },
     },
 
     // ==== Billing (P3): =======

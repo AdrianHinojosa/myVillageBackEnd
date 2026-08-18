@@ -363,27 +363,38 @@ class Queries {
     }
 
     /**
-     * P7 — roll a divided goal's figures up from its subgoals.
+     * P7 — a divided goal's progress MIRRORS its current stage. It does not average anything.
      *
-     * A goal that is split has NO records of its own (the contract forbids them), so its stored
-     * dProgress/iRecordsCount would sit at 0 forever and the goal card, the student dashboard and
-     * the PDF report — all of which read those stored columns — would show nothing.
+     * RULE (client, Lucy, 2026-08-18 — supersedes the averaging rule of 2026-08-14):
      *
-     * RULE (PO decision 2026-08-14): dProgress is the average across **ALL** active subgoals, with
-     * a subgoal that has no records counting as 0. iRecordsCount is the SUM, and tLastRecord the
-     * most recent, so "how much has been logged" is answered at the parent.
+     *   > "La submeta activa y la meta siempre son el mismo porcentaje. Lo que no quiero es que se
+     *   >  promedien la submeta 1 y la submeta 2 para que en la meta me dé un 50%, porque no es real."
      *
-     * ⚠️ The frontend's getSubGoalsRollup() in app/utils/subGoals.ts averages only the *started*
-     * subgoals. Until it is changed to match, the subgoal manager will show a different percentage
-     * than the card for the same goal. Registered in frontEndChanges.md.
+     * So: Etapa 1 at 80% and active → the goal reads 80%. Close it, Etapa 2 becomes active with no
+     * records → **the goal reads 0%**, on purpose (confirmed with the client): the goal always shows
+     * where the student is *right now*, not a blended history.
+     *
+     * Which stage is "the current one" is not guessed here — the sequential machine in
+     * subGoals.queries.ts guarantees at most ONE subgoal is ACTIVE. This function only reads it:
+     *
+     *   1. the ACTIVE subgoal, if there is one;
+     *   2. otherwise the LAST CLOSED one by order — the end state of a finished goal, and also what
+     *      shows if the only stage is paused;
+     *   3. otherwise 0 (no subgoals, or none started and none closed).
+     *
+     * `iRecordsCount` and `tLastRecord` stay the SUM and the MAX across every stage: they answer
+     * "how much has been logged on this goal", which is what the report and the card print, and that
+     * total is not a percentage so it cannot distort the figure above.
      */
     static async recalculateParentRollup(sParentGoalId: string, trx?) {
         if (!sParentGoalId) return null;
 
         const aSubGoals = await GoalsModel.query(trx)
-            .select('dProgress', 'dAverageValue', 'iRecordsCount', 'tLastRecord')
+            .select('sGoalId', 'sStatus', 'dProgress', 'dAverageValue', 'iRecordsCount', 'tLastRecord')
             .where('sParentGoalId', sParentGoalId)
-            .where('bActive', true);
+            .where('bActive', true)
+            .orderBy('iOrder', 'asc')
+            .orderBy('created_at', 'asc');
 
         // No subgoals left: the parent behaves like an ordinary goal again.
         if (aSubGoals.length === 0) {
@@ -393,22 +404,23 @@ class Queries {
             return 0;
         }
 
-        let dProgressSum = 0;
-        let dAverageSum = 0;
+        // Totals span every stage, whatever its state.
         let iRecordsTotal = 0;
         let tLatest: string | null = null;
-
         for (const oSub of aSubGoals as any[]) {
-            dProgressSum += Number(oSub.dProgress) || 0;
-            dAverageSum += Number(oSub.dAverageValue) || 0;
             iRecordsTotal += Number(oSub.iRecordsCount) || 0;
             if (oSub.tLastRecord && (!tLatest || new Date(oSub.tLastRecord) > new Date(tLatest))) {
                 tLatest = oSub.tLastRecord;
             }
         }
 
-        const dProgress = Math.min(Math.round((dProgressSum / aSubGoals.length) * 100) / 100, 100);
-        const dAverageValue = Math.round((dAverageSum / aSubGoals.length) * 100) / 100;
+        // The percentage comes from ONE stage — never from a blend.
+        const aClosed = (aSubGoals as any[]).filter(o => o.sStatus === 'COMPLETED' || o.sStatus === 'NOT_ACHIEVED');
+        const oSource = (aSubGoals as any[]).find(o => o.sStatus === 'ACTIVE')
+            || (aClosed.length ? aClosed[aClosed.length - 1] : null);
+
+        const dProgress = oSource ? Math.min(Number(oSource.dProgress) || 0, 100) : 0;
+        const dAverageValue = oSource ? (Number(oSource.dAverageValue) || 0) : 0;
 
         await GoalsModel.query(trx).patch({
             dProgress,
@@ -422,7 +434,21 @@ class Queries {
 
     /**
      * PROGRESS RECALCULATION
-     * Uses the last 3 non-excluded records to calculate goal progress.
+     *
+     * Averages **every** non-excluded record of the goal.
+     *
+     * ⚠️ CHANGED 2026-08-18 (client, Lucy): *"se promedia toda la submeta"*. This used to average
+     * only the **last 3** records — a rule documented in the frontend's `docs/REGLAS_DE_NEGOCIO.md`
+     * §7.4 and §13.2 since the original system. The client replaced it, and the decision applies to
+     * goals AND subgoals alike (PO, 2026-08-18): one rule everywhere, so a stage and an ordinary goal
+     * holding the same records can never show different numbers.
+     *
+     * What that changes in practice: a bad start is no longer forgotten. A goal that went 10% → 90%
+     * used to read 90% (the recent three) and now reads the average of its whole history, so it
+     * climbs more slowly. Records the teacher marks as excluded remain the escape hatch for outliers.
+     *
+     * Applies to a subgoal exactly as it applies to a goal — a subgoal IS a `Goals` row — and every
+     * measurement branch below is untouched, so only the size of the window changed.
      */
     static async recalculateGoalProgress(sGoalId, trx?) {
         const queryContext = trx || TrackingRecordsModel;
@@ -431,14 +457,13 @@ class Queries {
         const goal = await GoalsModel.query(trx).findById(sGoalId).where('bActive', true);
         if (!goal) return 0;
 
-        // Get last 3 non-excluded records
+        // Every non-excluded record. Still ordered newest-first so the set is deterministic.
         const records = await TrackingRecordsModel.query(trx)
             .where('sGoalId', sGoalId)
             .where('bActive', true)
             .whereNull('tDeletedAt')
             .where('bExcludedFromAverage', false)
-            .orderBy('tRecordDate', 'desc')
-            .limit(3);
+            .orderBy('tRecordDate', 'desc');
 
         if (records.length === 0) {
             await GoalsModel.query(trx).patch({ dProgress: 0, dAverageValue: 0 }).where('sGoalId', sGoalId);

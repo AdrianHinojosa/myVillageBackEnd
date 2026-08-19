@@ -62,10 +62,31 @@ async function handleInvoicePaid(oInvoice: any): Promise<void> {
         sStripeInvoiceId: String(oInvoice.id)
     });
 
-    // A successful charge always clears delinquency. The contract: "el acceso se reactivará una vez
-    // que el cobro sea procesado exitosamente."
+    /**
+     * A successful charge always clears delinquency. The contract: "el acceso se reactivará una vez
+     * que el cobro sea procesado exitosamente."
+     *
+     * The STATUS, though, is read back from the subscription rather than assumed to be ACTIVE.
+     * Assuming it was wrong for the very first invoice of a trial: Stripe issues a **$0 invoice and
+     * marks it paid immediately** when a trial starts, which fires this handler and used to overwrite
+     * TRIALING with ACTIVE. A school in its 30-day trial then showed as "activa", and "when does my
+     * trial end" became unanswerable from our own data.
+     *
+     * Stripe owns subscription state; we mirror it. Only `iFailedAttempts` is ours to clear.
+     * (Invoices with no subscription — a one-off charge — keep the previous behaviour.)
+     */
+    let sStatus: string = oSchool.bCancelAtPeriodEnd ? 'CANCELED' : 'ACTIVE';
+    if (oInvoice.subscription) {
+        try {
+            const oSub: any = await stripe.subscriptions.retrieve(String(oInvoice.subscription));
+            sStatus = mapStripeStatus(oSub.status, oSub.cancel_at_period_end === true);
+        } catch (error: any) {
+            console.error(`Webhook invoice.paid: could not read subscription ${oInvoice.subscription}:`, error?.message);
+        }
+    }
+
     await BillingQueries.patchSchoolBilling(oSchool.sSchoolId, {
-        sBillingStatus: oSchool.bCancelAtPeriodEnd ? 'CANCELED' : 'ACTIVE',
+        sBillingStatus: sStatus,
         iFailedAttempts: 0,
         tCurrentPeriodEnd: fromStripeTimestamp(oInvoice.lines?.data?.[0]?.period?.end) || oSchool.tCurrentPeriodEnd
     });

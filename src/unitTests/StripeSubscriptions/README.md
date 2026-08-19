@@ -47,8 +47,20 @@ Every file snapshots the school row it touches and restores all 15 billing-relat
 **re-queries the database to prove nothing was left behind** — stray payments, stray customer ids, or
 any school still `SUSPENDED`. A dirty result fails the run.
 
-Fixtures are chosen from existing data (a school that has a main user), never created, so the suite
-does not grow the database on each run.
+### Fixtures are created and destroyed, not borrowed
+
+Each file creates **its own school** (plus a main user and a second administrative user), tagged
+`ZZTEST-STRIPE`. The runner destroys every one of them at both the **start** and the **end** of a run,
+and the residue check counts them, so an interrupted run cannot quietly leave schools behind.
+
+It used to choose the first real school with a main user and restore its columns afterwards. That
+stopped being safe the moment a Stripe **webhook endpoint went live**: the deployed dev API receives
+real Stripe events and writes to this same `development` database, so an event can land mid-run and
+overwrite the exact column an assertion is about. A dedicated school removes that class of collision —
+nobody is clicking through it and nothing else references it.
+
+The one row still borrowed is a superadmin, used only to mint a token for `PUT /schools`. Nothing
+about it is modified.
 
 ---
 

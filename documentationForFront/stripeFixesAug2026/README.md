@@ -5,6 +5,7 @@ Arreglos posteriores al cierre de P3 (Cobranza automática), a partir de pruebas
 | Documento | Para quién | Qué contiene |
 |---|---|---|
 | [`guia-frontend-reintentar-pago.md`](guia-frontend-reintentar-pago.md) | **frontend** | El endpoint nuevo `POST /billing/pay`, los endpoints que dejaron de responder 402 durante una suspensión, las reglas de negocio de cada uno, y el flujo de 3 pasos que el usuario tiene que seguir para recuperarse |
+| [`guia-frontend-reactivar-suscripcion.md`](guia-frontend-reactivar-suscripcion.md) | **frontend** | El endpoint nuevo `POST /billing/resubscribe`, la matriz de qué botón mostrar según `summary`, y la regla nueva: **la prueba de 30 días es una sola vez por colegio** |
 
 ## Resumen de lo que cambió y por qué
 
@@ -19,6 +20,8 @@ Detectado probando el flujo completo en DEV con un test clock y una tarjeta que 
 | 4 | El estado del colegio quedaba `ACTIVE` con la suscripción `canceled` en Stripe | backend | ✅ hecho — misma causa raíz que el punto 2 de abajo |
 | 2 | El gate de suspensión devolvía 402 en `/billing/*`, incluidos los endpoints de recuperación | backend | ✅ hecho |
 | 3 | **No existía** ningún endpoint capaz de cobrar la factura pendiente | backend | ✅ hecho — `POST /billing/pay` |
+| 5 | Un colegio ya cancelado **con tarjeta guardada** no tenía forma de volver a suscribirse | backend | ✅ hecho — `POST /billing/resubscribe` |
+| 6 | La prueba de 30 días se **regalaba de nuevo** en cada re-suscripción | backend | ✅ hecho — una sola vez por colegio |
 
 El reporte original describía 1 y 2. El 3 salió al revisarlo: registrar una tarjeta nueva **no**
 provoca ningún cobro, y los reintentos automáticos de Stripe ya estaban agotados en el momento de
@@ -33,10 +36,10 @@ backend **nunca** cancela una suscripción por un pago fallido. Solo cuenta el i
 | Archivo | Cambio |
 |---|---|
 | `src/Middlewares/001_Permissions.mw.ts/schools.permissions.ts` | `verifySchoolUserPermissions` acepta `{ bAllowWhenSuspended }` |
-| `src/Api/030_Billing/billing.routes.ts` | la opción activada en las 7 rutas de recuperación; `/cancel` NO; ruta nueva `POST /pay` |
-| `src/Api/030_Billing/billing.controllers.ts` | `payOutstanding()` — cobra la factura abierta con la tarjeta predeterminada |
-| `src/Utils/ErrorMessages.util.ts` | `Billing.nothingToPay`, `Billing.noDefaultCard`, `Billing.paymentRetryFailed` |
-| `src/Utils/SuccessMessage.util.ts` | `Billing.payOutstanding` |
+| `src/Api/030_Billing/billing.routes.ts` | la opción activada en las 7 rutas de recuperación; `/cancel` NO; rutas nuevas `POST /pay` y `POST /resubscribe` |
+| `src/Api/030_Billing/billing.controllers.ts` | `payOutstanding()` — cobra la factura abierta con la tarjeta predeterminada; `resubscribe()` — levanta la cancelación pendiente o crea una suscripción nueva; `bTrialAlreadyUsed()` — la prueba es una sola vez por colegio, aplicada también en `attachPaymentMethod()` |
+| `src/Utils/ErrorMessages.util.ts` | `Billing.nothingToPay`, `Billing.noDefaultCard`, `Billing.paymentRetryFailed`, `Billing.alreadySubscribed` |
+| `src/Utils/SuccessMessage.util.ts` | `Billing.payOutstanding`, `Billing.resubscribe` |
 
 Sin migraciones. Sin cambios en endpoints existentes.
 
@@ -51,6 +54,16 @@ Sin migraciones. Sin cambios en endpoints existentes.
   desincronizan. Solo se reinicia `iFailedAttempts`, que es un contador propio.
 * **`/billing/cancel` sigue bloqueado durante la suspensión.** Cancelar estando moroso no debería ser
   la salida. Decisión de producto, reversible en una línea.
+* **`/billing/resubscribe` es un solo endpoint para los dos casos** (levantar una cancelación
+  pendiente y crear una suscripción nueva). La interfaz necesita un botón, no dos, y decidir cuál de
+  las dos cosas aplica requiere leer el estado real en Stripe — que es exactamente lo que el backend
+  ya tiene que hacer.
+* **`/billing/resubscribe` exige tarjeta predeterminada.** Sin tarjeta responde 409 pidiendo
+  registrarla, en vez de crear una suscripción que nacería impaga.
+* **La prueba de 30 días es una sola vez por colegio.** Se pregunta a Stripe si el customer tuvo
+  alguna suscripción, incluidas las canceladas — sin columna nueva ni migración. Si esa consulta a
+  Stripe falla, se **asume que la prueba ya se usó**: equivocarse cobrando es recuperable, equivocarse
+  regalando un mes es dinero que se va sin que nadie lo note.
 
 ## Corrección al listado de pendientes (19/ago/2026)
 

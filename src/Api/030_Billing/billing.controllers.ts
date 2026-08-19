@@ -36,6 +36,32 @@ function assertStripe(res: Response, next: NextFunction): boolean {
     return true;
 }
 
+/**
+ * Has this school ever had a subscription? If so, the free trial is spent.
+ *
+ * The 30-day trial is a one-time concession (PO, 2026-08-07), not something a school can collect
+ * again by letting its subscription lapse and re-subscribing. Without this, a school cancelled for
+ * non-payment could add a card and get another free month — because a cancellation nulls
+ * `sStripeSubscriptionId`, and the create path only checks whether that column is empty.
+ *
+ * Asked of Stripe rather than tracked in a column: Stripe holds every subscription the customer ever
+ * had, including cancelled ones, so it cannot disagree with itself. `sStripeCustomerId` alone is not
+ * a usable signal — the customer is created lazily on the first SetupIntent, so a first-time school
+ * already has one before it ever subscribes.
+ */
+async function bTrialAlreadyUsed(sCustomerId: string): Promise<boolean> {
+    if (!sCustomerId) return false;
+    try {
+        const aPrior = await stripe.subscriptions.list({ customer: sCustomerId, status: 'all', limit: 1 });
+        return (aPrior.data || []).length > 0;
+    } catch (error: any) {
+        // Cannot confirm -> assume it was used. Erring towards charging is recoverable; erring
+        // towards a free month is revenue quietly walking out.
+        console.error(`bTrialAlreadyUsed failed for ${sCustomerId}:`, error?.message);
+        return true;
+    }
+}
+
 /** Guard: only the school's main user may manage cards or cancel. */
 async function requireMainUser(res: Response, next: NextFunction): Promise<boolean> {
     const { sLang, sSchoolId, sUserId } = res.locals;
@@ -262,12 +288,16 @@ class Controllers {
             const dTotal = computeMonthlyTotal(oSchool);
             const sPriceId = await createPriceForSchool(oSchool, dTotal);
 
+            // 30-day free trial — PO instruction 2026-08-07, NOT in the signed scope document — and
+            // once per school (PO, 2026-08-19). A school that already had a subscription starts
+            // billing immediately.
+            const bUsed = await bTrialAlreadyUsed(sCustomerId);
+
             const oSub: any = await stripe.subscriptions.create({
                 customer: sCustomerId,
                 items: [{ price: sPriceId }],
                 default_payment_method: sAttachedId,
-                // 30-day free trial — PO instruction 2026-08-07. NOT in the signed scope document.
-                trial_period_days: TRIAL_PERIOD_DAYS,
+                ...(bUsed ? {} : { trial_period_days: TRIAL_PERIOD_DAYS }),
                 metadata: { sSchoolId }
             });
 
@@ -407,6 +437,104 @@ class Controllers {
 
         return res.status(200).json({
             message: SuccessMessages.Billing.cancelSubscription[sLang],
+            success: true
+        });
+    }
+
+    /**
+     * POST /billing/resubscribe — "Reactivar suscripción".
+     *
+     * Covers the two ways a school can end up wanting back in, because they need different actions:
+     *
+     *   1. CANCELLATION PENDING (`cancel_at_period_end`, subscription still alive). Nothing is
+     *      recreated — the pending cancellation is simply lifted. Cheapest and keeps the billing
+     *      period, the price and the payment history intact.
+     *   2. NO SUBSCRIPTION AT ALL (Stripe already cancelled it; our id was nulled by the
+     *      `subscription.deleted` webhook). A new one is created on the existing default card.
+     *
+     * Case 2 existed as a silent gap: a subscription is otherwise only created inside
+     * `attachPaymentMethod`, so a school whose card was still on file had NOTHING that could restart
+     * it — adding a *second* card was the only trigger, which nobody would guess.
+     *
+     * The trial is NOT granted again (PO, 2026-08-19) — see `bTrialAlreadyUsed`.
+     */
+    async resubscribe(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
+        const { sLang, sSchoolId } = res.locals;
+        if (!assertStripe(res, next)) return;
+        if (!await requireMainUser(res, next)) return;
+
+        const oSchool = await BillingQueries.findSchoolBilling(sSchoolId);
+        if (!oSchool) return next(new MyError(404, ErrorMessages.Schools.notFound[sLang]));
+        if (!hasChargeableTariff(oSchool)) {
+            return next(new MyError(409, ErrorMessages.Billing.noTariff[sLang]));
+        }
+
+        // ---- case 1: lift a pending cancellation -------------------------------------------
+        if (oSchool.sStripeSubscriptionId) {
+            const oCurrent: any = await stripe.subscriptions.retrieve(oSchool.sStripeSubscriptionId);
+            if (oCurrent.status === 'canceled') {
+                // Stripe already finished the job; fall through to create a new one.
+                await BillingQueries.patchSchoolBilling(sSchoolId, { sStripeSubscriptionId: null });
+            } else if (oCurrent.cancel_at_period_end !== true) {
+                return next(new MyError(409, ErrorMessages.Billing.alreadySubscribed[sLang]));
+            } else {
+                const oResumed: any = await stripe.subscriptions.update(oSchool.sStripeSubscriptionId, {
+                    cancel_at_period_end: false
+                });
+                await BillingQueries.patchSchoolBilling(sSchoolId, {
+                    bCancelAtPeriodEnd: false,
+                    sBillingStatus: mapStripeStatus(oResumed.status, false),
+                    tCurrentPeriodEnd: fromStripeTimestamp(oResumed.current_period_end)
+                });
+                return res.status(200).json({
+                    message: SuccessMessages.Billing.resubscribe[sLang],
+                    results: { sSubscriptionId: String(oResumed.id), bRecreated: false, bTrialGranted: false },
+                    success: true
+                });
+            }
+        }
+
+        // ---- case 2: create a fresh subscription -------------------------------------------
+        if (!oSchool.sStripeCustomerId) {
+            return next(new MyError(409, ErrorMessages.Billing.noDefaultCard[sLang]));
+        }
+        const oCustomer: any = await stripe.customers.retrieve(oSchool.sStripeCustomerId);
+        const sDefaultPm: string = oCustomer?.invoice_settings?.default_payment_method || '';
+        if (!sDefaultPm) {
+            return next(new MyError(409, ErrorMessages.Billing.noDefaultCard[sLang]));
+        }
+
+        const dTotal = computeMonthlyTotal(oSchool);
+        const sPriceId = await createPriceForSchool(oSchool, dTotal);
+        // Second time around there is no trial: billing starts on this cycle.
+        const bUsed = await bTrialAlreadyUsed(oSchool.sStripeCustomerId);
+
+        const oSub: any = await stripe.subscriptions.create({
+            customer: oSchool.sStripeCustomerId,
+            items: [{ price: sPriceId }],
+            default_payment_method: sDefaultPm,
+            ...(bUsed ? {} : { trial_period_days: TRIAL_PERIOD_DAYS }),
+            metadata: { sSchoolId }
+        });
+
+        await BillingQueries.patchSchoolBilling(sSchoolId, {
+            sStripeSubscriptionId: oSub.id,
+            sStripePriceId: sPriceId,
+            sBillingStatus: mapStripeStatus(oSub.status, oSub.cancel_at_period_end),
+            tCurrentPeriodEnd: fromStripeTimestamp(oSub.current_period_end),
+            bCancelAtPeriodEnd: oSub.cancel_at_period_end === true,
+            iFailedAttempts: 0
+        });
+
+        return res.status(200).json({
+            message: SuccessMessages.Billing.resubscribe[sLang],
+            results: {
+                sSubscriptionId: String(oSub.id),
+                bRecreated: true,
+                bTrialGranted: !bUsed,
+                dMonthlyTotal: dTotal,
+                sCurrency: BILLING_CURRENCY
+            },
             success: true
         });
     }

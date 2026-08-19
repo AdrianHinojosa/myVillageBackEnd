@@ -90,6 +90,17 @@ router.post('/pay',
     aH(denyFacultyAccess() as any),
     aH(BillingController.payOutstanding));
 
+/**
+ * POST /billing/resubscribe — "Reactivar suscripción".
+ *
+ * Lifts a pending cancellation, or creates a fresh subscription when Stripe already cancelled it.
+ * Exempt from the suspension gate for the same reason as /pay: getting back in must be reachable.
+ */
+router.post('/resubscribe',
+    aH(verifySchoolUserPermissions([{ sModuleName: 'General', sActionCode: 'WRITE' }], RECOVERY)),
+    aH(denyFacultyAccess() as any),
+    aH(BillingController.resubscribe));
+
 // POST /billing/cancel — cancel at the end of the paid period, never immediately
 router.post('/cancel',
     aH(verifySchoolUserPermissions([{ sModuleName: 'General', sActionCode: 'WRITE' }])),

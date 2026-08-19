@@ -232,7 +232,33 @@ está probado de punta a punta, no solo el de permisos.
 
 ## Pendientes que no son de frontend
 
-1. **Cambiar la opción de Stripe** (punto 1). Sin eso, la suscripción sigue llegando a `canceled` y
-   no hay factura que cobrar.
-2. **`STRIPE_WEBHOOK_SECRET` en el servidor.** Sin webhook, el pago se cobra pero `sBillingStatus`
-   nunca vuelve a `ACTIVE` por sí solo y el historial de pagos queda vacío.
+*(revisado el 19/ago/2026 — el punto del webhook ya estaba resuelto y se corrigió aquí)*
+
+| # | Pendiente | Estado |
+|---|---|---|
+| 1 | **Desplegar dev.** `POST /billing/pay` y el arreglo del estado no están en el servidor todavía | ⬜ **lo más urgente** |
+| 2 | **Cambiar la opción de Stripe:** *Settings → Billing → Manage failed payments* → "Mark as unpaid" | ⬜ pendiente |
+| 3 | ~~`STRIPE_WEBHOOK_SECRET` en el servidor~~ | ✅ **ya está** |
+
+**1. Desplegar dev.** Mientras el servidor corra el build anterior, `POST /billing/pay` responde
+**404** y el estado se vuelve a desincronizar solo, porque el handler viejo sigue escribiendo `ACTIVE`
+en cualquier factura pagada. Nada de esta guía se puede probar sin este paso.
+
+**2. La opción de Stripe.** Sigue pendiente: la suscripción `sub_1U5gej…` terminó en `canceled`
+(26/oct), que es el comportamiento de "Cancel subscription". **Esto es una precondición, no un
+detalle**: una suscripción `canceled` no se puede revivir, así que `POST /billing/pay` cobraría el
+dinero y el colegio se quedaría igual sin servicio. Con "Mark as unpaid" la suscripción sigue viva y
+el pago sí la reactiva.
+
+Stripe no expone esta configuración por API, así que solo se puede verificar y cambiar en el
+dashboard.
+
+**3. El webhook ya funciona.** Endpoint `we_1U5yzu…` creado el 19/ago 02:12 en el sandbox, apuntando a
+`https://api.myvillage.com.mx/development/api/v1/billing/webhook`. La prueba es la tabla `Payments`:
+tiene filas de las 04:20, 04:26, 04:27 (`failed`) y 06:06 (`succeeded`), **todas posteriores** a la
+creación del endpoint. Esas filas las escribe **únicamente** el handler del webhook, y solo después de
+validar la firma — cosa que es imposible sin `STRIPE_WEBHOOK_SECRET` en el servidor. Así que el
+historial de pagos **sí se está llenando**.
+
+Lo que falta para producción es su propio endpoint (modo live, URL `/production/...`, secreto
+distinto) y llaves live.

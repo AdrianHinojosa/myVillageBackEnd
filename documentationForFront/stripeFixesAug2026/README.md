@@ -16,6 +16,7 @@ Detectado probando el flujo completo en DEV con un test clock y una tarjeta que 
 | # | Problema | Owner | Estado |
 |---|---|---|---|
 | 1 | Stripe **cancelaba** la suscripción al agotar los reintentos → estado terminal, sin retorno | dashboard de Stripe (*Settings → Billing → Subscriptions → Manage failed payments*) | ⚠️ **pendiente** — no es código |
+| 4 | El estado del colegio quedaba `ACTIVE` con la suscripción `canceled` en Stripe | backend | ✅ hecho — misma causa raíz que el punto 2 de abajo |
 | 2 | El gate de suspensión devolvía 402 en `/billing/*`, incluidos los endpoints de recuperación | backend | ✅ hecho |
 | 3 | **No existía** ningún endpoint capaz de cobrar la factura pendiente | backend | ✅ hecho — `POST /billing/pay` |
 
@@ -50,3 +51,28 @@ Sin migraciones. Sin cambios en endpoints existentes.
   desincronizan. Solo se reinicia `iFailedAttempts`, que es un contador propio.
 * **`/billing/cancel` sigue bloqueado durante la suspensión.** Cancelar estando moroso no debería ser
   la salida. Decisión de producto, reversible en una línea.
+
+## Corrección al listado de pendientes (19/ago/2026)
+
+La primera versión de la guía listaba `STRIPE_WEBHOOK_SECRET` como pendiente. **Ya estaba resuelto.**
+El endpoint `we_1U5yzu…` existe en el sandbox desde el 19/ago 02:12 apuntando a
+`.../development/api/v1/billing/webhook`, y la tabla `Payments` tiene filas de las 04:20, 04:26, 04:27
+y 06:06 — todas posteriores. Esas filas las escribe únicamente el handler del webhook, y solo tras
+validar la firma, lo cual es imposible sin el secreto en el servidor.
+
+El pendiente real y más urgente es **desplegar dev**: mientras el servidor corra el build anterior,
+`POST /billing/pay` responde 404 y el handler viejo sigue desincronizando el estado.
+
+## Un bug extra que salió de esto
+
+`handleInvoicePaid` escribía `sBillingStatus: 'ACTIVE'` en **cualquier** factura pagada. Dos
+consecuencias, las dos reportadas por separado:
+
+* Una suscripción con periodo de prueba: Stripe emite una factura de **$0 y la marca pagada de
+  inmediato**, así que un colegio en sus 30 días de prueba aparecía como "activa".
+* Después de que Stripe cancela por impago, pagar la factura vencida dejaba el colegio en `ACTIVE`
+  **sin suscripción** — de ahí el "el colegio no tiene una suscripción activa que cancelar".
+
+Ahora el estado se lee de la suscripción con `mapStripeStatus()` en lugar de asumirse. Stripe es dueño
+del estado de la suscripción; nosotros lo reflejamos. Solo `iFailedAttempts` se limpia, porque ese
+contador es nuestro.

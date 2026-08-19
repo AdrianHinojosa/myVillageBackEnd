@@ -1,3 +1,18 @@
+/**
+ * NOTE FOR MAINTAINERS
+ *
+ * This is NOT the knexfile the CLI uses. `npm run db:migrations|db:rollback|db:seeds` run from the
+ * repo root and therefore pick up the ROOT `knexfile.ts`.
+ *
+ * This copy exists solely because the two root helper scripts import it for its connection config:
+ *   - migrationScript.ts            (`npm run migrate-script`)
+ *   - productionMigrationUpdate.ts  (`npm run update-prod-migrations`)
+ * Both compute the migrations directory themselves, so the `directory` values below are unused —
+ * they would resolve to `src/knex/db/migrations`, which does not exist.
+ *
+ * Until 2026-08-11 the npm scripts did `cd src` first, which made the CLI load THIS file and fail
+ * with `ENOENT ... scandir '.../src/knex/db/migrations'`. Keep the scripts running from the root.
+ */
 import path from "path";
 require('dotenv').config({ path: '.env' });
 

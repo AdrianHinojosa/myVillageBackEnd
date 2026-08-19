@@ -5,11 +5,15 @@
   "main": "index.js",
   "scripts": {
     "start": "node dist/server.js",
+    "test:stripe": "ts-node --transpile-only src/unitTests/StripeSubscriptions/run.ts",
+    "test:subgoals": "ts-node --transpile-only src/unitTests/SubGoalsRollup/run.ts",
+    "recalc:progress": "ts-node --transpile-only src/scripts/recalculateProgress.ts",
     "dev": "ts-node-dev --transpile-only src/server.ts",
     "build": "babel src --out-dir dist --extensions \".ts\" --copy-files",
-    "db:rollback": "cd src && knex migrate:rollback",
-    "db:migrations": "cd src && knex migrate:latest",
-    "db:seeds": "cd src && knex seed:run",
+    "db:rollback": "knex migrate:rollback",
+    "db:migrations": "knex migrate:latest",
+    "db:migrations:prod": "NODE_ENV=production knex migrate:latest",
+    "db:seeds": "knex seed:run",
     "migrate-script": "ts-node-dev --transpile-only migrationScript.ts",
     "update-prod-migrations": "NODE_ENV=production ts-node-dev --transpile-only productionMigrationUpdate.ts"
   },
@@ -32,6 +36,7 @@
   "homepage": "https://github.com/SofexTech/shipoBack#readme",
   "dependencies": {
     "@aws-sdk/client-ses": "^3.454.0",
+    "@babel/runtime": "^7.29.7",
     "aws-sdk": "^2.740.0",
     "bcryptjs": "^2.4.3",
     "celebrate": "^11.0.2",

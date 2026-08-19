@@ -87,6 +87,7 @@ class Queries {
                     FROM "Goals" g
                     WHERE g."sStudentId" = "Students"."sStudentId"
                       AND g."bActive" = true
+                      AND g."sParentGoalId" IS NULL   -- P7: subgoals are Goals rows; never count them as goals
                 ) AS "iGoalsCount"
             `))
 
@@ -97,6 +98,7 @@ class Queries {
                     FROM "Goals" g
                     WHERE g."sStudentId" = "Students"."sStudentId"
                       AND g."bActive" = true
+                      AND g."sParentGoalId" IS NULL   -- P7: exclude subgoals from the average
                 ) AS "dGoalsProgress"
             `))
 
@@ -138,6 +140,7 @@ class Queries {
                     FROM "Goals" g
                     WHERE g."sStudentId" = "Students"."sStudentId"
                       AND g."bActive" = true
+                      AND g."sParentGoalId" IS NULL   -- P7: subgoals are Goals rows; never count them as goals
                 ) AS "iGoalsCount"
             `))
             .select(db.raw(`
@@ -146,6 +149,7 @@ class Queries {
                     FROM "Goals" g
                     WHERE g."sStudentId" = "Students"."sStudentId"
                       AND g."bActive" = true
+                      AND g."sParentGoalId" IS NULL   -- P7: exclude subgoals from the average
                 ) AS "dGoalsProgress"
             `))
             .where('Students.sSchoolId', sSchoolId)

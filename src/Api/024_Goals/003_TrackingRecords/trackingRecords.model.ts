@@ -69,6 +69,15 @@ export class TrackingRecordsModel extends Model {
                 from: 'TrackingRecords.sGoalTaskId',
                 to: 'GoalTasks.sGoalTaskId'
             }
+        },
+        // P8 — the help types documented on this record (thunk avoids a circular import)
+        TrackingRecordHelps: {
+            relation: Model.HasManyRelation,
+            modelClass: () => require('./trackingRecordHelps.model').TrackingRecordHelpsModel,
+            join: {
+                from: 'TrackingRecords.sTrackingRecordId',
+                to: 'TrackingRecordHelps.sTrackingRecordId'
+            }
         }
     };
 

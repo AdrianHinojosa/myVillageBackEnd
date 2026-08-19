@@ -16,6 +16,10 @@ export const CreateGoalBody = Validations.JoiObjectKeys({
     iBaselineValue: Validations.PositiveInteger("Goals iBaselineValue"),
     sDirection: Validations.String("Goals sDirection"),
     iTargetOpportunities: Validations.PositiveInteger("Goals iTargetOpportunities"),
+    iTargetPercentage: Joi.number().integer().min(0).max(100).allow(null).error(new Error("Goals iTargetPercentage")),
+    // P7 — the frontend's GoalForm sends this on create ("¿Deseas dividir esta meta en submetas?").
+    // Without it the strict schema rejected the whole payload with 409.
+    bHasSubGoals: Validations.Boolean("Goals bHasSubGoals"),
     aTasks: Joi.array().items(Joi.object({
         sTitle: Joi.string().required(),
         iOrder: Joi.number().integer().min(0)
@@ -52,6 +56,9 @@ export const UpdateGoalBody = Validations.JoiObjectKeys({
     iBaselineValue: Validations.PositiveInteger("Goals iBaselineValue"),
     sDirection: Validations.String("Goals sDirection"),
     iTargetOpportunities: Validations.PositiveInteger("Goals iTargetOpportunities"),
+    iTargetPercentage: Joi.number().integer().min(0).max(100).allow(null).error(new Error("Goals iTargetPercentage")),
+    // P7 — allows dividing an existing goal later, not only at creation.
+    bHasSubGoals: Validations.Boolean("Goals bHasSubGoals"),
     aTasks: Joi.array().items(Joi.object({
         sTitle: Joi.string().required(),
         bCompleted: Joi.boolean(),
@@ -64,7 +71,8 @@ export const CompleteGoalParams = Validations.JoiObjectKeys({
 });
 
 export const CompleteGoalBody = Validations.JoiObjectKeys({
-    sStatus: Joi.string().valid('COMPLETED', 'NOT_ACHIEVED', 'ACTIVE').required().error(new Error("Goals sStatus")),
+    // P7 — PAUSED added: the DB always allowed it but the API did not, so it was unreachable.
+    sStatus: Joi.string().valid('COMPLETED', 'NOT_ACHIEVED', 'ACTIVE', 'PAUSED').required().error(new Error("Goals sStatus")),
     sCompletionNotes: Validations.String("Goals sCompletionNotes"),
 });
 

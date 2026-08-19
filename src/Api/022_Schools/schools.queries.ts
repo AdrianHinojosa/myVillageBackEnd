@@ -14,7 +14,7 @@ class Queries {
     }
 
     // DONE: Insert school
-    static async insertSchool({sName, sPhone, sEmail, sAddress, sCityId, iUsersLimit, iStudentsLimit, sCreatedBy, sAdminName, sLastName, sSecondLastName}: any) {
+    static async insertSchool({sName, sPhone, sEmail, sAddress, sCityId, iUsersLimit, iStudentsLimit, sAccountType, sBillingMode, dFixedAmount, dAmountPerTeacher, dAmountPerStudent, dDiscountPct, sCreatedBy, sAdminName, sLastName, sSecondLastName}: any) {
         return await SchoolsModel.transaction(async (trx) => {
 
             // Insert into School table
@@ -26,6 +26,15 @@ class Queries {
                 sCityId,
                 iUsersLimit,
                 iStudentsLimit,
+                // P5 — SCHOOL unless the superadmin explicitly asked for a therapist account
+                sAccountType: sAccountType || 'SCHOOL',
+                // P3 — tariff. sBillingStatus stays at its 'NONE' default: a school only enters
+                // billing once it also has a payment method and a subscription.
+                sBillingMode: sBillingMode || 'FIXED',
+                dFixedAmount: dFixedAmount ?? null,
+                dAmountPerTeacher: dAmountPerTeacher ?? null,
+                dAmountPerStudent: dAmountPerStudent ?? null,
+                dDiscountPct: dDiscountPct ?? null,
                 bBlocked: false,
                 sCreatedBy,
                 bActive: true
@@ -57,18 +66,32 @@ class Queries {
     }
 
     // Done: Update school
-    static async updateSchool(sSchoolId, {sName, sPhone, sCityId, iUsersLimit, iStudentsLimit, sLastUpdatedBy}) {
+    static async updateSchool(sSchoolId, {sName, sPhone, sCityId, iUsersLimit, iStudentsLimit, sAccountType, sBillingMode, dFixedAmount, dAmountPerTeacher, dAmountPerStudent, dDiscountPct, sLastUpdatedBy}) {
 
         return await SchoolsModel.transaction(async (trx) => {
-            // Update school
-            let updatedSchool =  await SchoolsModel.query(trx).patchAndFetchById(sSchoolId, {
+            // Only patch sAccountType when it was actually sent — omitting it must not reset the type
+            const oPatch: any = {
                 sName,
                 sPhone,
                 sCityId,
                 iUsersLimit,
                 iStudentsLimit,
                 sLastUpdatedBy
-            }).where('bActive', true);
+            };
+            if (sAccountType) {
+                oPatch.sAccountType = sAccountType;
+            }
+            // P3 — only patch tariff fields the caller actually sent, so a partial school edit
+            // cannot silently wipe a configured tariff. Per the contract, a change here takes
+            // effect from the NEXT billing cycle; the current period is never re-priced.
+            if (sBillingMode) oPatch.sBillingMode = sBillingMode;
+            if (dFixedAmount !== undefined) oPatch.dFixedAmount = dFixedAmount;
+            if (dAmountPerTeacher !== undefined) oPatch.dAmountPerTeacher = dAmountPerTeacher;
+            if (dAmountPerStudent !== undefined) oPatch.dAmountPerStudent = dAmountPerStudent;
+            if (dDiscountPct !== undefined) oPatch.dDiscountPct = dDiscountPct;
+
+            // Update school
+            let updatedSchool =  await SchoolsModel.query(trx).patchAndFetchById(sSchoolId, oPatch).where('bActive', true);
 
             // GET updated school with fields required
             let mySchool =  await SchoolsModel.query(trx).findById(sSchoolId).select('Schools.*')
@@ -176,6 +199,7 @@ class Queries {
                                         (SELECT COUNT(*)::integer FROM "Goals" g
                                          JOIN "Students" s ON s."sStudentId" = g."sStudentId" AND s."bActive" = true
                                          WHERE s."sSchoolId" = "Schools"."sSchoolId" AND g."bActive" = true AND g."sStatus" = 'ACTIVE'
+                                           AND g."sParentGoalId" IS NULL   -- P7: exclude subgoals
                                         ) AS "iGoals"
                                     `))
                                     // Computed: sGoalsProgress (AVG of active goals dProgress)
@@ -183,6 +207,7 @@ class Queries {
                                         (SELECT COALESCE(ROUND(AVG(g."dProgress")::numeric, 0), 0)::text FROM "Goals" g
                                          JOIN "Students" s ON s."sStudentId" = g."sStudentId" AND s."bActive" = true
                                          WHERE s."sSchoolId" = "Schools"."sSchoolId" AND g."bActive" = true AND g."sStatus" = 'ACTIVE'
+                                           AND g."sParentGoalId" IS NULL   -- P7: exclude subgoals
                                         ) AS "sGoalsProgress"
                                     `))
                                     .where('Schools.bActive', true)
@@ -335,6 +360,7 @@ class Queries {
                 JOIN "Students" s ON s."sStudentId" = g."sStudentId" AND s."bActive" = true
                 JOIN "Schools" sc ON sc."sSchoolId" = s."sSchoolId" AND sc."bActive" = true
                 WHERE g."bActive" = true AND g."sStatus" = 'ACTIVE'
+                  AND g."sParentGoalId" IS NULL   -- P7: exclude subgoals
                   AND g."created_at"::date BETWEEN ?::date AND ?::date
             `, [sStart, sEnd]),
 
@@ -399,14 +425,14 @@ class Queries {
             // 7. Goals trend: current period completion rate vs previous
             db.raw(`
                 SELECT
-                    COALESCE((SELECT ROUND(AVG("dProgress")::numeric, 1) FROM "Goals" WHERE "bActive" = true AND "sStatus" = 'ACTIVE' AND "created_at"::date BETWEEN ?::date AND ?::date), 0) ::float8 AS "dCurrentGoalProgress",
+                    COALESCE((SELECT ROUND(AVG("dProgress")::numeric, 1) FROM "Goals" WHERE "bActive" = true AND "sStatus" = 'ACTIVE' AND "sParentGoalId" IS NULL AND "created_at"::date BETWEEN ?::date AND ?::date), 0) ::float8 AS "dCurrentGoalProgress",
                     COALESCE((
                         SELECT COUNT(*)::integer FROM "Goals"
-                        WHERE "bActive" = true AND "sStatus" = 'COMPLETED' AND "tCompletedDate" IS NOT NULL AND "tCompletedDate" BETWEEN ?::date AND ?::date
+                        WHERE "bActive" = true AND "sStatus" = 'COMPLETED' AND "sParentGoalId" IS NULL AND "tCompletedDate" IS NOT NULL AND "tCompletedDate" BETWEEN ?::date AND ?::date
                     ), 0) AS "iCurrentCompleted",
                     COALESCE((
                         SELECT COUNT(*)::integer FROM "Goals"
-                        WHERE "bActive" = true AND "sStatus" = 'COMPLETED' AND "tCompletedDate" IS NOT NULL AND "tCompletedDate" BETWEEN ?::date AND ?::date
+                        WHERE "bActive" = true AND "sStatus" = 'COMPLETED' AND "sParentGoalId" IS NULL AND "tCompletedDate" IS NOT NULL AND "tCompletedDate" BETWEEN ?::date AND ?::date
                     ), 0) AS "iPrevCompleted"
             `, [sStart, sEnd, sStart, sEnd, sPrevStart, sPrevEnd]),
 
@@ -423,12 +449,12 @@ class Queries {
                 ) AS gs(month)
                 LEFT JOIN (
                     SELECT date_trunc('month', "created_at") AS month, COUNT(*) AS cnt
-                    FROM "Goals" WHERE "bActive" = true AND "created_at"::date BETWEEN ? AND ?
+                    FROM "Goals" WHERE "bActive" = true AND "sParentGoalId" IS NULL AND "created_at"::date BETWEEN ? AND ?
                     GROUP BY date_trunc('month', "created_at")
                 ) AS created_cnt ON created_cnt.month = gs.month
                 LEFT JOIN (
                     SELECT date_trunc('month', "tCompletedDate") AS month, COUNT(*) AS cnt
-                    FROM "Goals" WHERE "bActive" = true AND "sStatus" = 'COMPLETED' AND "tCompletedDate" IS NOT NULL AND "tCompletedDate" BETWEEN ?::date AND ?::date
+                    FROM "Goals" WHERE "bActive" = true AND "sStatus" = 'COMPLETED' AND "sParentGoalId" IS NULL AND "tCompletedDate" IS NOT NULL AND "tCompletedDate" BETWEEN ?::date AND ?::date
                     GROUP BY date_trunc('month', "tCompletedDate")
                 ) AS completed_cnt ON completed_cnt.month = gs.month
                 ORDER BY gs.month ASC

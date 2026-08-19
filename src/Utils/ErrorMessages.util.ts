@@ -172,6 +172,16 @@ export default {
             en: "Your school is not part of the platform."
         },
 
+        therapistNotAllowed: {
+            sp: "Esta función no está disponible en las cuentas de terapeuta.",
+            en: "This feature is not available on therapist accounts."
+        },
+
+        billingSuspended: {
+            sp: "La suscripción de tu colegio está suspendida por falta de pago. Regulariza el pago para restaurar el acceso.",
+            en: "Your school's subscription is suspended for non-payment. Settle the payment to restore access."
+        },
+
         bBlockedPermission: {
             sp: "Tu escuela no cuenta con acceso a la plataforma.",
             en: "Your school does not have access to the platform."
@@ -292,6 +302,71 @@ export default {
         notFound: {
             sp: "La tarea de la meta especificada no existe.",
             en: "The specified goal task does not exist."
+        },
+    },
+
+    // ==== SubGoals: =======
+    SubGoals: {
+        notFound: {
+            sp: "La submeta especificada no existe.",
+            en: "The specified subgoal does not exist."
+        },
+        maxReached: {
+            sp: "Una meta puede dividirse en un máximo de 5 submetas.",
+            en: "A goal can be divided into a maximum of 5 subgoals."
+        },
+        nestingNotAllowed: {
+            sp: "Una submeta no puede dividirse en más submetas.",
+            en: "A subgoal cannot be divided into further subgoals."
+        },
+        parentHasSubGoals: {
+            sp: "Esta meta está dividida en submetas: los registros se capturan en la submeta, no en la meta principal.",
+            en: "This goal is divided into subgoals: records must be captured on a subgoal, not on the main goal."
+        },
+        // P7 sequential (client decision 2026-08-18): only the stage in progress accepts records.
+        notActiveStage: {
+            sp: "Solo se pueden capturar registros en la etapa en curso. Reactiva esta etapa o captura en la etapa activa.",
+            en: "Records can only be captured on the stage in progress. Reactivate this stage, or capture on the active one."
+        },
+    },
+
+    // ==== Billing (P3): =======
+    Billing: {
+        stripeNotConfigured: {
+            sp: "El módulo de cobranza no está configurado. Contacta al administrador.",
+            en: "The billing module is not configured. Please contact the administrator."
+        },
+        onlyMainUser: {
+            sp: "Solo el usuario principal del colegio puede administrar los métodos de pago y la suscripción.",
+            en: "Only the school's main user can manage payment methods and the subscription."
+        },
+        paymentMethodNotFound: {
+            sp: "La tarjeta especificada no existe o no pertenece a tu colegio.",
+            en: "The specified card does not exist or does not belong to your school."
+        },
+        cannotRemoveLastCard: {
+            sp: "No puedes eliminar tu única tarjeta mientras la suscripción esté activa. Registra otra tarjeta primero o cancela la suscripción.",
+            en: "You cannot remove your only card while the subscription is active. Add another card first, or cancel the subscription."
+        },
+        noSubscription: {
+            sp: "Tu colegio no tiene una suscripción activa que cancelar.",
+            en: "Your school has no active subscription to cancel."
+        },
+        noTariff: {
+            sp: "Tu colegio no tiene una tarifa configurada. Contacta al administrador.",
+            en: "Your school has no configured tariff. Please contact the administrator."
+        },
+    },
+
+    // ==== Support: =======
+    Support: {
+        reporterNotFound: {
+            sp: "No se pudo identificar al usuario que reporta. Intenta de nuevo.",
+            en: "The reporting user could not be identified. Please try again."
+        },
+        sendTicketFailed: {
+            sp: "No se pudo enviar el reporte. Intenta de nuevo.",
+            en: "The report could not be sent. Please try again."
         },
     },
 

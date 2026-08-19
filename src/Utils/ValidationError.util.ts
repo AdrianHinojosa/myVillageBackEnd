@@ -225,6 +225,33 @@ export default {
                 sp: "Por favor, ingresa un identificador de escuela correcto.",
                 en: "Please, enter a valid school id."
             },
+            // P3 — Cobranza
+            sBillingMode: {
+                sp: "Por favor, selecciona una modalidad de cobro válida (fija o variable).",
+                en: "Please, select a valid billing mode (fixed or variable)."
+            },
+            dFixedAmount: {
+                sp: "Por favor, ingresa un monto mensual válido.",
+                en: "Please, enter a valid monthly amount."
+            },
+            dAmountPerTeacher: {
+                sp: "Por favor, ingresa un monto por maestro válido.",
+                en: "Please, enter a valid amount per teacher."
+            },
+            dAmountPerStudent: {
+                sp: "Por favor, ingresa un monto por alumno válido.",
+                en: "Please, enter a valid amount per student."
+            },
+            dDiscountPct: {
+                sp: "Por favor, ingresa un porcentaje de descuento entre 0 y 100.",
+                en: "Please, enter a discount percentage between 0 and 100."
+            },
+
+            // P5 — Modo terapeuta
+            sAccountType: {
+                sp: "Por favor, selecciona un tipo de cuenta válido (colegio o terapeuta).",
+                en: "Please, select a valid account type (school or therapist)."
+            },
             sName: {
                 sp: "Por favor, ingresa un nombre de escuela correcto.",
                 en: "Please, enter a valid school name."
@@ -445,6 +472,19 @@ export default {
                 sp: "Por favor, ingresa un identificador de registro correcto.",
                 en: "Please, enter a valid tracking record id."
             },
+            // P8 — Tipos de ayuda
+            aHelpTypes: {
+                sp: "Por favor, revisa los tipos de ayuda: cada tipo puede registrarse una sola vez, con una cantidad de 0 a 10.",
+                en: "Please, review the help types: each type may be recorded only once, with an amount from 0 to 10."
+            },
+            sHelpType: {
+                sp: "Por favor, selecciona un tipo de ayuda válido.",
+                en: "Please, select a valid help type."
+            },
+            iHelpAmount: {
+                sp: "Por favor, ingresa una cantidad de ayuda entre 0 y 10.",
+                en: "Please, enter a help amount between 0 and 10."
+            },
             sGoalId: {
                 sp: "Por favor, ingresa un identificador de meta correcto.",
                 en: "Please, enter a valid goal id."
@@ -652,6 +692,118 @@ export default {
             sConfirmPassword: {
                 sp: "Por favor, confirma tu nueva contraseña.",
                 en: "Please, confirm your new password."
+            },
+        },
+
+        // P8 — Tipos de ayuda (items inside the aHelpTypes array)
+        TrackingRecordHelps: {
+            sHelpType: {
+                sp: "Por favor, selecciona un tipo de ayuda válido.",
+                en: "Please, select a valid help type."
+            },
+            iHelpAmount: {
+                sp: "Por favor, ingresa una cantidad de ayuda entre 0 y 10.",
+                en: "Please, enter a help amount between 0 and 10."
+            },
+        },
+
+        // P7 — Submetas
+        SubGoals: {
+            sTitle: {
+                sp: "Por favor, ingresa un título válido para la submeta.",
+                en: "Please, enter a valid subgoal title."
+            },
+            sSubGoalId: {
+                sp: "Por favor, ingresa un identificador de submeta correcto.",
+                en: "Please, enter a valid subgoal id."
+            },
+            sDescription: {
+                sp: "Por favor, ingresa una descripción válida.",
+                en: "Please, enter a valid description."
+            },
+            tStartDate: {
+                sp: "Por favor, ingresa una fecha de inicio válida.",
+                en: "Please, enter a valid start date."
+            },
+            tTargetDate: {
+                sp: "Por favor, ingresa una fecha objetivo válida.",
+                en: "Please, enter a valid target date."
+            },
+            tCompletedDate: {
+                sp: "Por favor, ingresa una fecha de completado válida.",
+                en: "Please, enter a valid completion date."
+            },
+            sCompletionNotes: {
+                sp: "Por favor, ingresa notas de cierre válidas.",
+                en: "Please, enter valid completion notes."
+            },
+            iTargetValue: {
+                sp: "Por favor, ingresa un valor objetivo correcto.",
+                en: "Please, enter a valid target value."
+            },
+            iTargetDuration: {
+                sp: "Por favor, ingresa una duración objetivo correcta.",
+                en: "Please, enter a valid target duration."
+            },
+            iScaleMin: {
+                sp: "Por favor, ingresa una escala mínima correcta.",
+                en: "Please, enter a valid minimum scale."
+            },
+            iScaleMax: {
+                sp: "Por favor, ingresa una escala máxima correcta.",
+                en: "Please, enter a valid maximum scale."
+            },
+            sFrequencyUnit: {
+                sp: "Por favor, ingresa una unidad de frecuencia válida.",
+                en: "Please, enter a valid frequency unit."
+            },
+            iBaselineValue: {
+                sp: "Por favor, ingresa un valor base correcto.",
+                en: "Please, enter a valid baseline value."
+            },
+            sDirection: {
+                sp: "Por favor, selecciona una dirección válida.",
+                en: "Please, select a valid direction."
+            },
+            iTargetOpportunities: {
+                sp: "Por favor, ingresa un número de oportunidades objetivo correcto.",
+                en: "Please, enter a valid target opportunities value."
+            },
+            iTargetPercentage: {
+                sp: "Por favor, ingresa un porcentaje objetivo entre 0 y 100.",
+                en: "Please, enter a target percentage between 0 and 100."
+            },
+            sStatus: {
+                sp: "Por favor, selecciona un estado válido (activa, completada, no alcanzada o pausada).",
+                en: "Please, select a valid status (active, completed, not achieved or paused)."
+            },
+            aTasks: {
+                sp: "Por favor, revisa las tareas de la submeta.",
+                en: "Please, review the subgoal tasks."
+            },
+        },
+
+        // P3 — Cobranza
+        Billing: {
+            sPaymentMethodId: {
+                sp: "Por favor, selecciona una tarjeta válida.",
+                en: "Please, select a valid card."
+            },
+        },
+
+        // P10 — Tickets de soporte
+        Support: {
+            sSubject: {
+                sp: "Por favor, ingresa un asunto válido (máximo 120 caracteres).",
+                en: "Please, enter a valid subject (120 characters maximum)."
+            },
+            sMessage: {
+                sp: "Por favor, describe tu reporte (máximo 1000 caracteres).",
+                en: "Please, describe your report (1000 characters maximum)."
+            },
+            sCategory: {
+                sp: "Por favor, selecciona una categoría válida.",
+                en: "Please, select a valid category."
             },
         },
 

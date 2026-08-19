@@ -344,4 +344,68 @@ export default {
         }
     },
 
+    // ========  SubGoals  ==================
+    SubGoals: {
+        createSubGoal: {
+            sp: 'Se creó la submeta exitosamente!',
+            en: "The subgoal was created successfully."
+        },
+        getAllSubGoals: {
+            sp: 'Se han encontrado las submetas!',
+            en: "The subgoals were successfully found."
+        },
+        updateSubGoal: {
+            sp: 'Se actualizó la submeta exitosamente!',
+            en: "The subgoal was updated successfully."
+        },
+        deleteSubGoal: {
+            sp: 'Se eliminó la submeta y sus registros exitosamente!',
+            en: "The subgoal and its records were successfully deleted."
+        }
+    },
+
+    // ========  Billing (P3)  ==================
+    Billing: {
+        getSummary: {
+            sp: 'Resumen de suscripción obtenido exitosamente!',
+            en: "The subscription summary was retrieved successfully."
+        },
+        getPayments: {
+            sp: 'Historial de pagos obtenido exitosamente!',
+            en: "The payment history was retrieved successfully."
+        },
+        getPaymentMethods: {
+            sp: 'Métodos de pago obtenidos exitosamente!',
+            en: "The payment methods were retrieved successfully."
+        },
+        setupIntent: {
+            sp: 'Listo para registrar tu tarjeta.',
+            en: "Ready to register your card."
+        },
+        attachPaymentMethod: {
+            sp: 'Tarjeta registrada exitosamente!',
+            en: "The card was registered successfully."
+        },
+        setDefaultPaymentMethod: {
+            sp: 'Tarjeta predeterminada actualizada exitosamente!',
+            en: "The default card was updated successfully."
+        },
+        detachPaymentMethod: {
+            sp: 'Tarjeta eliminada exitosamente!',
+            en: "The card was removed successfully."
+        },
+        cancelSubscription: {
+            sp: 'Tu suscripción se cancelará al final del periodo vigente. Conservas el acceso hasta la fecha de corte.',
+            en: "Your subscription will be cancelled at the end of the current period. You keep access until the cut-off date."
+        }
+    },
+
+    // ========  Support  ==================
+    Support: {
+        sendTicket: {
+            sp: 'Tu reporte fue enviado. Te contactaremos pronto.',
+            en: "Your report was sent. We will contact you soon."
+        }
+    },
+
 };

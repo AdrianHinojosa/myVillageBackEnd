@@ -20,6 +20,10 @@ import IepRoutes from '../025_Ieps/ieps.routes';
 import SchoolUserRoutes from '../026_SchoolUsers/schoolUsers.routes';
 import ProfileRoutes from '../027_Profile/profile.routes';
 import StudentAssignmentRoutes from '../028_StudentAssignments/studentAssignments.routes';
+import SupportRoutes from '../029_Support/support.routes';
+import SubGoalRoutes from '../024_Goals/004_SubGoals/subGoals.routes';
+import BillingRoutes from '../030_Billing/billing.routes';
+import BillingWebhookRoutes from '../030_Billing/001_Webhooks/webhooks.routes';
 
 
 function BaseRoute(env: string, module: string): string {
@@ -27,6 +31,16 @@ function BaseRoute(env: string, module: string): string {
 }
 
 export default (app: Application, env: string) : void => {
+    // P3 — Stripe webhook, mounted FIRST and deliberately outside everything else.
+    //
+    // No `:sLang` segment (Stripe calls a fixed URL and sends no language) and no auth middleware
+    // (it authenticates by signing the body, verified against STRIPE_WEBHOOK_SECRET).
+    //
+    // ORDER MATTERS: `/api/v1/billing/webhook` would otherwise be matched first by the
+    // `/api/v1/:sLang/billing` pattern below — binding sLang='billing' and running the Language
+    // middleware before falling through. Registering it here removes that ambiguity entirely.
+    app.use(`${env}/api/v1/billing`, aH(BillingWebhookRoutes));
+
     app.use(BaseRoute(env, 'countries'), celebrate({ params: LanguageParams }), aH(Language()), aH(CountriesRoutes));
     app.use(BaseRoute(env, 'cities'), celebrate({ params: LanguageParams }), aH(Language()), aH(CitiesRoutes));
     app.use(BaseRoute(env, 'auth'), celebrate({ params: LanguageParams }), aH(Language()), aH(AuthenticationRoutes));
@@ -39,6 +53,9 @@ export default (app: Application, env: string) : void => {
     app.use(BaseRoute(env, 'schoolUsers'), celebrate({ params: LanguageParams }), aH(Language()), aH(SchoolUserRoutes));
     app.use(BaseRoute(env, 'profile'), celebrate({ params: LanguageParams }), aH(Language()), aH(ProfileRoutes));
     app.use(BaseRoute(env, 'studentAssignments'), celebrate({ params: LanguageParams }), aH(Language()), aH(StudentAssignmentRoutes));
+    app.use(BaseRoute(env, 'support'), celebrate({ params: LanguageParams }), aH(Language()), aH(SupportRoutes));
+    app.use(BaseRoute(env, 'subGoals'), celebrate({ params: LanguageParams }), aH(Language()), aH(SubGoalRoutes));
+    app.use(BaseRoute(env, 'billing'), celebrate({ params: LanguageParams }), aH(Language()), aH(BillingRoutes));
 
 
     app.all(`*`, (req: Request, res: Response, next: NextFunction): object => {

@@ -2,11 +2,48 @@ import { db } from '../../../Config/Db.config';
 import { TrackingRecordsModel } from './trackingRecords.model';
 import { TrackingRecordTasksModel } from './trackingRecordTasks.model';
 import { TrackingRecordFilesModel } from './trackingRecordFiles.model';
+import { TrackingRecordHelpsModel } from './trackingRecordHelps.model';
 import { GoalsModel } from '../goals.model';
 import { GoalTasksModel } from '../001_GoalTasks/goalTasks.model';
+import { normalizeHelpTypesInput, formatHelpTypesForFrontend } from './helpTypes';
 
 class Queries {
     constructor() {};
+
+    /**
+     * P8 — replace the help types stored on a record.
+     *
+     * Delete-then-insert, mirroring how TrackingRecordTasks are handled on update. Runs inside the
+     * caller's transaction so a record and its help types are always written atomically.
+     * Returns the wire-shaped list for the response.
+     */
+    static async replaceRecordHelpTypes(sTrackingRecordId: string, aHelpTypes: Array<{sHelpType: string, iHelpAmount: number}>, sUserId: string, trx) {
+        await TrackingRecordHelpsModel.query(trx)
+            .delete()
+            .where('sTrackingRecordId', sTrackingRecordId);
+
+        if (!aHelpTypes || aHelpTypes.length === 0) return [];
+
+        const aInserted = await TrackingRecordHelpsModel.query(trx).insertGraph(
+            aHelpTypes.map((oHelp) => ({
+                sTrackingRecordId,
+                sHelpType: oHelp.sHelpType,
+                iHelpAmount: oHelp.iHelpAmount,
+                sCreatedBy: sUserId,
+                sLastUpdatedBy: sUserId
+            }))
+        );
+
+        return formatHelpTypesForFrontend(aInserted as any[]);
+    }
+
+    /** P8 — read the help types of one record, in wire shape. */
+    static async findRecordHelpTypes(sTrackingRecordId: string, trx?) {
+        const aRows = await TrackingRecordHelpsModel.query(trx)
+            .where('sTrackingRecordId', sTrackingRecordId)
+            .orderBy('iHelpAmount', 'desc');
+        return formatHelpTypesForFrontend(aRows as any[]);
+    }
 
     // Verify tracking record exists and is active
     static async verifyRecordExists(sTrackingRecordId) {
@@ -64,6 +101,14 @@ class Queries {
                 aTasksCompleted = oData.aTasksCompleted;
             }
 
+            // P8: store the help types documented for this session. Purely documental — it is
+            // written before recalculateGoalProgress on purpose, to make plain that the
+            // recalculation does not read it and the result is identical either way.
+            const aNormalizedHelps = normalizeHelpTypesInput(oData);
+            const aHelpTypes = await Queries.replaceRecordHelpTypes(
+                newRecord.sTrackingRecordId, aNormalizedHelps || [], oData.sCreatedBy, trx
+            );
+
             // Update goal: increment iRecordsCount, set tLastRecord
             await GoalsModel.query(trx).patch({
                 iRecordsCount: GoalsModel.raw('"iRecordsCount" + 1'),
@@ -86,6 +131,7 @@ class Queries {
                 iSuccessful: newRecord.iAchieved,
                 iOpportunities: newRecord.iTotal,
                 aTasksCompleted,
+                aHelpTypes,
                 aDocuments: [],
             };
 
@@ -111,9 +157,25 @@ class Queries {
         }).orderBy('TrackingRecords.tRecordDate', 'desc').page((iPageNumber - 1), iItemsPerPage);
     }
 
-    // Format records with frontend field names, task completions, and documents
+    // Format records with frontend field names, task completions, documents and help types
     static async formatRecordsForFrontend(records: any[]) {
         const formatted = [];
+
+        // P8: fetch the help types for EVERY record in a single query and group them in memory.
+        // The per-record loop below is already N+1 for tasks and files; there is no reason to add
+        // another query per record on top of that.
+        const aRecordIds = (records || []).map((r: any) => r.sTrackingRecordId);
+        const oHelpsByRecord: { [key: string]: any[] } = {};
+        if (aRecordIds.length > 0) {
+            const aAllHelps = await TrackingRecordHelpsModel.query()
+                .whereIn('sTrackingRecordId', aRecordIds)
+                .orderBy('iHelpAmount', 'desc');
+            for (const oHelp of aAllHelps as any[]) {
+                if (!oHelpsByRecord[oHelp.sTrackingRecordId]) oHelpsByRecord[oHelp.sTrackingRecordId] = [];
+                oHelpsByRecord[oHelp.sTrackingRecordId].push(oHelp);
+            }
+        }
+
         for (const r of records) {
             // Get task completions for this record
             const taskCompletions = await TrackingRecordTasksModel.query()
@@ -149,6 +211,7 @@ class Queries {
                 iSuccessful: r.iAchieved,
                 iOpportunities: r.iTotal,
                 aTasksCompleted,
+                aHelpTypes: formatHelpTypesForFrontend(oHelpsByRecord[r.sTrackingRecordId] || []),
                 aDocuments,
             });
         }
@@ -216,6 +279,17 @@ class Queries {
                 aTasksCompleted = existingTasks.map((t: any) => t.sGoalTaskId);
             }
 
+            // P8: sending aHelpTypes REPLACES the stored set; omitting it leaves it untouched.
+            const aNormalizedHelps = normalizeHelpTypesInput(oData);
+            let aHelpTypes: Array<{sHelpType: string, iHelpAmount: number}>;
+            if (aNormalizedHelps !== null) {
+                aHelpTypes = await Queries.replaceRecordHelpTypes(
+                    sTrackingRecordId, aNormalizedHelps, oData.sLastUpdatedBy, trx
+                );
+            } else {
+                aHelpTypes = await Queries.findRecordHelpTypes(sTrackingRecordId, trx);
+            }
+
             const dUpdatedProgress = await Queries.recalculateGoalProgress(existing.sGoalId, trx);
 
             // Preserve attached files in the response (not touched here)
@@ -246,6 +320,7 @@ class Queries {
                 iSuccessful: updated.iAchieved,
                 iOpportunities: updated.iTotal,
                 aTasksCompleted,
+                aHelpTypes,
                 aDocuments,
             };
 
@@ -288,8 +363,108 @@ class Queries {
     }
 
     /**
+     * P7 — a divided goal's progress MIRRORS its current stage. It does not average anything.
+     *
+     * RULE (client, Lucy, 2026-08-18 — supersedes the averaging rule of 2026-08-14):
+     *
+     *   > "La submeta activa y la meta siempre son el mismo porcentaje. Lo que no quiero es que se
+     *   >  promedien la submeta 1 y la submeta 2 para que en la meta me dé un 50%, porque no es real."
+     *
+     * So: Etapa 1 at 80% and active → the goal reads 80%. Close it, Etapa 2 becomes active with no
+     * records → **the goal reads 0%**, on purpose (confirmed with the client): the goal always shows
+     * where the student is *right now*, not a blended history.
+     *
+     * Which stage is "the current one" is not guessed here — the sequential machine in
+     * subGoals.queries.ts guarantees at most ONE subgoal is ACTIVE. This function only reads it:
+     *
+     *   1. the ACTIVE subgoal, if there is one;
+     *   2. otherwise the LAST CLOSED one by order — the end state of a finished goal, and also what
+     *      shows if the only stage is paused;
+     *   3. otherwise 0 (no subgoals, or none started and none closed).
+     *
+     * `iRecordsCount` and `tLastRecord` stay the SUM and the MAX across every stage: they answer
+     * "how much has been logged on this goal", which is what the report and the card print, and that
+     * total is not a percentage so it cannot distort the figure above.
+     */
+    static async recalculateParentRollup(sParentGoalId: string, trx?) {
+        if (!sParentGoalId) return null;
+
+        const aSubGoals = await GoalsModel.query(trx)
+            .select('sGoalId', 'sStatus', 'dProgress', 'dAverageValue', 'iRecordsCount', 'tLastRecord')
+            .where('sParentGoalId', sParentGoalId)
+            .where('bActive', true)
+            .orderBy('iOrder', 'asc')
+            .orderBy('created_at', 'asc');
+
+        // No subgoals left: the parent behaves like an ordinary goal again.
+        if (aSubGoals.length === 0) {
+            await GoalsModel.query(trx)
+                .patch({ dProgress: 0, dAverageValue: 0, iRecordsCount: 0, tLastRecord: null })
+                .where('sGoalId', sParentGoalId);
+            return 0;
+        }
+
+        // Totals span every stage, whatever its state.
+        let iRecordsTotal = 0;
+        let tLatest: string | null = null;
+        for (const oSub of aSubGoals as any[]) {
+            iRecordsTotal += Number(oSub.iRecordsCount) || 0;
+            if (oSub.tLastRecord && (!tLatest || new Date(oSub.tLastRecord) > new Date(tLatest))) {
+                tLatest = oSub.tLastRecord;
+            }
+        }
+
+        /**
+         * The percentage comes from ONE stage — never from a blend.
+         *
+         * SUPERSEDED on 2026-08-18, kept commented so the reversal stays traceable. Until then the
+         * PO's rule (2026-08-14) averaged every stage, counting an empty one as 0:
+         *
+         *   let dProgressSum = 0, dAverageSum = 0;
+         *   for (const oSub of aSubGoals as any[]) {
+         *       dProgressSum += Number(oSub.dProgress) || 0;
+         *       dAverageSum  += Number(oSub.dAverageValue) || 0;
+         *   }
+         *   const dProgress     = Math.min(Math.round((dProgressSum / aSubGoals.length) * 100) / 100, 100);
+         *   const dAverageValue = Math.round((dAverageSum / aSubGoals.length) * 100) / 100;
+         *
+         * The client rejected it: two stages at 90% and 0% reported 45%, and *"no es real"*.
+         * Its test lives in `src/unitTests/SubGoalsRollup/02_parentRollup.SUPERSEDED.ts`.
+         */
+        const aClosed = (aSubGoals as any[]).filter(o => o.sStatus === 'COMPLETED' || o.sStatus === 'NOT_ACHIEVED');
+        const oSource = (aSubGoals as any[]).find(o => o.sStatus === 'ACTIVE')
+            || (aClosed.length ? aClosed[aClosed.length - 1] : null);
+
+        const dProgress = oSource ? Math.min(Number(oSource.dProgress) || 0, 100) : 0;
+        const dAverageValue = oSource ? (Number(oSource.dAverageValue) || 0) : 0;
+
+        await GoalsModel.query(trx).patch({
+            dProgress,
+            dAverageValue,
+            iRecordsCount: iRecordsTotal,
+            tLastRecord: tLatest
+        }).where('sGoalId', sParentGoalId);
+
+        return dProgress;
+    }
+
+    /**
      * PROGRESS RECALCULATION
-     * Uses the last 3 non-excluded records to calculate goal progress.
+     *
+     * Averages **every** non-excluded record of the goal.
+     *
+     * ⚠️ CHANGED 2026-08-18 (client, Lucy): *"se promedia toda la submeta"*. This used to average
+     * only the **last 3** records — a rule documented in the frontend's `docs/REGLAS_DE_NEGOCIO.md`
+     * §7.4 and §13.2 since the original system. The client replaced it, and the decision applies to
+     * goals AND subgoals alike (PO, 2026-08-18): one rule everywhere, so a stage and an ordinary goal
+     * holding the same records can never show different numbers.
+     *
+     * What that changes in practice: a bad start is no longer forgotten. A goal that went 10% → 90%
+     * used to read 90% (the recent three) and now reads the average of its whole history, so it
+     * climbs more slowly. Records the teacher marks as excluded remain the escape hatch for outliers.
+     *
+     * Applies to a subgoal exactly as it applies to a goal — a subgoal IS a `Goals` row — and every
+     * measurement branch below is untouched, so only the size of the window changed.
      */
     static async recalculateGoalProgress(sGoalId, trx?) {
         const queryContext = trx || TrackingRecordsModel;
@@ -298,17 +473,25 @@ class Queries {
         const goal = await GoalsModel.query(trx).findById(sGoalId).where('bActive', true);
         if (!goal) return 0;
 
-        // Get last 3 non-excluded records
+        // Every non-excluded record. Still ordered newest-first so the set is deterministic.
+        //
+        // The previous rule was the same query with `.limit(3)` on the end — kept here as a comment
+        // rather than erased, because it was a documented decision of the original system
+        // (`docs/REGLAS_DE_NEGOCIO.md` §7.4, §13.2) and someone will eventually ask what changed:
+        //     .orderBy('tRecordDate', 'desc')
+        //     .limit(3);          // ← removed 2026-08-18: "se promedia toda la submeta"
         const records = await TrackingRecordsModel.query(trx)
             .where('sGoalId', sGoalId)
             .where('bActive', true)
             .whereNull('tDeletedAt')
             .where('bExcludedFromAverage', false)
-            .orderBy('tRecordDate', 'desc')
-            .limit(3);
+            .orderBy('tRecordDate', 'desc');
 
         if (records.length === 0) {
             await GoalsModel.query(trx).patch({ dProgress: 0, dAverageValue: 0 }).where('sGoalId', sGoalId);
+            if (goal.sParentGoalId) {
+                await Queries.recalculateParentRollup(goal.sParentGoalId, trx);
+            }
             return 0;
         }
 
@@ -425,6 +608,11 @@ class Queries {
             dProgress,
             dAverageValue: Math.round(avgPct * 100) / 100
         }).where('sGoalId', sGoalId);
+
+        // P7 — if this is a subgoal, the parent's rolled-up figures just went stale.
+        if (goal.sParentGoalId) {
+            await Queries.recalculateParentRollup(goal.sParentGoalId, trx);
+        }
 
         return dProgress;
     }

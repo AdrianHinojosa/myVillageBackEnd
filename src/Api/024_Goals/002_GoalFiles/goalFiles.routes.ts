@@ -3,15 +3,17 @@ import aH from "express-async-handler";
 import { celebrate} from "celebrate";
 import GoalFileController from './goalFiles.controllers';
 import * as GoalFileValidations from './goalFiles.validations';
-import { verifySchoolUserPermissions } from '../../../Middlewares/001_Permissions.mw.ts/schools.permissions';
+import { verifySchoolUserPermissions, denyTherapistAccess } from '../../../Middlewares/001_Permissions.mw.ts/schools.permissions';
 
 // Images Upload
 import upload from 'express-fileupload';
 const router = Router({mergeParams: true});
 
 // Done
+// P5: therapist accounts cannot upload documents.
 router.post('/',
     aH(verifySchoolUserPermissions(  [  {sModuleName: 'General', sActionCode: 'WRITE' }  ])),
+    aH(denyTherapistAccess() as any),
     aH(upload()),
     celebrate({ params: GoalFileValidations.useGoalFileParams, body: GoalFileValidations.CreateGoalFileBody}),
     aH(GoalFileController.createGoalFile));

@@ -19,10 +19,46 @@ class Controllers {
         const {sLang, sSchoolId, sUserId} = res.locals;
         const oBody = req.body;
 
+        // P7 — a record hangs off EITHER a goal or a subgoal. Because a subgoal is itself a Goals
+        // row, `sSubGoalId` simply resolves to the same `sGoalId` used everywhere downstream, so
+        // the rest of this flow (and recalculateGoalProgress) needs no special case at all.
+        // Validation guarantees exactly one of the two is present.
+        const bIsSubGoalRecord = !!oBody.sSubGoalId;
+        const sTargetGoalId = oBody.sSubGoalId || oBody.sGoalId;
+        oBody.sGoalId = sTargetGoalId;
+        delete oBody.sSubGoalId;
+
         // Verify goal exists and is active
-        const myGoal = await GoalQueries.verifyGoalExists(oBody.sGoalId);
+        const myGoal = await GoalQueries.verifyGoalExists(sTargetGoalId);
         if (!myGoal) {
             return next(new MyError(404, ErrorMessages.Goals.notFound[sLang]));
+        }
+
+        // A subgoal id must actually be a subgoal, and a goal id must not be one — otherwise the
+        // caller could silently write to the wrong level.
+        if (bIsSubGoalRecord && !myGoal.sParentGoalId) {
+            return next(new MyError(404, ErrorMessages.SubGoals.notFound[sLang]));
+        }
+
+        // P7 — "la meta principal no tiene registros propios cuando está dividida". Records on a
+        // divided goal must go to one of its subgoals, otherwise the parent's progress and the
+        // subgoal rollup would both count, double-reporting the student's advance.
+        if (!bIsSubGoalRecord && myGoal.bHasSubGoals === true) {
+            return next(new MyError(409, ErrorMessages.SubGoals.parentHasSubGoals[sLang]));
+        }
+
+        /**
+         * P7 sequential (client decision 2026-08-18) — only the stage IN PROGRESS takes new records.
+         *
+         * The goal's percentage mirrors its current stage, so letting a queued or closed stage
+         * accept records would move a number nobody is looking at while the goal stayed still. It is
+         * also what "hay que cerrar una etapa para avanzar" means in practice.
+         *
+         * Editing or deleting an EXISTING record of a closed stage stays allowed — that is a
+         * correction, not progress on a finished stage.
+         */
+        if (bIsSubGoalRecord && myGoal.sStatus !== 'ACTIVE') {
+            return next(new MyError(409, ErrorMessages.SubGoals.notActiveStage[sLang]));
         }
 
         // Verify goal is active (not completed)

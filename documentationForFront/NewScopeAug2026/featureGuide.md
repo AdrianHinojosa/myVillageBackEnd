@@ -1,0 +1,915 @@
+# Feature Guide — Ampliación de alcance (Aug 2026)
+
+**For:** the frontend team, QA, and anyone picking this up later
+**Backend branch:** `features02Aug2026`
+**Last updated:** 2026-08-11
+
+Plain-language explanation of **how each feature actually works on the backend**: what was stored,
+where, which endpoints exist, and what the frontend gets back. No backend knowledge assumed.
+
+> **Sibling documents**
+> - [`implementationTracket.md`](implementationTracket.md) — build status, engineering decisions, open questions
+> - [`frontEndChanges.md`](frontEndChanges.md) — the list of things the **frontend** must change
+> - This file — *what each feature is and how to use it*
+
+---
+
+## How to read the endpoint tables
+
+Every URL below is written the way the frontend calls it (`/support/ticket`). The real URL has a
+prefix the axios base already adds:
+
+```
+{env}/api/v1/{sLang}/{module}/...
+   ↓
+/development/api/v1/sp/support/ticket
+```
+
+`sLang` is `sp` (Spanish) or `en` — it decides the language of the `message` field that the axios
+interceptor pops up on screen. **Every endpoint returns a `message`**, already translated; the
+frontend never hardcodes those strings.
+
+Authentication is always the `Authorization: Bearer <token>` header. **The backend never accepts
+your user id, school id, or role in the request body** — it reads them from the token. Sending
+them is rejected.
+
+**Validation failures return HTTP `409`**, not 400 — that is this project's existing convention.
+The `message` is always localized and explains what was wrong, so the axios interceptor shows
+something useful without the frontend inspecting the error.
+
+---
+
+# API quick reference — everything new or changed
+
+One table for the whole integration. Paths are as the frontend calls them; the axios base adds
+`{env}/api/v1/{sLang}`. All require `Authorization: Bearer <token>`.
+
+### New endpoints
+
+| Method | Path | Success | Returns | Feature |
+|---|---|---|---|---|
+| `POST` | `/support/ticket` | 200 | `message` | P10 |
+| `GET` | `/goals/:sGoalId/subGoals` | 200 | **`aData`** (array) | P7 |
+| `POST` | `/goals/:sGoalId/subGoals` | 201 | `oData` (object) | P7 |
+| `PUT` | `/subGoals/:sSubGoalId` | 200 | `oData` | P7 |
+| `DELETE` | `/subGoals/:sSubGoalId` | 200 | `message` | P7 |
+| `GET` | `/subGoals/:sSubGoalId/trackingRecords` | 200 | **`aData`** | P7 |
+| `GET` | `/billing/summary` | 200 | **`results`** | P3 |
+| `GET` | `/billing/payments` | 200 | **`aData`** | P3 |
+| `GET` | `/billing/payment-methods` | 200 | **`aData`** | P3 |
+| `POST` | `/billing/setup-intent` | 200 | `sClientSecret` | P3 |
+| `POST` | `/billing/payment-methods` | 201 | `message` | P3 |
+| `PUT` | `/billing/payment-methods/:sPaymentMethodId/default` | 200 | `message` | P3 |
+| `DELETE` | `/billing/payment-methods/:sPaymentMethodId` | 200 | `message` | P3 |
+| `POST` | `/billing/cancel` | 200 | `message` | P3 |
+| `POST` | `/billing/webhook` | 200 | Stripe only — **no `sLang`, no auth** | P3 |
+
+### Existing endpoints that changed
+
+| Method | Path | What changed | Feature |
+|---|---|---|---|
+| `POST` | `/goals` | now accepts `bHasSubGoals`, `iTargetPercentage` — **previously rejected the whole payload** | P7 |
+| `PUT` | `/goals/:sGoalId` | same two fields | P7 |
+| `GET` | `/goals/:sGoalId` | now returns `bHasSubGoals` | P7 |
+| `PATCH` | `/goals/:sGoalId/complete` | `sStatus` now also accepts `PAUSED` | P7 |
+| `POST` | `/trackingRecords` | takes `sGoalId` **xor** `sSubGoalId`; accepts `aHelpTypes`; a **divided** goal refuses `sGoalId` (409) | P7 · P8 |
+| `PUT` | `/trackingRecords/:sTrackingRecordId` | accepts `aHelpTypes` (replaces the set) | P8 |
+| `GET` | `/goals/:sGoalId/trackingRecords` | every record now carries `aHelpTypes` | P8 |
+| `POST` | `/schools` | accepts `sAccountType` | P5 |
+| `PUT` | `/schools/:sSchoolId` | accepts `sAccountType`; **omitting it preserves the current value** | P5 |
+| `GET` | `/schools/:sSchoolId` | returns `sAccountType` | P5 |
+| `POST` | `/auth/login` | `oSchool.sAccountType` added | P5 |
+| `POST` | `/auth/login` | `oSchool.sBillingStatus` added | P3 |
+| `POST`/`PUT` | `/schools` | tariff fields accepted; `PUT` also returns `bStripeSynced` | P3 |
+| `GET` | `/schools/:sSchoolId` | returns the tariff **and** `sBillingStatus` | P3 |
+| **all school endpoints** | — | **new 402** when the school is `SUSPENDED` | P3 |
+
+### Endpoints now blocked for `THERAPIST` accounts (403)
+
+| Method | Path | Rule |
+|---|---|---|
+| `POST` | `/schoolUsers` | single user — cannot create more |
+| `POST` | `/iep` | cannot use the IEP module |
+| `GET` | `/iep` | cannot view it either |
+| `POST` | `/goals/:sGoalId/goalFiles` | no document uploads |
+| `POST` | `/trackingRecords/:sTrackingRecordId/files` | no document uploads |
+
+Still allowed: reading/deleting existing files, student photos, account logo.
+
+### Status codes used throughout
+
+| Code | Meaning |
+|---|---|
+| `200` / `201` | success — `201` on create, `200` otherwise |
+| **`409`** | **validation failure** (this project's convention, not 400) or a business-rule refusal. `message` is localized and explains which. |
+| `403` | permission denied, or blocked for a therapist account |
+| `404` | resource not found, or not yours |
+| `401` | token missing / invalid / expired |
+
+---
+
+# Status at a glance
+
+| # | Feature | Backend state | New table? | New endpoints |
+|---|---|---|---|---|
+| 10 | Support tickets | ✅ **Built** | No | 1 |
+| 8 | Help types | ✅ **Built** | Yes — `TrackingRecordHelps` | 0 (extends existing 3) |
+| 5 | Therapist mode | ✅ **Built** | No — 1 new column on `Schools` | 0 (extends existing) + 4 gated |
+| 7 | Subgoals | ✅ **Built** | No — `Goals` gains a parent link | 5 new + 3 extended |
+| 3 | Billing (Stripe) | ✅ **Built** | Yes — `Payments` + 12 columns on `Schools` | 8 + webhook |
+| 11 | Goal-writing guide | ➖ Frontend only | — | — |
+| 13 | Trainings module | ➖ Frontend only | — | — |
+
+---
+
+# ✅ Punto 10 — Support tickets
+
+### What it does, in one paragraph
+
+Any logged-in person can open the support form, type a subject and a description, optionally pick
+a category, and send it. The backend figures out **who they are from their login token**, looks up
+their name, email, phone and school, and emails all of that to the support inbox. The person gets
+back a friendly confirmation message in their own language. Nothing is saved in the database — the
+signed contract explicitly says this stage is "only sending the notification email".
+
+### Was a table created?
+
+**No.** This was deliberate: the contract says there is no ticket panel and no ticket history at
+this stage (that would be a separate proposal). Adding a table nobody reads would be dead weight.
+If history is bought later, a `SupportTickets` table can be added without changing this endpoint.
+
+### The endpoint
+
+| | |
+|---|---|
+| **URL** | `POST /support/ticket` |
+| **Who can call it** | **Anyone logged in** — school admin, teacher (FACULTY), *and* superadmin |
+| **Success** | `200` |
+
+**What you send**
+
+```jsonc
+{
+  "sSubject":  "No puedo generar el PDF de reporte",   // required, max 120 characters
+  "sMessage":  "Al dar clic en Exportar no pasa nada", // required, max 1000 characters
+  "sCategory": "technical"                             // optional — may be omitted entirely
+}
+```
+
+`sCategory` must be one of `technical`, `question`, `suggestion`, `other` — or left out.
+
+**What you get back**
+
+```jsonc
+{
+  "message": "Tu reporte fue enviado. Te contactaremos pronto.",
+  "success": true
+}
+```
+
+The axios interceptor displays `message` automatically, so the modal only needs to close and reset.
+
+**When things go wrong**
+
+| Code | Meaning |
+|---|---|
+| `409` | A field is missing, too long, an invalid category, **or you sent an extra field**. `message` explains which, already localized. |
+| `401` | Token missing, invalid, or expired |
+| `404` | The user behind the token could not be found |
+
+### Three behaviours worth knowing
+
+**1. Superadmins can file tickets.** This needed real work. School users and superadmins log in
+through two completely separate doors in this system — different tables, different session checks.
+No existing security gate accepted both. A new one (`verifyAnyAuthenticatedUser`) tries the school
+door first, then the admin door. Practical upshot: **the support button can stay visible for every
+user type.**
+
+**2. A school that has been blocked can still send a ticket.** Deliberate. A blocked school can
+log in, but every other endpoint returns 404 — so if support were blocked too, they'd have no way
+to reach anyone precisely when they most need to. A valid session is still required.
+
+**3. Identity cannot be faked.** Name, email, phone, school and role are read from the token. The
+request schema is strict, so a body containing `sUserId` or `sSchoolId` is rejected outright.
+
+### What the support inbox receives
+
+An HTML email in the My Village house style (logo, rainbow divider, teal button), containing:
+
+- subject, category chip, and the full message
+- **who reported it:** name, email (clickable "Reply to user" button), phone, role
+  (*Superadministrador* / *Docente* / *Administrador de colegio*), and school name
+- the interface language they were using, so support replies in the right one
+- a small technical footer with the user and school ids
+
+Destination is `info@myvillage.com.mx` (overridable with the `SUPPORT_EMAIL` env var).
+
+### SMS — enabled
+
+Alongside the email, an SMS heads-up goes out through AWS SNS to **+528181377416**, on every
+ticket regardless of category. It fires only when both `SUPPORT_SMS_ENABLED=true` and
+`SUPPORT_PHONE` are set, so any environment missing them simply sends no SMS.
+
+Two things to know:
+
+- **The SNS service had never actually worked.** `SMS.services.ts` existed but nothing imported it,
+  and it built its AWS client *before* loading the credentials — so every send would have failed
+  silently. Fixed when this was switched on.
+- ⚠️ **AWS SNS accounts start in a sandbox** that can only reach *verified* phone numbers. If
+  `+528181377416` isn't verified in the SNS console, sends fail silently (the path is
+  fire-and-forget, exactly like email). Verify it there before relying on it.
+
+### ⚠️ One honest limitation
+
+The email system is "fire and forget" — it hands the message to AWS and never checks the result.
+If AWS rejects it, the error is only written to the server log. **So the success message means
+"we received your report", not "the email arrived".** Changing this would affect every email the
+platform sends, so it wasn't done unilaterally — flagged for a decision.
+
+---
+
+# ✅ Punto 8 — Help types
+
+> ⚠️ This **differs from what the frontend currently has** — it sends one help type per record.
+> Read [`frontEndChanges.md`](frontEndChanges.md) entry 1. A compatibility shim keeps the old
+> format working meanwhile, so nothing breaks on deploy.
+
+### What it does, in one paragraph
+
+When a teacher logs a session result, they can also record **what kinds of support the student
+needed** and **how much of each**, on a 0–10 scale — for example Visual 8, Verbal 7, Written 6.
+This is purely descriptive, like a note: it **never** changes the goal's progress, average, or
+record count. On the chart, each point is coloured by the support type with the highest value.
+
+### The important change from what the frontend built
+
+The frontend currently sends **one** support type per record (`sHelpType` + `iHelpAmount`). The
+client's model — confirmed from their mock-up, which lists all 8 types each with its own value box
+— is **several types per record, each with its own number**. That is what the backend now stores.
+
+### Was a table created?
+
+**Yes — `TrackingRecordHelps`.** Because one record can now hold several help types, they can't
+live in a column on the record itself. The alternative (eight fixed columns, one per type) would
+be rigid and painful to query for reports.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `sTrackingRecordHelpId` | uuid | primary key |
+| `sTrackingRecordId` | uuid | which tracking record this belongs to |
+| `sHelpType` | string | the support type code |
+| `iHelpAmount` | integer | how much, **0–10** |
+
+One row per help type per record. The same type cannot be recorded twice on one record.
+
+### Why not the column that was already there?
+
+`TrackingRecords` has an unused `sSupportUsed` column, added long ago and documented with exactly
+these 8 types. It holds a *single* value, so it can't serve the multi-type model. It will be left
+untouched (dropping a production column is not something to do casually) and marked as superseded.
+
+### The 8 support types
+
+The frontend keeps its own lowercase slugs on the wire; the database stores the uppercase code
+already established for this concept — the same style as `sStatus`, `sMeasurementType`,
+`sDirection`. **The frontend never sees the uppercase form**; translation happens at the boundary.
+
+| Frontend sends | Stored as | Label (ES) |
+|---|---|---|
+| `independiente` | `INDEPENDENT` | Independiente |
+| `ayuda_general` | `GENERAL` | Ayuda General |
+| `visual` | `VISUAL` | Visual |
+| `verbal` | `VERBAL` | Verbal |
+| `escrita` | `WRITTEN` | Escrita |
+| `gestual` | `GESTURAL` | Gestual |
+| `modelacion` | `MODELING` | Modelación |
+| `fisica` | `PHYSICAL` | Física |
+
+### No new endpoints — the existing record endpoints grow a field
+
+| URL | Change |
+|---|---|
+| `POST /trackingRecords` | accepts `aHelpTypes` |
+| `PUT /trackingRecords/:sTrackingRecordId` | accepts `aHelpTypes` (**replaces** the whole set) |
+| `GET /goals/:sGoalId/trackingRecords` | returns `aHelpTypes` on each record |
+
+**What you send**
+
+```jsonc
+{
+  "dtDate": "2026-08-02",
+  "iCorrect": 8,
+  "iTotal": 10,
+  "aHelpTypes": [
+    { "sHelpType": "visual",  "iHelpAmount": 8 },
+    { "sHelpType": "verbal",  "iHelpAmount": 7 },
+    { "sHelpType": "escrita", "iHelpAmount": 6 }
+  ]
+}
+```
+
+- Leave a type **out entirely** if it wasn't given — don't send it with a null.
+- Repeating the same `sHelpType` twice returns **409** with a clear message.
+- `iHelpAmount` must be a whole number 0–10. `11`, `-1` and `2.5` are all rejected with 409.
+- All 8 types at once is allowed. A 9th entry is rejected.
+- **On `POST`:** omitting `aHelpTypes` stores nothing; the response returns `aHelpTypes: []`.
+- **On `PUT`:** sending the array **replaces** the whole stored set. Sending `[]` **clears** it.
+  **Omitting the field leaves the existing set untouched** — so partial edits are safe.
+
+**What you get back** — the same shape, on every record in every GET.
+
+### It does not affect any calculation
+
+The contract insists on this, so it was tested rather than assumed. Progress, average, record
+count and the "last 3 records" rule read only the measurement fields (`iHits`, `iScaleValue`,
+`iOccurrences`, …). Help types sit alongside and are never consulted.
+
+Proven on a real `EXACTITUD` goal:
+
+| Step | `dProgress` | `dAverageValue` |
+|---|---|---|
+| record 9/10 correct, **no** help types | 70.00 | 70.00 |
+| **added 4 help types, all at 10** | 70.00 | 70.00 |
+| **cleared all help types** | 70.00 | 70.00 |
+| *sanity:* changed the measurement 9/10 → 2/10 | **35.00** | — |
+
+The last row matters: it proves the check can actually detect movement, so the three unchanged
+rows above are real evidence and not a test that simply never moves.
+
+### Chart colouring (frontend side)
+
+A record with Visual 8, Verbal 7 and Written 6 has no single "the" support type, so the contract's
+"one colour per point" rule needed a tiebreak. **Decision: colour the point by the type with the
+highest value**, and show that number as the point label; ties fall back to the canonical order of
+the 8 types so it's deterministic. The full breakdown can go in the tooltip. **No API change** —
+the backend returns the array and the frontend picks the maximum.
+
+### Backwards compatibility during the transition
+
+So the frontend isn't broken the moment the backend deploys, `POST`/`PUT` **also** accept the old
+single-value form (`sHelpType` + `iHelpAmount`) and store it as a one-item array — verified:
+sending `sHelpType: "modelacion", iHelpAmount: 4` comes back as
+`aHelpTypes: [{ sHelpType: "modelacion", iHelpAmount: 4 }]` and is stored as `MODELING`. The 0–10
+range applies to the legacy field too.
+
+This is a **temporary shim**, marked in the code for removal once the frontend ships the new
+capture UI.
+
+### How it was verified
+
+39 checks against the real development database with a genuine session token: multi-type create,
+UPPERCASE storage with lowercase wire slugs, ordering by amount, all six validation rejections
+(duplicate, 11, −1, 2.5, unknown type, 9 items), 0 and all-8 accepted, the legacy shim, `PUT`
+replace / preserve / clear, the batched list read, and the calculation-invariance proof above.
+Every test record was removed afterwards and the affected goals' counters recomputed — leftover
+help rows: 0, goal counter drift: 0.
+
+---
+
+# ✅ Punto 5 — Therapist mode
+
+### What it does, in one paragraph
+
+An account is now either a **school** (everything as before) or a **therapist**. The superadmin
+picks which when creating or editing the account. When someone logs in, the backend tells the
+front-end which type it is, and the front-end reworks all its wording — "colegio" becomes
+"terapeuta", "alumnos" become "Pacientes", "Docente" becomes "Terapeuta". On top of that, the
+backend now **actively refuses** the three things a therapist account isn't allowed to do, so the
+restriction is real rather than just hidden in the interface.
+
+### Was a table created?
+
+**No — one new column** on the existing `Schools` table.
+
+| Column | Values | Default |
+|---|---|---|
+| `sAccountType` | `SCHOOL` or `THERAPIST` | `SCHOOL` |
+
+Every existing school was automatically set to `SCHOOL`, so nothing about current behaviour
+changed. Verified after the migration: all 12 accounts in the development database came out as
+`SCHOOL`.
+
+### How an account becomes a therapist account
+
+The superadmin sets it, on the endpoints that already exist:
+
+| URL | Change |
+|---|---|
+| `POST /schools` | accepts `sAccountType` — omit it and you get `SCHOOL` |
+| `PUT /schools/:sSchoolId` | accepts `sAccountType` — **omit it and the current type is kept**, it is never silently reset |
+| `GET /schools/:sSchoolId` | returns `sAccountType` |
+
+Sending anything other than `SCHOOL` or `THERAPIST` is rejected with **409** and a localized message.
+
+### Login tells the front-end which mode to use
+
+`sAccountType` now travels inside `oSchool`, exactly where the front-end already looks
+(`oResults.oSchool.sAccountType`):
+
+```jsonc
+{
+  "message": "Bienvenido, …",
+  "status": true,
+  "results": {
+    "sUserId": "…", "sToken": "…", "sUserType": "SchoolAdmin",
+    "oSchool": {
+      "sSchoolId": "…",
+      "sSchoolName": "Consultorio Ana López",
+      "sSchoolLogo": "…",
+      "oImages": { },
+      "sAccountType": "THERAPIST"      // ← new
+    },
+    "aPermissions": [ ]
+  }
+}
+```
+
+Superadmins have no school, so they have no `oSchool` and never see therapist mode.
+
+### What a therapist account is refused
+
+The contract says a therapist *"operará como un usuario único, por lo que no contará con la
+posibilidad de crear usuarios adicionales"* and *"no podrá cargar documentos ni visualizar o
+utilizar el módulo de IEP"*. All three are now enforced server-side:
+
+| URL | Result for a therapist account | Why |
+|---|---|---|
+| `POST /schoolUsers` | **403** | single user — cannot create more |
+| `POST /iep` | **403** | cannot *use* the IEP module |
+| `GET /iep` | **403** | cannot *view* it either |
+| `POST /goals/:sGoalId/goalFiles` | **403** | cannot upload documents |
+| `POST /trackingRecords/:id/files` | **403** | same — no document uploads at all |
+
+The message is localized: *"Esta función no está disponible en las cuentas de terapeuta."* /
+*"This feature is not available on therapist accounts."*
+
+**Everything else works normally** — students, goals, tracking records, reports, support tickets.
+Verified: a therapist account still gets `201` on `GET /students` and `200` on
+`POST /support/ticket`.
+
+### What is still allowed
+
+**Student photos and the account logo** (`POST /students/:id/image`,
+`POST /schools/:id/image`). Those are profile pictures, not documents — a therapist legitimately
+needs a patient photo and their own logo, and the contract restricts *documentos*.
+
+**Reading and deleting** existing files is not blocked either; the restriction is on *uploading*.
+An account switched from school to therapist may still have files worth viewing.
+
+### ⚠️ Frontend must hide one control
+
+`RecordForm.vue` renders a file-attach dropzone (~line 208) with **no** therapist gating, so a
+therapist currently sees a control whose endpoint now returns 403. It must be gated the same way
+`GoalForm.vue:311` gates the goal-documents section. See
+[`frontEndChanges.md`](frontEndChanges.md) entry 5.
+
+### One thing the front-end should tidy up
+
+The student detail page calls `fetchIep()` **unconditionally**, including for therapists
+(`app/pages/admin/students/[id]/index.vue:335`, in the frontend repo).
+That call now returns `403`. It's harmless — the request is `silent: true` with an empty
+`.catch()`, so nothing appears on screen — but it's a pointless failing request in the console.
+Skip it when in therapist mode.
+
+### How it was verified
+
+Against the real development database, with a genuine session token:
+
+- migration applied; all 12 existing schools defaulted to `SCHOOL`
+- as `SCHOOL`: none of the four endpoints blocked
+- as `THERAPIST`: all four return `403` with the localized message
+- as `THERAPIST`: `GET /students` and `POST /support/ticket` still succeed
+- login returns `sAccountType` correctly for both types
+- invalid values rejected; omitting the field on `PUT` preserves the existing type
+- test data restored afterwards (all accounts back to `SCHOOL`, password restored, sessions removed)
+
+# ✅ Punto 7 — Subgoals
+
+### What it does, in one paragraph
+
+A goal can be split into up to **5 subgoals** — think quarterly stages inside a yearly goal. Each
+subgoal has its own description, dates, targets, status, records and chart, and inherits the
+parent's title and measurement type. The parent becomes a container showing a roll-up. Goals that
+aren't split behave exactly as before.
+
+### Was a table created?
+
+**No — and that is the most important decision in this feature.** A subgoal *is* a goal: same
+fields, same records, same chart, same measurement maths. So it's a `Goals` row with a pointer to
+its parent, rather than a parallel `SubGoals` table.
+
+| Column added to `Goals` | Meaning |
+|---|---|
+| `sParentGoalId` | NULL = a normal goal · set = a subgoal of that goal |
+| `iOrder` | display order within the parent (0, 1, 2…) |
+| `bHasSubGoals` | true when the goal is divided |
+| `iTargetPercentage` | target percentage 0–100 (in the signed PDF, previously missing entirely) |
+
+**Why it matters:** the progress calculation is ~140 lines that branch across 6 measurement types
+and 2 directions. A separate table would have meant a **second copy** of it, plus a second tasks
+table and a second files table — and every future fix would need doing twice. This way subgoals got
+progress, averages, record counts, tasks, files and charts for free, and a fix applies to both.
+
+**The cost, stated honestly:** every query that lists or counts goals must now exclude children, or
+subgoals would show up as independent goals and be double-counted in every report. That's **12
+places** across goals, students and schools. All 12 are guarded, and it was tested by planting a
+subgoal with `dProgress = 999`: the guarded school average stayed **49** while the unguarded form
+jumped to **90**.
+
+### The endpoints
+
+| URL | What it does |
+|---|---|
+| `GET /goals/:sGoalId/subGoals` | list a goal's subgoals → **`aData`** |
+| `POST /goals/:sGoalId/subGoals` | create one (max 5) → `oData` |
+| `PUT /subGoals/:sSubGoalId` | edit one |
+| `DELETE /subGoals/:sSubGoalId` | delete it **and its records** |
+| `GET /subGoals/:sSubGoalId/trackingRecords` | its records → **`aData`** |
+| `POST /trackingRecords` with `sSubGoalId` | log a record against a subgoal |
+| `GET /goals/:sGoalId` | now returns `bHasSubGoals` |
+| `POST` / `PUT /goals` | now accept `bHasSubGoals` and `iTargetPercentage` |
+
+**Creating or editing a subgoal** — the body is a goal body; everything is optional:
+
+```jsonc
+// POST /goals/:sGoalId/subGoals   ·   PUT /subGoals/:sSubGoalId
+{
+  "sDescription": "Trimestre 1 — reconocer 10 palabras",
+  "tStartDate":  "2026-08-01",
+  "tTargetDate": "2026-10-31",
+  "iTargetValue": 50,
+  "iTargetPercentage": 80,        // 0–100
+  "iScaleMin": 1, "iScaleMax": 5, // ESCALA goals
+  "iBaselineValue": 10,           // when sDirection is DECREASE
+  "sDirection": "INCREASE",       // INCREASE | DECREASE
+  "iTargetOpportunities": 20,     // OPORTUNIDAD goals
+  "sFrequencyUnit": "día",
+  "sStatus": "ACTIVE",            // ACTIVE | COMPLETED | NOT_ACHIEVED | PAUSED
+  "tCompletedDate": null,         // set when closing a stage
+  "sCompletionNotes": "",
+  "aTasks": [ { "sTitle": "Tarea 1", "iOrder": 0 } ]   // TAREAS goals
+}
+```
+
+`sTitle`, `sMeasurementType`, `bHasSubGoals` and `aDocuments` may be sent — they are **accepted and
+ignored**, so reusing `GoalForm.vue` never triggers a validation error. Title and measurement type
+always come from the parent.
+
+**On `PUT`, only the fields you send are changed.** Omitted fields keep their stored values, so
+partial edits are safe.
+
+**Every subgoal carries both ids:**
+
+```jsonc
+{
+  "sSubGoalId": "…",       // the subgoal itself — use this for PUT / DELETE
+  "sGoalId":    "…",       // the PARENT goal
+  "sTitle":            "inherited from the parent, always",
+  "sMeasurementType":  "inherited, immutable",
+  "sStatus": "ACTIVE", "iOrder": 0,
+  "dProgress": 80, "dAverageValue": 80, "iRecordsCount": 1, "tLastRecord": "…"
+}
+```
+
+### The business rules it enforces
+
+1. **Max 5 subgoals.** The 6th returns 409 *"Una meta puede dividirse en un máximo de 5 submetas."*
+   The front-end also disables its button, but that's cosmetic — this is the real limit.
+2. **One level only.** Creating a subgoal *of a subgoal* returns 409. The contract is explicit:
+   *"una submeta no podrá contener a su vez otras submetas."*
+3. **Each subgoal can have its OWN title; the measurement type is inherited and immutable.**
+   *(Changed 2026-08-17 — see "Each stage can be named" below.)* Send `sTitle` and it is saved; send
+   nothing, or an empty string, and the parent's title is inherited. Whatever you send for
+   `sMeasurementType` is ignored, so all stages of a goal always measure the same thing.
+4. **Sequential stages: only one is in progress at a time.** *(Changed 2026-08-18 — see "Stages are
+   sequential" below.)* The first stage created starts `ACTIVE`, the rest queue as `PAUSED`, and
+   closing one promotes the next automatically. `sStatus` sent on **create** is ignored; on **update**
+   it is how a stage is closed, paused or reopened. This is what the signed PDF specified; the earlier
+   "independent statuses" decision was reversed by the client.
+5. **A divided goal takes no records of its own, and only its stage in progress does.** Posting a
+   record with `sGoalId` to a divided goal returns 409 — it must go to a stage. Posting to a stage
+   that is queued or closed also returns 409: the goal's percentage follows the stage in progress, so
+   capturing anywhere else would move a number nobody is looking at.
+6. **Deleting a subgoal deletes its records too** (soft delete, both recoverable).
+7. **Creating a subgoal marks the parent as divided** automatically, so `bHasSubGoals` can never
+   drift from reality even if the goal wasn't created with the flag.
+
+### Who can do what
+
+Same rules as goals: the subgoal's student must belong to your school, and a **FACULTY** user must
+be assigned to that student. Otherwise 403.
+
+### The goal's percentage IS its stage in progress *(rule set by the client 2026-08-18)*
+
+**Before:** a divided goal had no records of its own, so its `dProgress` sat at 0 forever and the
+goal card, the student dashboard, the PDF report and `/schools/analytics` all showed 0% for a goal
+whose stages were at 91%.
+
+**Now:** the goal's figures are **stored on the goal** and recalculated in the same transaction as
+anything that can move them — a record created, edited, excluded or deleted; a stage created, closed,
+reopened, paused or deleted. Nothing to compute on the client: read `dProgress`.
+
+| Field on the goal | Value |
+|---|---|
+| `dProgress` | **the same number as the stage in progress.** No averaging |
+| `dAverageValue` | that stage's `dAverageValue` |
+| `iRecordsCount` | **sum** across every stage — "how much has been logged on this goal" |
+| `tLastRecord` | the most recent across every stage |
+
+**The rule, in the client's words:** *"La submeta activa y la meta siempre son el mismo porcentaje.
+Lo que no quiero es que se promedien la submeta 1 y la submeta 2 para que en la meta me dé un 50%,
+porque no es real."*
+
+Fallbacks, in order: the `ACTIVE` stage → the **last closed** stage by order → `0`.
+
+**Consequence the client confirmed explicitly:** close Etapa 1 at 80% and Etapa 2 becomes the stage
+in progress with no records, so **the goal reads 0%** until its first capture. That is intended — the
+goal reports where the student is *right now*, not a blended history.
+
+> ⚠️ This replaces the rule documented here on 2026-08-14 (average of all subgoals, empty counting as
+> 0). Anything still describing the goal as an average of its stages is out of date.
+
+Goals that existed before were recomputed by migration `3039_Goals_sequentialSubGoals`, already
+applied to `development`.
+
+### Stages are sequential
+
+The percentage rule above needs "the stage in progress" to have exactly one answer, so the backend
+enforces it: **at most ONE subgoal of a goal is `ACTIVE`.** This is what the signed scope document
+specified all along.
+
+| What the user does | What the backend does as well |
+|---|---|
+| Creates a stage | `ACTIVE` if no stage is in progress, otherwise `PAUSED` (queued). `sStatus` in the request body is **ignored on create** |
+| `PUT /subGoals/:id { sStatus: 'COMPLETED' }` (or `NOT_ACHIEVED`) | promotes the next unfinished stage, by order, to `ACTIVE` |
+| `PUT { sStatus: 'ACTIVE' }` — reopening or jumping ahead | demotes whichever stage was in progress to `PAUSED` |
+| `PUT { sStatus: 'PAUSED' }` on the stage in progress | leaves the goal with none in progress → it shows the last closed stage |
+| Deletes the stage in progress | promotes the next unfinished stage |
+| Posts a record to a stage that is **not** in progress | refuses with **409** — *"solo se pueden capturar registros en la etapa en curso"* |
+
+Editing or deleting a record that already exists on a closed stage stays allowed: that is a
+correction, not progress on a finished stage.
+
+The goal is **not** closed automatically when every stage closes — that stays a manual action.
+
+### The percentage averages ALL records, not the last 3 *(changed 2026-08-18)*
+
+Client: *"se promedia toda la submeta"*. The old rule took the three most recent non-excluded records;
+now every non-excluded record counts, and the PO extended it to **ordinary goals as well** so one rule
+holds everywhere and two goals with identical records can never show different numbers.
+
+What changes in practice: a bad start is no longer forgotten. A goal that went 10% → 90% used to read
+90% and now reads the average of its whole history, so it climbs more slowly. Marking a record as
+**excluded** is now the only way to keep an outlier out of the number.
+
+⚠️ This contradicts the frontend repo's `docs/REGLAS_DE_NEGOCIO.md` §7.4 and §13.2, which still
+document the last-3 window as a decision of the original system. That document needs updating.
+
+### Each stage can be named *(changed 2026-08-17)*
+
+`POST /goals/:sGoalId/subGoals` and `PUT /subGoals/:sSubGoalId` accept `sTitle`, and
+`GET /goals/:sGoalId/subGoals` returns each subgoal's own title instead of the parent's.
+
+| What you send | What is stored |
+|---|---|
+| `sTitle` with content, on create | that title |
+| `sTitle: ''` or omitted, on create | the parent's title (previous behaviour) |
+| `sTitle` with content, on update | replaces the stored title |
+| `sTitle: ''`, on update | nothing — the stored title survives |
+
+The blank-value rules exist because `GoalForm.vue` hides its title input in subgoal mode and still
+sends `sTitle: ''`. Show that input and per-stage titles start working; until then nothing changes.
+
+### The student report includes divided goals *(fixed 2026-08-17)*
+
+`GET /students/:sStudentId/report` looked for records under the top-level goal ids only. A subgoal's
+records carry the **subgoal's** id, so none were found — and because the report keeps only goals with
+records, a divided goal **disappeared from the report** rather than showing 0%.
+
+It now queries the subgoals too and attributes each record to its parent goal, so the goal's
+`aRecords` holds everything logged across its stages. Each record also carries `sSubGoalId` and
+`sSubGoalTitle` (both `null` for a normal goal's records) if the PDF wants to label rows by stage.
+
+### ⚠️ One gap on the front-end side
+
+**Nothing in the UI can change a subgoal's status.** The badge is read-only and the subgoal form
+never sends `sStatus`, so every subgoal stays `ACTIVE` forever — which means the roll-up's
+"N/total completed" is permanently 0/N and the parent can never auto-complete. The backend accepts
+`sStatus` on `PUT /subGoals/:sSubGoalId` already; the front-end needs a control. See
+[`frontEndChanges.md`](frontEndChanges.md) entry 7.
+
+### How it was verified
+
+39 checks against the real development database, all passing: inheritance of title and measurement
+type, the id remapping, `iOrder` sequencing, the 5-subgoal cap, nesting refusal, `aData` envelopes,
+calculated fields present, **subgoals absent from the goals list while the parent is present**,
+records via `sSubGoalId` producing real progress (80%), the divided-parent 409, `PUT` partial edits
+preserving untouched fields, `PAUSED` accepted, delete cascading to records, and 404s for unknown
+ids and for using a goal id on a subgoal route. Test data removed afterwards; zero leftover subgoal
+rows and zero counter drift.
+
+The 2026-08-17 and 2026-08-18 changes add a re-runnable suite — **`npm run test:subgoals`, 109
+assertions, all passing** (`src/unitTests/SubGoalsRollup/`): own titles on create and update,
+blank-title inheritance, all ten transitions of the sequential machine with the goal's figure checked
+after each one, the divided goal appearing in the student report with its stages' records, and the
+average window proved with a case where the old and new rules cannot both pass (4 records of
+100/100/100/0 → **75%**, where last-3 would say 100%). It refuses to run against any database but
+`development` and deletes everything it creates.
+
+# ✅ Punto 3 — Billing with Stripe
+
+### What it does, in one paragraph
+
+The superadmin sets a monthly price for a school. The school's main user adds a card, which starts a
+Stripe subscription with a **30-day free trial**. From then on Stripe charges the card every month,
+each charge lands in a payment history the school can see, and if a charge fails the system retries
+twice before marking the account delinquent, emailing the main user and **cutting off access for
+every user of that school** until the payment goes through. The main user can cancel at any time and
+keeps access until the date already paid for.
+
+### What was created
+
+**A `Payments` table** — one row per charge attempt (amount, date, status, card brand, last 4,
+Stripe transaction id). Written only by the Stripe webhooks, never by a user.
+
+**Twelve columns on `Schools`** — five for the tariff (`sBillingMode`, `dFixedAmount`,
+`dAmountPerTeacher`, `dAmountPerStudent`, `dDiscountPct`) and seven for subscription state
+(`sBillingStatus`, `sStripeCustomerId`, `sStripeSubscriptionId`, `sStripePriceId`,
+`tCurrentPeriodEnd`, `bCancelAtPeriodEnd`, `iFailedAttempts`).
+
+### The two pricing modes
+
+| Mode | Amount |
+|---|---|
+| `FIXED` | `dFixedAmount` |
+| `VARIABLE` | `dAmountPerTeacher × iUsersLimit + dAmountPerStudent × iStudentsLimit` |
+
+Both then apply `dDiscountPct` (0–100). **`VARIABLE` uses the configured *limits*, never the real
+number of registered users** — the contract requires this explicitly, so a school cannot delete
+users the day before billing to shrink its invoice.
+
+`GET /billing/summary` returns `dMonthlyTotal`, which is **the official amount**. Your
+`computeMonthlyTotal()` in `app/utils/billing.ts` is a mirror of the same formula for previewing —
+verified identical on both sides (500×10 + 200×40 − 10% = **11,700**).
+
+### Card data never touches our servers
+
+1. Front-end calls `POST /billing/setup-intent` → gets `sClientSecret`
+2. Front-end calls `stripe.confirmCardSetup()` — the card is typed into **Stripe's** iframe
+3. Front-end sends only the resulting `sPaymentMethodId` to `POST /billing/payment-methods`
+
+No card number, expiry or CVC appears in any request to this API, or in any validation schema. That
+keeps the backend out of PCI scope entirely.
+
+### The six statuses, and which one blocks
+
+| Status | Access | Meaning |
+|---|---|---|
+| `NONE` | ✅ | never billed — **all 12 existing schools** |
+| `TRIALING` | ✅ | inside the 30-day free trial |
+| `ACTIVE` | ✅ | paid up |
+| `PAST_DUE` | ✅ | a charge failed, retries still running — warn, don't lock out |
+| **`SUSPENDED`** | ⛔ **402** | retries exhausted |
+| `CANCELED` | ✅ | cancelled, but paid until the cut-off date |
+
+### Business rules enforced
+
+1. **Only the school's main user** (`Users.sCreatedBy IS NULL`) can add, change or remove a card, or
+   cancel. Everyone else gets 403. FACULTY cannot reach billing at all.
+2. **The first card starts the subscription** — with the 30-day trial — but only if a chargeable
+   tariff exists.
+3. **Tariff changes apply from the next cycle only.** Changing a price (or a limit, under
+   `VARIABLE`) creates a new Stripe price and repoints the subscription with **no proration**, so
+   the period already invoiced is never re-priced. Verified: the upcoming invoice contains zero
+   proration lines.
+4. **Two retries, then suspension** — initial attempt plus 2 retries. On the third failure the
+   school becomes `SUSPENDED` immediately, with **no grace period**, and the main user is emailed.
+   Counted in our own code, so the rule holds regardless of Stripe's dashboard retry settings.
+5. **A successful charge always restores access** and resets the failure counter.
+6. **Cancellation never refunds** and never cuts access early — it sets `cancel_at_period_end`, so
+   the school keeps working until `tCurrentPeriodEnd`.
+7. **You cannot delete your only card while the subscription is live** (409). Doing so would
+   guarantee the next renewal fails and suspend the school. *This rule is not in the contract — it
+   protects the customer from locking themselves out.*
+8. **Suspended schools can still file support tickets.** Deliberately the one thing that keeps
+   working, since it is their only route to a human.
+
+### The webhook
+
+```
+POST {env}/api/v1/billing/webhook
+```
+
+Note what's missing: **no `sLang` segment and no authentication.** Stripe calls a fixed URL, sends
+no language, and carries no token — it authenticates by signing the request body, which the server
+verifies against `STRIPE_WEBHOOK_SECRET`. A forged or missing signature is rejected with 400.
+
+It handles `invoice.paid`, `invoice.payment_failed`, `customer.subscription.updated` and
+`customer.subscription.deleted`, and **always answers 200 once the signature is valid** — a non-2xx
+would make Stripe retry the same event for days, so a bug in our handling must not become a retry
+storm.
+
+**Redelivery is safe.** Stripe may send the same event more than once; payments are keyed on a
+unique Stripe transaction id, so a redelivery updates rather than duplicates. Verified by sending
+the same event three times and confirming exactly one row.
+
+### No cron job
+
+The front-end guide suggested a scheduler for the monthly charge. There isn't one, and shouldn't be:
+Stripe Subscriptions drive the recurrence themselves. A cron would duplicate that and risk
+double-charging.
+
+### How it was verified
+
+**98 checks**, of which **74 against the live Stripe API** (test-mode account, `livemode: false`):
+
+- cards & subscription (36): lazy customer creation, SetupIntent, trial measured at exactly 30 days,
+  price stored as `1170000` centavos / `mxn` / monthly, default switching propagating to the
+  subscription, last-card deletion refused, another customer's card rejected, cancel not cancelling
+  outright
+- webhooks & dunning (31): forged signature rejected; failures 1–2 → `PAST_DUE` with access intact;
+  failure 3 → `SUSPENDED` + 402 while support tickets still work; `invoice.paid` restoring access;
+  redelivery not duplicating; all four status mappings
+- tariff sync (7): 10,000 → 15,000 repriced in Stripe; limits change 11,700 → 16,200; zero proration
+  lines; a no-op change skipped
+- and 24 more with no Stripe key at all, confirming the module fails cleanly (503) when unconfigured
+
+Every Stripe object created in testing was deleted, and the database restored and re-queried.
+
+### ⚠️ Still needed before this can go live
+
+| | |
+|---|---|
+| `STRIPE_WEBHOOK_SECRET` | Not set yet. Signature logic is proven, but real deliveries need a webhook endpoint registered in the Stripe dashboard and its `whsec_…` in the environment. |
+| `NUXT_PUBLIC_STRIPE_PK` | The front-end needs the publishable key (`pk_test_…`) for Stripe.js. |
+| Live keys | Test mode charges nothing. Going live needs `sk_live_`/`pk_live_` **and a second webhook endpoint** — live and test secrets are different. |
+
+---
+
+## ⚠️ Outstanding items — deliberately not done
+
+Everything here was a conscious choice, not an oversight. Each row says **who owns it** and
+**what happens if it's ignored**. Nothing here blocks the features already shipped.
+
+### Needs a decision (blocks nobody today)
+
+| # | Item | Owner | If ignored |
+|---|---|---|---|
+| **Q15** | **May therapists attach files to tracking records?** The contract says therapists cannot *"cargar documentos"*. Goal documents are blocked; record attachments are **not**, because `RecordForm.vue` has no therapist gating and blocking would make a visible button fail. | PO | The contract's rule is only half true — therapists can still upload via record attachments. |
+| — | **Should support tickets confirm real email delivery?** Today the API answers *"we received your report"*, not *"the email arrived"* — AWS SES errors are only logged (`Mail.service.ts`). Fixing it changes behaviour for **every** email the platform sends, so it wasn't done unilaterally. | PO | A silently failed SES send looks like success to the user. Low risk, non-zero. |
+
+### Needs approval — one-line changes
+
+| # | Item | Owner | If ignored |
+|---|---|---|---|
+| **Q14** | **Add `@babel/runtime` to `dependencies`.** `.babelrc` enables `@babel/plugin-transform-runtime`, which compiles code to `require('@babel/runtime/...')`, but that package is in neither `dependencies` nor `devDependencies`. | PO → backend | 🔴 **A clean `npm ci && npm run build && npm start` crashes.** This blocks deploying any of this work. Existing servers survive only on a stale `node_modules`. |
+| **Q16** | **Fix `npm run db:migrations`.** It does `cd src`, picking up the stale tracked `src/knexfile.ts` whose migrations path resolves to a directory that doesn't exist. | PO → backend | Migrations fail with `ENOENT`. **Workaround: run `npx knex migrate:latest` from the repo root** — that's how `3033` was applied. *Deferred by PO 2026-08-02.* |
+
+### Front-end work required
+
+| # | Item | Owner | If ignored |
+|---|---|---|---|
+| **1** | **P8 — send `aHelpTypes` as an array** instead of a single `sHelpType` + `iHelpAmount`. See [`frontEndChanges.md`](frontEndChanges.md) entry 1. | Front-end | 🔴 Only one help type per record would be saved. A temporary compatibility shim will keep the old form working, so nothing breaks immediately. |
+| **3** | **P5 — skip `fetchIep()` in therapist mode** (`students/[id]/index.vue:335`). | Front-end | Harmless — a silent, always-403 request in the network log. Cosmetic only. |
+
+### Deferred cleanup (no action needed)
+
+| Item | Why it's being left |
+|---|---|
+| **`TrackingRecords.sSupportUsed`** — will be superseded by the `TrackingRecordHelps` table in P8. | It holds a single value so it cannot serve the multi-type model, and it has never been written to. Dropping a column from a live schema is irreversible and deserves its own approval. Marked superseded, left in place. |
+| **`src/knexfile.ts`** — stale duplicate of the root `knexfile.ts`. | Same as Q16 — deferred by the PO. |
+
+### Waiting on the client
+
+| Item | Needed by |
+|---|---|
+| **Live Stripe keys** (secret + webhook signing secret) and confirmation of MXN currency. Development uses the existing MyVillage **test-mode** keys, so P3 can be built and verified without them. | Before P3 can go live |
+
+---
+
+## Environment variables introduced so far
+
+| Variable | Default | Feature | Purpose |
+|---|---|---|---|
+| `SUPPORT_EMAIL` | `info@myvillage.com.mx` | P10 | Where tickets are emailed |
+| `SUPPORT_SMS_ENABLED` | *(off)* | P10 | `true` turns on the SMS heads-up |
+| `SUPPORT_PHONE` | *(none)* | P10 | Destination number for that SMS |
+| `STRIPE_PRIVATE_KEY` | *(required for P3)* | P3 | Secret key. Billing endpoints return **503** without a real one |
+| `STRIPE_PUBLIC_KEY` | *(required for P3)* | P3 | Publishable key; the frontend needs the same value as `NUXT_PUBLIC_STRIPE_PK` |
+| `STRIPE_WEBHOOK_SECRET` | *(required for P3)* | P3 | `whsec_…` from the Stripe dashboard webhook endpoint. Without it the webhook returns 503 rather than trusting unverified events |
+
+P10's are all optional. **P3's three are required** for billing to function — without them the
+billing endpoints fail cleanly with 503 and nothing else is affected.
+
+### Setting up the Stripe webhook
+
+1. Stripe Dashboard → **Developers → Webhooks → Add endpoint** (with **Test mode** on)
+2. URL: `https://api.myvillage.com.mx/development/api/v1/billing/webhook` — note there is **no**
+   `/sp` or `/en` segment
+3. Events: `invoice.paid`, `invoice.payment_failed`, `customer.subscription.updated`,
+   `customer.subscription.deleted`
+4. Reveal the **Signing secret** and put it in `STRIPE_WEBHOOK_SECRET`
+5. Restart the process — `.env` is read at boot, so no rebuild is needed
+
+Locally, `stripe listen --forward-to localhost:3000/development/api/v1/billing/webhook` prints a
+temporary secret instead. **Test and live webhooks are separate endpoints with different secrets.**

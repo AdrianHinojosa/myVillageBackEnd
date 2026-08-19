@@ -3,7 +3,7 @@ import aH from "express-async-handler";
 import { celebrate } from "celebrate";
 import SchoolUserController from './schoolUsers.controllers';
 import * as SchoolUserValidations from './schoolUsers.validations';
-import { verifySchoolUserPermissions, denyFacultyAccess } from '../../Middlewares/001_Permissions.mw.ts/schools.permissions';
+import { verifySchoolUserPermissions, denyFacultyAccess, denyTherapistAccess } from '../../Middlewares/001_Permissions.mw.ts/schools.permissions';
 
 const router = Router();
 
@@ -16,10 +16,12 @@ router.get('/',
 );
 
 // POST /schoolUsers — Create school user
+// P5: a therapist account is a single user and cannot create additional ones.
 router.post('/',
     celebrate({ body: SchoolUserValidations.CreateSchoolUserBody }),
     aH(verifySchoolUserPermissions([{ sModuleName: 'General', sActionCode: 'WRITE' }])),
     aH(denyFacultyAccess() as any),
+    aH(denyTherapistAccess() as any),
     aH(SchoolUserController.createSchoolUser)
 );
 

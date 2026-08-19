@@ -356,6 +356,19 @@ export default {
             sp: "Tu colegio no tiene una tarifa configurada. Contacta al administrador.",
             en: "Your school has no configured tariff. Please contact the administrator."
         },
+        // P3 recovery — "Reintentar pago" (2026-08-19).
+        nothingToPay: {
+            sp: "No hay un cobro pendiente por pagar en este momento.",
+            en: "There is no outstanding charge to pay right now."
+        },
+        noDefaultCard: {
+            sp: "Registra una tarjeta y márcala como predeterminada antes de reintentar el pago.",
+            en: "Add a card and set it as the default before retrying the payment."
+        },
+        paymentRetryFailed: {
+            sp: "No pudimos procesar el pago con la tarjeta registrada. Verifica los datos o usa otra tarjeta.",
+            en: "We could not process the payment with the card on file. Check the details or use another card."
+        },
     },
 
     // ==== Support: =======

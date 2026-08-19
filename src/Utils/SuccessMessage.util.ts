@@ -397,7 +397,11 @@ export default {
         cancelSubscription: {
             sp: 'Tu suscripción se cancelará al final del periodo vigente. Conservas el acceso hasta la fecha de corte.',
             en: "Your subscription will be cancelled at the end of the current period. You keep access until the cut-off date."
-        }
+        },
+        payOutstanding: {
+            sp: 'Pago procesado exitosamente! El acceso se restablece en unos segundos.',
+            en: "The payment went through. Access is restored in a few seconds."
+        },
     },
 
     // ========  Support  ==================

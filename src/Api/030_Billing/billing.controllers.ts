@@ -14,7 +14,8 @@ import stripe, {
     computeMonthlyTotal,
     hasChargeableTariff,
     mapStripeStatus,
-    fromStripeTimestamp
+    fromStripeTimestamp,
+    fromStripeAmount
 } from '../../Services/Stripe.service';
 
 /**
@@ -406,6 +407,76 @@ class Controllers {
 
         return res.status(200).json({
             message: SuccessMessages.Billing.cancelSubscription[sLang],
+            success: true
+        });
+    }
+
+    /**
+     * POST /billing/pay — "Reintentar pago". Charge the outstanding invoice now.
+     *
+     * This is how a SUSPENDED school gets back in, and it exists because nothing else does the job:
+     * by the time we suspend, Stripe's automatic retries are exhausted, and attaching a new card does
+     * NOT make Stripe charge anything. Without this endpoint a school could update its card and stay
+     * locked out forever — reported from a DEV test, 2026-08-19.
+     *
+     * Deliberately explicit rather than automatic on card-attach: the user presses a button that says
+     * what it will cost, so a charge is never a surprise side-effect of saving a card.
+     *
+     * The status is NOT force-written here. On success Stripe emits `invoice.payment_succeeded`, and
+     * that webhook is the single place that maps Stripe state onto `sBillingStatus` — two writers for
+     * one field is how they drift. `iFailedAttempts` IS reset, because that counter is ours alone.
+     */
+    async payOutstanding(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
+        const { sLang, sSchoolId } = res.locals;
+        if (!assertStripe(res, next)) return;
+        if (!await requireMainUser(res, next)) return;
+
+        const oSchool = await BillingQueries.findSchoolBilling(sSchoolId);
+        if (!oSchool) return next(new MyError(404, ErrorMessages.Schools.notFound[sLang]));
+        if (!oSchool.sStripeCustomerId) {
+            return next(new MyError(409, ErrorMessages.Billing.nothingToPay[sLang]));
+        }
+
+        // A card must be on file AND be the default — `invoices.pay()` charges the default one.
+        const oCustomer: any = await stripe.customers.retrieve(oSchool.sStripeCustomerId);
+        if (!oCustomer?.invoice_settings?.default_payment_method) {
+            return next(new MyError(409, ErrorMessages.Billing.noDefaultCard[sLang]));
+        }
+
+        // The unpaid invoice. `open` is what an invoice sits at once Stripe's retries give up.
+        const aOpen = await stripe.invoices.list({
+            customer: oSchool.sStripeCustomerId,
+            status: 'open',
+            limit: 1
+        });
+        const oInvoice: any = (aOpen.data || [])[0];
+        if (!oInvoice) {
+            return next(new MyError(409, ErrorMessages.Billing.nothingToPay[sLang]));
+        }
+
+        let oPaid: any;
+        try {
+            oPaid = await stripe.invoices.pay(oInvoice.id);
+        } catch (error: any) {
+            // A decline is an expected outcome, not a server fault. 409 on purpose and NOT 402 —
+            // the frontend treats 402 as "school suspended" and would bounce the user off the very
+            // page they are trying to pay from.
+            console.error(`billing/pay declined for school ${sSchoolId}:`, error?.message);
+            return next(new MyError(409, ErrorMessages.Billing.paymentRetryFailed[sLang]));
+        }
+
+        // Ours to clear: the dunning counter. Status is left to the webhook.
+        await BillingQueries.patchSchoolBilling(sSchoolId, { iFailedAttempts: 0 });
+
+        return res.status(200).json({
+            message: SuccessMessages.Billing.payOutstanding[sLang],
+            results: {
+                sInvoiceId: String(oPaid.id),
+                dAmountPaid: fromStripeAmount(oPaid.amount_paid),
+                sCurrency: String(oPaid.currency || BILLING_CURRENCY).toUpperCase(),
+                bPaid: oPaid.paid === true,
+                sStatus: String(oPaid.status)
+            },
             success: true
         });
     }

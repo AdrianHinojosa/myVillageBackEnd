@@ -54,8 +54,24 @@ const refreshTokenSchools  = async (resLocals): Promise<void> => {
 }
 
 
+/**
+ * Options for the school-user gate.
+ */
+type SchoolGateOptions = {
+    /**
+     * Let the request through even when the school is SUSPENDED for non-payment.
+     *
+     * Set ONLY on the billing endpoints a delinquent school needs in order to pay. The suspension is
+     * meant to restrict *"el acceso a la plataforma"* — the students, goals and IEP modules — not the
+     * checkout. Blocking the checkout too made suspension a dead end: the 402 message says
+     * "regulariza el pago" while every endpoint that could take the payment answered 402.
+     * Reported from a DEV test, 2026-08-19.
+     */
+    bAllowWhenSuspended?: boolean;
+};
+
 // Verify is School User .
-export const verifySchoolUserPermissions = (sArrModules: Permission[]) => async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+export const verifySchoolUserPermissions = (sArrModules: Permission[], oOptions: SchoolGateOptions = {}) => async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { sLang } = res.locals;
     const { authorization } = req.headers;
     if (!authorization) return next(new MyError(401, ErrorMessages.Authentication.invalidToken[sLang]));
@@ -89,7 +105,10 @@ export const verifySchoolUserPermissions = (sArrModules: Permission[]) => async 
     // access returns by itself as soon as a charge succeeds and the webhook flips the status back.
     // Only SUSPENDED blocks — NONE (never billed), TRIALING, ACTIVE, PAST_DUE (still in retries)
     // and CANCELED (paid until the cut-off date) all keep working.
-    if (mySchool.sBillingStatus === 'SUSPENDED') {
+    //
+    // `bAllowWhenSuspended` exempts the endpoints a suspended school needs in order to pay its way
+    // out. See the note on SchoolGateOptions: without it the suspension could never be lifted.
+    if (mySchool.sBillingStatus === 'SUSPENDED' && !oOptions.bAllowWhenSuspended) {
         return next(new MyError(402, ErrorMessages.Schools.billingSuspended[sLang]));
     }
 

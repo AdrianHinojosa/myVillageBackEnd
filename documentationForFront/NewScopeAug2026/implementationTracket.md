@@ -827,3 +827,37 @@ vencimiento anterior** (no desde hoy). Los **colegios existentes quedan en TRANS
 **Validaciones (§2.7):** `Schools.sPaymentMethod` / `dMonthlyAmount` / `tNextPaymentDate` agregadas a `ValidationError.util.ts`. Mensajes `SuccessMessages.Schools.registerTransferPayment` + `ErrorMessages.Schools.notTransferMode`/`stripeNotForTransfer` (sp/en).
 
 **Deliberadamente NO hecho:** cobro automático/recordatorios por transferencia; historial de transfer con más metadata; enforcement de suspensión por falta de pago en transfer (queda informativo).
+
+**Fix post-auditoría (fechas):** `tNextPaymentDate` como string `YYYY-MM-DD` (no `Joi.date()`, que guardaba un día antes en tz negativas); avance de ciclo con clamp a fin de mes; `getSummary` devuelve `YYYY-MM-DD`.
+
+---
+
+## Feature 2 — Alumno compartido entre instituciones (folio)
+
+**Decisiones del PO (2026-08-21):** un alumno puede existir en varias instituciones compartiendo
+**solo** nombre + fecha de nacimiento; **todo lo demás (diagnóstico, grado, metas, registros) es
+por institución**. El **folio** es el id de base de datos de la identidad compartida. Meta futura:
+"My Village Parents" (un hijo, no un hijo por organización).
+
+**Esquema — migración `3041_Persons_and_Students_sPersonId.ts`:**
+- Nueva tabla `Persons` (identidad compartida): `sPersonId` (uuid PK = **folio**), `sName`, `sLastName`, `sSecondLastName`, `tBirthDate`, `bActive`, timestamps.
+- `Students.sPersonId` (uuid FK → Persons, nullable) + índice.
+- **Backfill:** cada alumno existente genera su Person reusando su `sStudentId` como `sPersonId` → todo alumno actual queda con folio; comportamiento previo sin cambios.
+
+**Modelo:** una `Persons` (compartida) → N `Students` (uno por institución). Metas/registros
+cuelgan de `Students.sStudentId` (por institución), así cada colegio ve lo suyo.
+
+**Endpoints:**
+- `POST /students/verifyByFolio` (SchoolAdmin, WRITE + denyFaculty): body `{ sFolio, sFullName, tBirthDate }`. Valida folio + nombre completo (normalizado: sin acentos/mayúsculas/espacios) + fecha; responde `{ person: { sPersonId, sName, sLastName, sSecondLastName, tBirthDate } }` o **404 genérico** (no revela si el folio existe).
+- `POST /students` extendido: acepta `sPersonId` opcional. Con folio → **re-verifica** identidad (defensa), evita duplicado en el mismo colegio (409 `alreadyLinked`), y crea el perfil copiando nombre+fecha **de la Person** (fuente de verdad). Sin folio → crea una Person nueva.
+- `GET /students/:id` ahora incluye `sPersonId` (el folio, para mostrarlo/compartirlo).
+
+**Privacidad:** el verify no filtra datos si no hay match exacto; un colegio nunca ve perfiles/metas de otras instituciones (siguen scoped por `sSchoolId`).
+
+**Deliberadamente NO hecho:** sincronización en vivo del nombre entre instituciones (se copia al ligar; editar el nombre en un colegio no propaga — suficiente para hoy, el futuro Parents agrupa por `sPersonId`); UI/consolidación cross-institución (es del futuro My Village Parents).
+
+**Validaciones:** `Students.sPersonId`/`sFolio`/`sFullName`/`tBirthDate` agregadas a `ValidationError.util.ts` (esta última era un gap pre-existente). Mensajes `folioVerified` / `folioNotFound` / `folioMismatch` / `alreadyLinked` (sp/en).
+
+| commit | Punto | Qué |
+|---|---|---|
+| _(branch `feature/transfer-billing`)_ | **F2** | Alumno compartido: migración `3041`, tabla `Persons` + `Students.sPersonId`, `POST /students/verifyByFolio`, alta por folio con re-verificación y dedupe |

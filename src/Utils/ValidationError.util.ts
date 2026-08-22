@@ -358,6 +358,23 @@ export default {
                 sp: "Por favor, ingresa notas correctas.",
                 en: "Please, enter valid notes."
             },
+            // Feature 2 — alumno compartido (folio)
+            tBirthDate: {
+                sp: "Por favor, ingresa una fecha de nacimiento válida.",
+                en: "Please, enter a valid birth date."
+            },
+            sPersonId: {
+                sp: "Por favor, ingresa un folio de alumno válido.",
+                en: "Please, enter a valid student folio."
+            },
+            sFolio: {
+                sp: "Por favor, ingresa el folio del alumno.",
+                en: "Please, enter the student folio."
+            },
+            sFullName: {
+                sp: "Por favor, ingresa el nombre completo del alumno.",
+                en: "Please, enter the student's full name."
+            },
         },
 
         // ========== Goals ==========

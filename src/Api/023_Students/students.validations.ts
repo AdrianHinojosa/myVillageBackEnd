@@ -1,7 +1,17 @@
 import { Joi } from 'celebrate';
 import * as Validations from '../../Middlewares/Validations.mw';
 
+// Feature 2 — verificar folio (identidad compartida) con nombre completo + fecha de nacimiento.
+export const VerifyFolioBody = Validations.JoiObjectKeys({
+    sFolio: Validations.RequiredUUID("Students sFolio"),
+    sFullName: Validations.RequiredString("Students sFullName"),
+    tBirthDate: Validations.Date("Students tBirthDate"),
+});
+
 export const CreateStudentBody = Validations.JoiObjectKeys({
+    // Feature 2 — folio de una identidad existente; si viene, el alumno se liga a ella.
+    sPersonId: Joi.string().guid({ version: ['uuidv4'] }).allow(null).allow('')
+        .error(new Error("Students sPersonId")),
     sName: Validations.RequiredString("Students sName"),
     sLastName: Validations.RequiredString("Students sLastName"),
     sSecondLastName: Validations.String("Students sSecondLastName"),

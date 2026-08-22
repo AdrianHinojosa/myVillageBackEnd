@@ -8,6 +8,14 @@ import { verifySchoolUserPermissions, denyFacultyAccess } from '../../Middleware
 
 const router = Router();
 
+// Feature 2 — verificar folio (identidad compartida) antes de cargar un alumno existente.
+// Va antes de '/:sStudentId' (aunque son métodos distintos) para dejar clara la intención.
+router.post('/verifyByFolio',
+    celebrate({ body: StudentValidations.VerifyFolioBody }),
+    aH(verifySchoolUserPermissions(  [  {sModuleName: 'General', sActionCode: 'WRITE' }  ])),
+    aH(denyFacultyAccess() as any),
+    aH(StudentController.verifyByFolio));
+
 // Create
 router.post('/',
     celebrate({ body: StudentValidations.CreateStudentBody }),

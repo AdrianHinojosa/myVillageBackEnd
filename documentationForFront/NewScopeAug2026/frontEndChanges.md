@@ -647,6 +647,26 @@ referencia y para el equipo de backend:
 
 ---
 
+## Feature 2 — Alumno compartido entre instituciones (folio)
+
+Contrato para el frontend (add-student):
+
+1. **Verificar folio — `POST /students/verifyByFolio`** (auth SchoolAdmin). Body:
+   `{ sFolio: uuid, sFullName: string, tBirthDate: 'YYYY-MM-DD' }`. Respuesta OK:
+   `{ message, person: { sPersonId, sName, sLastName, sSecondLastName, tBirthDate }, success }`.
+   Si no coincide → **404** con mensaje genérico (mostrar "no se encontró"; no revela detalles).
+2. **Crear alumno — `POST /students`** ahora acepta **`sPersonId`** (el folio) opcional:
+   - Con `sPersonId`: liga el alumno a esa identidad. El backend **re-verifica** (manda también
+     `sName`/`sLastName`/`tBirthDate`, que vienen precargados del verify) y **copia nombre+fecha
+     de la identidad** (aunque el front los mande, gana la Person). Resto de campos = por institución.
+     Errores: `409 folioMismatch` (no coincide), `409 alreadyLinked` (ya está en este colegio).
+   - Sin `sPersonId`: alta normal (crea la identidad compartida automáticamente).
+3. **`GET /students/:id`** ahora devuelve **`sPersonId`** (el folio). Mostrarlo en el detalle del
+   alumno para copiar/compartir con otra institución.
+4. Nada más cambia en las listas/reportes: siguen scoped por colegio (cada colegio ve lo suyo).
+
+---
+
 ## Resolved / already applied
 
 *(entries move here once the frontend confirms the change is in)*

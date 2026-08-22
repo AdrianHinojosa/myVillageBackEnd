@@ -241,6 +241,19 @@ export default {
             sp: "Se ha alcanzado el límite de estudiantes permitidos para esta escuela.",
             en: "The student limit for this school has been reached."
         },
+        // Feature 2 — alumno compartido (folio)
+        folioNotFound: {
+            sp: "No se encontró un alumno con ese folio, nombre y fecha de nacimiento.",
+            en: "No student was found with that folio, name and birth date."
+        },
+        folioMismatch: {
+            sp: "El folio no coincide con el nombre y la fecha de nacimiento.",
+            en: "The folio does not match the name and birth date."
+        },
+        alreadyLinked: {
+            sp: "Este alumno ya está registrado en tu institución.",
+            en: "This student is already registered in your institution."
+        },
     },
 
     // ==== Goals: =======

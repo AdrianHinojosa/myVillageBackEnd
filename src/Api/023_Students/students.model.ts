@@ -8,6 +8,7 @@ Model.knex(db);
 export interface IStudents {
     sStudentId?: string;
     sSchoolId?: string;
+    sPersonId?: string;
     sName?: string;
     sLastName?: string;
     sSecondLastName?: string;
@@ -29,6 +30,7 @@ export interface IStudents {
 export class StudentsModel extends Model {
     public sStudentId?: string;
     public sSchoolId?: string;
+    public sPersonId?: string;
     public sName?: string;
     public sLastName?: string;
     public sSecondLastName?: string;

@@ -178,6 +178,10 @@ export default {
             sp: 'Se eliminó el estudiante exitosamente!',
             en: "The student was successfully deleted."
         },
+        folioVerified: {
+            sp: 'Se encontró al alumno. Se cargarán su nombre y fecha de nacimiento.',
+            en: "The student was found. Their name and birth date will be loaded."
+        },
         uploadStudentImage: {
             sp: 'Se actualizó la imagen del estudiante exitosamente!',
             en: "The student image was successfully updated!"

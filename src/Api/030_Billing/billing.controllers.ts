@@ -109,6 +109,11 @@ class Controllers {
                 dAmountPerStudent: oSchool.dAmountPerStudent !== null ? Number(oSchool.dAmountPerStudent) : null,
                 dDiscountPct: oSchool.dDiscountPct !== null ? Number(oSchool.dDiscountPct) : null,
                 sBillingStatus: oSchool.sBillingStatus || 'NONE',
+                // Pago por transferencia (billing manual). En modo TRANSFER el frontend muestra
+                // la tarjeta manual (estado/monto/próximo pago) en vez de la UI de Stripe.
+                sPaymentMethod: oSchool.sPaymentMethod || 'TRANSFER',
+                dMonthlyAmount: oSchool.dMonthlyAmount !== null && oSchool.dMonthlyAmount !== undefined ? Number(oSchool.dMonthlyAmount) : null,
+                tNextPaymentDate: oSchool.tNextPaymentDate || null,
                 sCurrency: BILLING_CURRENCY,
                 // The OFFICIAL amount. The frontend previews the same figure with its own mirror of
                 // this formula, but this is the one that gets charged.
@@ -236,6 +241,11 @@ class Controllers {
 
         const oSchool = await BillingQueries.findSchoolBilling(sSchoolId);
         if (!oSchool) return next(new MyError(404, ErrorMessages.Schools.notFound[sLang]));
+
+        // Pago por transferencia: se ignora Stripe. Un colegio en transferencia no adjunta tarjetas.
+        if (oSchool.sPaymentMethod === 'TRANSFER') {
+            return next(new MyError(409, ErrorMessages.Schools.stripeNotForTransfer[sLang]));
+        }
 
         const sCustomerId = await ensureStripeCustomer(oSchool);
 
@@ -428,6 +438,9 @@ export { createPriceForSchool, ensureStripeCustomer };
  * the caller can surface it.
  */
 export async function syncSubscriptionTariff(oSchool: any): Promise<{ bSynced: boolean, sReason?: string }> {
+    // Pago por transferencia: se ignora Stripe por completo (cobro manual). Sin este early-return,
+    // cada edición de un colegio en transferencia intentaría tocar Stripe.
+    if (oSchool?.sPaymentMethod === 'TRANSFER') return { bSynced: false, sReason: 'transfer' };
     if (!isStripeConfigured()) return { bSynced: false, sReason: 'stripe-not-configured' };
     // Nothing to sync until the school actually has a subscription.
     if (!oSchool?.sStripeSubscriptionId) return { bSynced: false, sReason: 'no-subscription' };

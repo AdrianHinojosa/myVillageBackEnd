@@ -3,6 +3,7 @@ import { Page } from 'objection';
 import { UsersModel, IUsers } from '../004_Users/users.model';
 import { SchoolsModel, ISchools } from './schools.model';
 import { SchoolUsersModel, ISchoolUser  } from './001_SchoolUsers/schoolUsers.model';
+import { PaymentsModel } from '../030_Billing/billing.model';
 
 class Queries {
     constructor() {
@@ -14,7 +15,7 @@ class Queries {
     }
 
     // DONE: Insert school
-    static async insertSchool({sName, sPhone, sEmail, sAddress, sCityId, iUsersLimit, iStudentsLimit, sAccountType, sBillingMode, dFixedAmount, dAmountPerTeacher, dAmountPerStudent, dDiscountPct, sCreatedBy, sAdminName, sLastName, sSecondLastName}: any) {
+    static async insertSchool({sName, sPhone, sEmail, sAddress, sCityId, iUsersLimit, iStudentsLimit, sAccountType, sBillingMode, dFixedAmount, dAmountPerTeacher, dAmountPerStudent, dDiscountPct, sPaymentMethod, dMonthlyAmount, tNextPaymentDate, sCreatedBy, sAdminName, sLastName, sSecondLastName}: any) {
         return await SchoolsModel.transaction(async (trx) => {
 
             // Insert into School table
@@ -35,6 +36,10 @@ class Queries {
                 dAmountPerTeacher: dAmountPerTeacher ?? null,
                 dAmountPerStudent: dAmountPerStudent ?? null,
                 dDiscountPct: dDiscountPct ?? null,
+                // Pago por transferencia — default TRANSFER si no se especifica.
+                sPaymentMethod: sPaymentMethod || 'TRANSFER',
+                dMonthlyAmount: dMonthlyAmount ?? null,
+                tNextPaymentDate: tNextPaymentDate ?? null,
                 bBlocked: false,
                 sCreatedBy,
                 bActive: true
@@ -66,7 +71,7 @@ class Queries {
     }
 
     // Done: Update school
-    static async updateSchool(sSchoolId, {sName, sPhone, sCityId, iUsersLimit, iStudentsLimit, sAccountType, sBillingMode, dFixedAmount, dAmountPerTeacher, dAmountPerStudent, dDiscountPct, sLastUpdatedBy}) {
+    static async updateSchool(sSchoolId, {sName, sPhone, sCityId, iUsersLimit, iStudentsLimit, sAccountType, sBillingMode, dFixedAmount, dAmountPerTeacher, dAmountPerStudent, dDiscountPct, sPaymentMethod, dMonthlyAmount, tNextPaymentDate, sLastUpdatedBy}) {
 
         return await SchoolsModel.transaction(async (trx) => {
             // Only patch sAccountType when it was actually sent — omitting it must not reset the type
@@ -89,6 +94,10 @@ class Queries {
             if (dAmountPerTeacher !== undefined) oPatch.dAmountPerTeacher = dAmountPerTeacher;
             if (dAmountPerStudent !== undefined) oPatch.dAmountPerStudent = dAmountPerStudent;
             if (dDiscountPct !== undefined) oPatch.dDiscountPct = dDiscountPct;
+            // Pago por transferencia — patch solo lo enviado (no borrar config en edits parciales).
+            if (sPaymentMethod) oPatch.sPaymentMethod = sPaymentMethod;
+            if (dMonthlyAmount !== undefined) oPatch.dMonthlyAmount = dMonthlyAmount;
+            if (tNextPaymentDate !== undefined) oPatch.tNextPaymentDate = tNextPaymentDate;
 
             // Update school
             let updatedSchool =  await SchoolsModel.query(trx).patchAndFetchById(sSchoolId, oPatch).where('bActive', true);
@@ -511,6 +520,35 @@ class Queries {
         };
     }
 
+
+    // Registra un pago por transferencia: avanza el ciclo mensual +1 mes (desde el vencimiento
+    // anterior, o desde hoy si aún no hay uno) y deja el pago en el historial para auditoría.
+    static async registerTransferPayment(sSchoolId, sLastUpdatedBy) {
+        return await SchoolsModel.transaction(async (trx) => {
+            const oSchool = await SchoolsModel.query(trx).findById(sSchoolId);
+
+            // Ciclo fijo mes a mes: se avanza desde la fecha de vencimiento previa, NO desde hoy,
+            // para que venza siempre el mismo día aunque el pago llegue unos días tarde.
+            const oBase = oSchool.tNextPaymentDate ? new Date(oSchool.tNextPaymentDate) : new Date();
+            oBase.setMonth(oBase.getMonth() + 1);
+            const sNextDate = oBase.toISOString().split('T')[0];
+
+            const oUpdated = await SchoolsModel.query(trx)
+                .patchAndFetchById(sSchoolId, { tNextPaymentDate: sNextDate, sLastUpdatedBy })
+                .where('bActive', true);
+
+            // Historial de pagos (auditoría). Sin ids de Stripe: es un pago manual.
+            await PaymentsModel.query(trx).insert({
+                sSchoolId,
+                dAmount: oSchool.dMonthlyAmount ?? 0,
+                sCurrency: 'MXN',
+                tPaidAt: new Date().toISOString(),
+                sStatus: 'succeeded',
+            });
+
+            return oUpdated;
+        });
+    }
 
     // Update School Image
     static async updateSchoolImage(sSchoolId: string, sImageKey: string) {

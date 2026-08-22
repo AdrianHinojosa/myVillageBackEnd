@@ -52,6 +52,13 @@ router.patch('/:sSchoolId',
         aH(SchoolController.patchSchoolBlocked));
 
 
+// Registrar pago por transferencia (superadmin). Avanza el ciclo mensual +1 mes.
+router.post('/:sSchoolId/billing/registerTransferPayment',
+        celebrate({ params: SchoolValidations.GetSchoolParams }),
+        aH(verifyAdminPermissions(  [  {sModuleName: 'General', sActionCode: 'WRITE' }  ])),
+        aH(SchoolController.registerTransferPayment));
+
+
 // POST Insert school logo (Admin route)
 router.post('/:sSchoolId/image',
     aH(upload()),

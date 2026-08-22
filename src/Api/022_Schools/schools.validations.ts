@@ -27,6 +27,15 @@ export const BillingFields = {
     // 0-100; the service clamps as well, but reject nonsense at the edge.
     dDiscountPct: Joi.number().min(0).max(100).allow(null)
         .error(new Error("Schools dDiscountPct")),
+
+    // ---- Pago por transferencia (billing manual) ----
+    // 'STRIPE' -> cobro automático con tarjeta ; 'TRANSFER' -> cobro manual por transferencia.
+    // Todo opcional/anulable: partial edits no deben borrar la config. Los existentes quedan
+    // en 'TRANSFER' por default de la columna.
+    sPaymentMethod: Joi.string().valid('STRIPE', 'TRANSFER').allow(null).allow('')
+        .error(new Error("Schools sPaymentMethod")),
+    dMonthlyAmount: Validations.PositiveMonetaryValue("Schools dMonthlyAmount").allow(null),
+    tNextPaymentDate: Validations.Date("Schools tNextPaymentDate").allow(null),
 };
 
 export const CreateSchoolBody = Validations.JoiObjectKeys({

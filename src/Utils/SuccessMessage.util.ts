@@ -142,6 +142,10 @@ export default {
             sp: 'Se eliminó la escuela exitosamente!',
             en: "The school was successfully deleted."
         },
+        registerTransferPayment: {
+            sp: 'Se registró el pago por transferencia y se actualizó la fecha de vencimiento.',
+            en: "The transfer payment was registered and the due date was updated."
+        },
         uploadSchoolLogo: {
             sp: 'Se actualizó el logo de la escuela exitosamente!',
             en: "The school logo was successfully updated!"

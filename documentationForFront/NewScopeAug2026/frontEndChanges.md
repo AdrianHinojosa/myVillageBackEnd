@@ -625,6 +625,28 @@ Recorded so nobody "fixes" these later:
 
 ---
 
+## Feature 1 — Pago por transferencia (contrato, ya implementado en el frontend)
+
+El frontend (branch `dev` de `myVillage`) ya envía/lee estos nombres exactos; se listan para
+referencia y para el equipo de backend:
+
+1. **Colegio (`POST /schools`, `PUT /schools/:id`)** — nuevos campos, todos opcionales:
+   - `sPaymentMethod`: `'STRIPE' | 'TRANSFER'` (default `'TRANSFER'`).
+   - `dMonthlyAmount`: número (monto mensual, solo en TRANSFER).
+   - `tNextPaymentDate`: fecha `YYYY-MM-DD` (primera fecha de vencimiento; el front la manda como `tNextPaymentDate`, ya con el mapeo `dt→t`).
+2. **`GET /billing/summary`** (envelope `results`) — ahora incluye `sPaymentMethod`, `dMonthlyAmount`,
+   `tNextPaymentDate`. En modo TRANSFER el frontend muestra una tarjeta manual (Estado Pagado/Pendiente
+   derivado de `tNextPaymentDate` vs hoy, Monto, Próximo pago) en vez de la UI de Stripe.
+3. **`GET /schools/:id`** — devuelve `sPaymentMethod`, `dMonthlyAmount`, `tNextPaymentDate` (ya vienen
+   con `select *`). El detalle del colegio (superadmin) muestra la tarjeta con botón "Registrar pago".
+4. **Nuevo endpoint `POST /schools/:id/billing/registerTransferPayment`** (superadmin) — sin body;
+   avanza el ciclo +1 mes y responde con `{ message, school, success }`. El front lo llama desde el
+   detalle del colegio.
+5. **Flag de frontend** `TRANSFER_BILLING_ENABLED` (`app/utils/features.ts`): ON en `dev`, OFF en
+   `main` hasta que backend despliegue estos campos. Al desplegar backend, prender en prod.
+
+---
+
 ## Resolved / already applied
 
 *(entries move here once the frontend confirms the change is in)*

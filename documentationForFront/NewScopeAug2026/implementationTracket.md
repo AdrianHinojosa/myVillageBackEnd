@@ -797,3 +797,33 @@ averaging is happening. `npm run test:stripe` re-run: **183 assertions, still gr
 | `a2a59d8` | **7** | Lucy 17/ago: parent goals aggregate their subgoals + subgoal own title + report fix; migration `3038`; suite `SubGoalsRollup` (66 assertions) |
 | `88d9666` | — | Reply document for the 17/ago feedback + CORS findings + Stripe 401/403/404 diagnosis; three trackers updated |
 | `366a3b4` | **7** | Lucy 18/ago: sequential stages + goal mirrors the active stage + average over ALL records; migration `3039`; `recalc:progress`; suite grown to 109 assertions; frontend guide |
+| _(branch `feature/transfer-billing`)_ | **F1** | Pago por transferencia: migración `3040`, `sPaymentMethod`/`dMonthlyAmount`/`tNextPaymentDate` en Schools, endpoint `POST /schools/:id/billing/registerTransferPayment`, Stripe ignorado en modo TRANSFER, summary extendido |
+
+---
+
+## Feature 1 — Pago por transferencia (billing manual)
+
+**Decisiones del PO (2026-08-21):** un colegio puede cobrarse por **transferencia** en vez de
+Stripe. En modo TRANSFER se ignora Stripe por completo. Solo el **superadmin** configura el modo
+y registra pagos. Ciclo **mensual fijo**: registrar pago avanza el vencimiento **+1 mes desde el
+vencimiento anterior** (no desde hoy). Los **colegios existentes quedan en TRANSFER** por default.
+
+**Esquema — migración `3040_Schools_transferBilling.ts`** (alter `Schools`):
+- `sPaymentMethod` string NOT NULL default `'TRANSFER'` (`STRIPE | TRANSFER`) → migra a todos los existentes a transferencia.
+- `dMonthlyAmount` decimal(12,2) nullable — monto mensual capturado por el superadmin.
+- `tNextPaymentDate` date nullable — próxima fecha de vencimiento; avanza +1 mes por pago.
+
+**Endpoints / cambios:**
+- `POST /schools/:sSchoolId/billing/registerTransferPayment` (superadmin, `verifyAdminPermissions [General WRITE]`):
+  avanza `tNextPaymentDate += 1 mes` y registra un row en `Payments` (`sStatus='succeeded'`, sin ids de Stripe) para el historial. Rechaza 409 si el colegio no está en modo TRANSFER.
+- `POST /schools` y `PUT /schools/:id`: aceptan/guardan `sPaymentMethod`, `dMonthlyAmount`, `tNextPaymentDate` (en `BillingFields`, todos opcionales/anulables).
+- `GET /billing/summary`: ahora devuelve `sPaymentMethod`, `dMonthlyAmount`, `tNextPaymentDate` (además de lo de Stripe) para que el frontend muestre la tarjeta manual.
+
+**Stripe ignorado en TRANSFER:**
+- `syncSubscriptionTariff()` hace early-return `{bSynced:false, sReason:'transfer'}` si `sPaymentMethod==='TRANSFER'` (se llama en cada update de colegio → no debe tocar Stripe).
+- `attachPaymentMethod()` rechaza 409 (`Schools.stripeNotForTransfer`) si el colegio es TRANSFER.
+- No se auto-suspende por webhooks (transfer no tiene subscription). El estado PAGADO/PENDIENTE lo **deriva el frontend** de `tNextPaymentDate` vs hoy; no se usa `sBillingStatus` para transfer.
+
+**Validaciones (§2.7):** `Schools.sPaymentMethod` / `dMonthlyAmount` / `tNextPaymentDate` agregadas a `ValidationError.util.ts`. Mensajes `SuccessMessages.Schools.registerTransferPayment` + `ErrorMessages.Schools.notTransferMode`/`stripeNotForTransfer` (sp/en).
+
+**Deliberadamente NO hecho:** cobro automático/recordatorios por transferencia; historial de transfer con más metadata; enforcement de suspensión por falta de pago en transfer (queda informativo).

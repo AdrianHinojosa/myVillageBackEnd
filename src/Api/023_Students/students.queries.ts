@@ -65,7 +65,10 @@ class Queries {
                     sName,
                     sLastName,
                     sSecondLastName: sSecondLastName || '',
-                    tBirthDate: tBirthDate || null,
+                    // Guardar como 'YYYY-MM-DD' string: Joi.date() entrega Date UTC-medianoche y pg lo
+                    // serializa en hora local (México UTC-6) → guardaría un día antes y rompería el
+                    // match por folio. toYMD normaliza tanto Date como string.
+                    tBirthDate: tBirthDate ? toYMD(tBirthDate) : null,
                     bActive: true
                 }).returning('*');
             }

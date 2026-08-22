@@ -33,17 +33,21 @@ export async function up(Knex): Promise<void> {
             table.uuid('sPersonId').references('sPersonId').inTable('Persons').nullable();
         }))
         .then(() => Knex.schema.raw('CREATE INDEX "Students_sPersonId_idx" ON "Students" ("sPersonId")'))
-        // Backfill: una Person por cada alumno existente, reusando su id como folio.
+        // Un colegio no puede ligar dos veces al mismo niño (evita duplicados en carrera).
+        .then(() => Knex.schema.raw('CREATE UNIQUE INDEX "Students_sSchoolId_sPersonId_uidx" ON "Students" ("sSchoolId", "sPersonId") WHERE "bActive" = true'))
+        // Backfill: una Person por cada alumno ACTIVO, reusando su id como folio. Los soft-deleted
+        // (bActive=false) no reciben identidad — no deben ser vinculables por otras instituciones.
         .then(() => Knex.schema.raw(`
             INSERT INTO "Persons" ("sPersonId", "sName", "sLastName", "sSecondLastName", "tBirthDate", "bActive")
             SELECT "sStudentId", "sName", "sLastName", COALESCE("sSecondLastName", ''), "tBirthDate", true
-            FROM "Students"
+            FROM "Students" WHERE "bActive" = true
         `))
-        .then(() => Knex.schema.raw(`UPDATE "Students" SET "sPersonId" = "sStudentId" WHERE "sPersonId" IS NULL`));
+        .then(() => Knex.schema.raw(`UPDATE "Students" SET "sPersonId" = "sStudentId" WHERE "sPersonId" IS NULL AND "bActive" = true`));
 }
 
 export async function down(Knex): Promise<void> {
-    return Knex.schema.raw('DROP INDEX IF EXISTS "Students_sPersonId_idx"')
+    return Knex.schema.raw('DROP INDEX IF EXISTS "Students_sSchoolId_sPersonId_uidx"')
+        .then(() => Knex.schema.raw('DROP INDEX IF EXISTS "Students_sPersonId_idx"'))
         .then(() => Knex.schema.alterTable('Students', (table: any) => {
             table.dropColumn('sPersonId');
         }))

@@ -84,6 +84,14 @@ async function createPriceForSchool(oSchool: any, dMonthlyTotal: number): Promis
     return oPrice.id;
 }
 
+// Columna `date` (pg la entrega como Date a medianoche local) → 'YYYY-MM-DD', sin corrimiento de zona.
+function toYMDLocal(dValue: any): string | null {
+    if (!dValue) return null;
+    const o = new Date(dValue);
+    if (Number.isNaN(o.getTime())) return null;
+    return `${o.getFullYear()}-${String(o.getMonth() + 1).padStart(2, '0')}-${String(o.getDate()).padStart(2, '0')}`;
+}
+
 class Controllers {
     constructor() {};
 
@@ -113,7 +121,7 @@ class Controllers {
                 // la tarjeta manual (estado/monto/próximo pago) en vez de la UI de Stripe.
                 sPaymentMethod: oSchool.sPaymentMethod || 'TRANSFER',
                 dMonthlyAmount: oSchool.dMonthlyAmount !== null && oSchool.dMonthlyAmount !== undefined ? Number(oSchool.dMonthlyAmount) : null,
-                tNextPaymentDate: oSchool.tNextPaymentDate || null,
+                tNextPaymentDate: toYMDLocal(oSchool.tNextPaymentDate),
                 sCurrency: BILLING_CURRENCY,
                 // The OFFICIAL amount. The frontend previews the same figure with its own mirror of
                 // this formula, but this is the one that gets charged.

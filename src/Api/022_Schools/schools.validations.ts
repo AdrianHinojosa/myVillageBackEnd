@@ -35,7 +35,11 @@ export const BillingFields = {
     sPaymentMethod: Joi.string().valid('STRIPE', 'TRANSFER').allow(null).allow('')
         .error(new Error("Schools sPaymentMethod")),
     dMonthlyAmount: Validations.PositiveMonetaryValue("Schools dMonthlyAmount").allow(null),
-    tNextPaymentDate: Validations.Date("Schools tNextPaymentDate").allow(null),
+    // Fecha SOLO 'YYYY-MM-DD' como string. NO Joi.date(): éste coerciona a Date UTC-medianoche
+    // y pg lo serializa en hora local (México UTC-6) → se guarda un día antes. Como string se
+    // almacena tal cual en la columna `date`, sin corrimiento de zona.
+    tNextPaymentDate: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).allow(null).allow('')
+        .error(new Error("Schools tNextPaymentDate")),
 };
 
 export const CreateSchoolBody = Validations.JoiObjectKeys({

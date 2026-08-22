@@ -5,6 +5,33 @@ import { SchoolsModel, ISchools } from './schools.model';
 import { SchoolUsersModel, ISchoolUser  } from './001_SchoolUsers/schoolUsers.model';
 import { PaymentsModel } from '../030_Billing/billing.model';
 
+// --- Helpers de fecha para el ciclo de transferencia (todo en 'YYYY-MM-DD', sin tz) ---
+
+// Un valor de columna `date` (pg lo entrega como Date a medianoche local) → 'YYYY-MM-DD' local.
+function dateToYMDLocal(dValue): string {
+    if (!dValue) return '';
+    const o = new Date(dValue);
+    if (Number.isNaN(o.getTime())) return '';
+    return `${o.getFullYear()}-${String(o.getMonth() + 1).padStart(2, '0')}-${String(o.getDate()).padStart(2, '0')}`;
+}
+
+// Fecha de hoy (local del servidor) como 'YYYY-MM-DD'.
+function todayYMDLocal(): string {
+    return dateToYMDLocal(new Date());
+}
+
+// Suma 1 mes a un 'YYYY-MM-DD' con clamp a fin de mes (31 ene → 28/29 feb, no 3 mar).
+function addOneMonthYMD(sYMD): string {
+    const [iY, iM, iD] = sYMD.split('-').map(Number);
+    let iNextYear = iY;
+    let iNextMonth = iM + 1;
+    if (iNextMonth > 12) { iNextMonth = 1; iNextYear += 1; }
+    // día 0 del mes SIGUIENTE al destino = último día del mes destino
+    const iDaysInMonth = new Date(Date.UTC(iNextYear, iNextMonth, 0)).getUTCDate();
+    const iNextDay = Math.min(iD, iDaysInMonth);
+    return `${iNextYear}-${String(iNextMonth).padStart(2, '0')}-${String(iNextDay).padStart(2, '0')}`;
+}
+
 class Queries {
     constructor() {
     };
@@ -528,10 +555,10 @@ class Queries {
             const oSchool = await SchoolsModel.query(trx).findById(sSchoolId);
 
             // Ciclo fijo mes a mes: se avanza desde la fecha de vencimiento previa, NO desde hoy,
-            // para que venza siempre el mismo día aunque el pago llegue unos días tarde.
-            const oBase = oSchool.tNextPaymentDate ? new Date(oSchool.tNextPaymentDate) : new Date();
-            oBase.setMonth(oBase.getMonth() + 1);
-            const sNextDate = oBase.toISOString().split('T')[0];
+            // para que venza siempre el mismo día aunque el pago llegue unos días tarde. Todo en
+            // 'YYYY-MM-DD' (sin tz) y con clamp a fin de mes.
+            const sBaseYMD = oSchool.tNextPaymentDate ? dateToYMDLocal(oSchool.tNextPaymentDate) : todayYMDLocal();
+            const sNextDate = addOneMonthYMD(sBaseYMD);
 
             const oUpdated = await SchoolsModel.query(trx)
                 .patchAndFetchById(sSchoolId, { tNextPaymentDate: sNextDate, sLastUpdatedBy })

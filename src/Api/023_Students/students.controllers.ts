@@ -24,10 +24,35 @@ class Controllers {
     constructor() {
     };
 
+    // Feature 2 — verifica un folio (identidad compartida) con nombre completo + fecha de nacimiento.
+    // Se usa en el alta cuando el colegio quiere cargar un alumno que ya existe en otra institución.
+    async verifyByFolio(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
+        const {sLang} = res.locals;
+        const {sFolio, sFullName, tBirthDate} = req.body;
+
+        const oPerson = await StudentQueries.verifyPersonByFolio(sFolio, sFullName, tBirthDate);
+        if (!oPerson) {
+            // Genérico a propósito: no revela si el folio existe ni qué dato no coincidió.
+            return next(new MyError(404, ErrorMessages.Students.folioNotFound[sLang]));
+        }
+
+        return res.status(200).json({
+            message: SuccessMessages.Students.folioVerified[sLang],
+            person: {
+                sPersonId: oPerson.sPersonId,
+                sName: oPerson.sName,
+                sLastName: oPerson.sLastName,
+                sSecondLastName: oPerson.sSecondLastName,
+                tBirthDate: oPerson.tBirthDate,
+            },
+            success: true
+        });
+    }
+
     // Create a student
     async createStudent(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
         const {sLang, sSchoolId, sUserId} = res.locals;
-        const {sName, sLastName, sSecondLastName, sCustomStudentId, iBirthYear, tBirthDate, sGender, sGrade, sGroup, sDiagnosis, sNotes} = req.body;
+        const {sPersonId, sName, sLastName, sSecondLastName, sCustomStudentId, iBirthYear, tBirthDate, sGender, sGrade, sGroup, sDiagnosis, sNotes} = req.body;
 
         // Validate student limit
         const mySchool = await SchoolQueries.verifySchoolExists(sSchoolId);
@@ -40,9 +65,23 @@ class Controllers {
             return next(new MyError(400, ErrorMessages.Students.limitReached[sLang]));
         }
 
-        // Insert student
-        const newStudent = await StudentQueries.insertStudent({
+        // Feature 2 — alta por folio existente: re-verifica identidad (defensa) y evita duplicados.
+        if (sPersonId) {
+            const sFullName = [sName, sLastName, sSecondLastName].filter(Boolean).join(' ');
+            const oPerson = await StudentQueries.verifyPersonByFolio(sPersonId, sFullName, tBirthDate);
+            if (!oPerson) {
+                return next(new MyError(409, ErrorMessages.Students.folioMismatch[sLang]));
+            }
+            const oExisting = await StudentQueries.findActiveStudentBySchoolAndPerson(sSchoolId, sPersonId);
+            if (oExisting) {
+                return next(new MyError(409, ErrorMessages.Students.alreadyLinked[sLang]));
+            }
+        }
+
+        // Insert student (crea o reusa la identidad compartida según venga sPersonId)
+        const newStudent = await StudentQueries.insertStudentWithIdentity({
             sSchoolId,
+            sPersonId,
             sName,
             sLastName,
             sSecondLastName,

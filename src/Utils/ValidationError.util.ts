@@ -247,6 +247,20 @@ export default {
                 en: "Please, enter a discount percentage between 0 and 100."
             },
 
+            // Pago por transferencia (billing manual)
+            sPaymentMethod: {
+                sp: "Por favor, selecciona un método de pago válido (Stripe o transferencia).",
+                en: "Please, select a valid payment method (Stripe or transfer)."
+            },
+            dMonthlyAmount: {
+                sp: "Por favor, ingresa un monto mensual válido.",
+                en: "Please, enter a valid monthly amount."
+            },
+            tNextPaymentDate: {
+                sp: "Por favor, ingresa una fecha de vencimiento válida.",
+                en: "Please, enter a valid due date."
+            },
+
             // P5 — Modo terapeuta
             sAccountType: {
                 sp: "Por favor, selecciona un tipo de cuenta válido (colegio o terapeuta).",
@@ -343,6 +357,23 @@ export default {
             sNotes: {
                 sp: "Por favor, ingresa notas correctas.",
                 en: "Please, enter valid notes."
+            },
+            // Feature 2 — alumno compartido (folio)
+            tBirthDate: {
+                sp: "Por favor, ingresa una fecha de nacimiento válida.",
+                en: "Please, enter a valid birth date."
+            },
+            sPersonId: {
+                sp: "Por favor, ingresa un folio de alumno válido.",
+                en: "Please, enter a valid student folio."
+            },
+            sFolio: {
+                sp: "Por favor, ingresa el folio del alumno.",
+                en: "Please, enter the student folio."
+            },
+            sFullName: {
+                sp: "Por favor, ingresa el nombre completo del alumno.",
+                en: "Please, enter the student's full name."
             },
         },
 

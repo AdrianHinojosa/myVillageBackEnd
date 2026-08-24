@@ -29,6 +29,10 @@ class Controllers {
             dAmountPerTeacher,
             dAmountPerStudent,
             dDiscountPct,
+            // Pago por transferencia
+            sPaymentMethod,
+            dMonthlyAmount,
+            tNextPaymentDate,
 
             // User info
             sAdminName,
@@ -49,7 +53,7 @@ class Controllers {
             return next(new MyError(401, ErrorMessages.Authentication.invalidToken[sLang]));
         }
 
-        const myObject = await SchoolQueries.insertSchool({sName, sPhone, sEmail, sAddress: null, sCityId: null, iUsersLimit, iStudentsLimit, sAccountType, sBillingMode, dFixedAmount, dAmountPerTeacher, dAmountPerStudent, dDiscountPct, sCreatedBy, sAdminName, sLastName, sSecondLastName});
+        const myObject = await SchoolQueries.insertSchool({sName, sPhone, sEmail, sAddress: null, sCityId: null, iUsersLimit, iStudentsLimit, sAccountType, sBillingMode, dFixedAmount, dAmountPerTeacher, dAmountPerStudent, dDiscountPct, sPaymentMethod, dMonthlyAmount, tNextPaymentDate, sCreatedBy, sAdminName, sLastName, sSecondLastName});
 
         const Token: string = Services.CreateRandomToken(64);
         const ExpiredDate: Date = Services.ExpireToken(new Date(), 4320); //72 hours
@@ -131,6 +135,10 @@ class Controllers {
             dAmountPerTeacher,
             dAmountPerStudent,
             dDiscountPct,
+            // Pago por transferencia
+            sPaymentMethod,
+            dMonthlyAmount,
+            tNextPaymentDate,
         } = req.body;
 
         // Validate that the school Exists
@@ -140,7 +148,7 @@ class Controllers {
         const sLastUpdatedBy = res.locals.sUserId;
 
         // Update school
-        const updatedSchool = await SchoolQueries.updateSchool(sSchoolId, { sName, sPhone, sCityId: null, iUsersLimit, iStudentsLimit, sAccountType, sBillingMode, dFixedAmount, dAmountPerTeacher, dAmountPerStudent, dDiscountPct, sLastUpdatedBy })
+        const updatedSchool = await SchoolQueries.updateSchool(sSchoolId, { sName, sPhone, sCityId: null, iUsersLimit, iStudentsLimit, sAccountType, sBillingMode, dFixedAmount, dAmountPerTeacher, dAmountPerStudent, dDiscountPct, sPaymentMethod, dMonthlyAmount, tNextPaymentDate, sLastUpdatedBy })
 
         // P3 — a tariff or limit change must reach Stripe, or the next renewal would still charge
         // the old amount. Applied with no proration, so the period already invoiced is untouched
@@ -156,6 +164,30 @@ class Controllers {
             sStripeSyncReason: oSync.sReason || null,
             success: true
         })
+    }
+
+
+    // Registra un pago por transferencia (solo superadmin). Avanza el ciclo mensual +1 mes.
+    async registerTransferPayment(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
+        const {sLang} = res.locals;
+        const {sSchoolId} = req.params;
+
+        const mySchool = await SchoolQueries.verifySchoolExists(sSchoolId);
+        if (!mySchool) {return next(new MyError(404, ErrorMessages.Schools.notFound[sLang])) }
+
+        // Solo aplica a colegios en modo transferencia; los de Stripe se cobran automáticamente.
+        if (mySchool.sPaymentMethod !== 'TRANSFER') {
+            return next(new MyError(409, ErrorMessages.Schools.notTransferMode[sLang]));
+        }
+
+        const sLastUpdatedBy = res.locals.sUserId;
+        const updatedSchool = await SchoolQueries.registerTransferPayment(sSchoolId, sLastUpdatedBy);
+
+        return res.status(201).json({
+            message: SuccessMessages.Schools.registerTransferPayment[sLang],
+            school: updatedSchool,
+            success: true
+        });
     }
 
 

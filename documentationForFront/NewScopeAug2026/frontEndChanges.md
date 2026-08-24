@@ -625,6 +625,48 @@ Recorded so nobody "fixes" these later:
 
 ---
 
+## Feature 1 — Pago por transferencia (contrato, ya implementado en el frontend)
+
+El frontend (branch `dev` de `myVillage`) ya envía/lee estos nombres exactos; se listan para
+referencia y para el equipo de backend:
+
+1. **Colegio (`POST /schools`, `PUT /schools/:id`)** — nuevos campos, todos opcionales:
+   - `sPaymentMethod`: `'STRIPE' | 'TRANSFER'` (default `'TRANSFER'`).
+   - `dMonthlyAmount`: número (monto mensual, solo en TRANSFER).
+   - `tNextPaymentDate`: fecha `YYYY-MM-DD` (primera fecha de vencimiento; el front la manda como `tNextPaymentDate`, ya con el mapeo `dt→t`).
+2. **`GET /billing/summary`** (envelope `results`) — ahora incluye `sPaymentMethod`, `dMonthlyAmount`,
+   `tNextPaymentDate`. En modo TRANSFER el frontend muestra una tarjeta manual (Estado Pagado/Pendiente
+   derivado de `tNextPaymentDate` vs hoy, Monto, Próximo pago) en vez de la UI de Stripe.
+3. **`GET /schools/:id`** — devuelve `sPaymentMethod`, `dMonthlyAmount`, `tNextPaymentDate` (ya vienen
+   con `select *`). El detalle del colegio (superadmin) muestra la tarjeta con botón "Registrar pago".
+4. **Nuevo endpoint `POST /schools/:id/billing/registerTransferPayment`** (superadmin) — sin body;
+   avanza el ciclo +1 mes y responde con `{ message, school, success }`. El front lo llama desde el
+   detalle del colegio.
+5. **Flag de frontend** `TRANSFER_BILLING_ENABLED` (`app/utils/features.ts`): ON en `dev`, OFF en
+   `main` hasta que backend despliegue estos campos. Al desplegar backend, prender en prod.
+
+---
+
+## Feature 2 — Alumno compartido entre instituciones (folio)
+
+Contrato para el frontend (add-student):
+
+1. **Verificar folio — `POST /students/verifyByFolio`** (auth SchoolAdmin). Body:
+   `{ sFolio: uuid, sFullName: string, tBirthDate: 'YYYY-MM-DD' }`. Respuesta OK:
+   `{ message, person: { sPersonId, sName, sLastName, sSecondLastName, tBirthDate }, success }`.
+   Si no coincide → **404** con mensaje genérico (mostrar "no se encontró"; no revela detalles).
+2. **Crear alumno — `POST /students`** ahora acepta **`sPersonId`** (el folio) opcional:
+   - Con `sPersonId`: liga el alumno a esa identidad. El backend **re-verifica** (manda también
+     `sName`/`sLastName`/`tBirthDate`, que vienen precargados del verify) y **copia nombre+fecha
+     de la identidad** (aunque el front los mande, gana la Person). Resto de campos = por institución.
+     Errores: `409 folioMismatch` (no coincide), `409 alreadyLinked` (ya está en este colegio).
+   - Sin `sPersonId`: alta normal (crea la identidad compartida automáticamente).
+3. **`GET /students/:id`** ahora devuelve **`sPersonId`** (el folio). Mostrarlo en el detalle del
+   alumno para copiar/compartir con otra institución.
+4. Nada más cambia en las listas/reportes: siguen scoped por colegio (cada colegio ve lo suyo).
+
+---
+
 ## Resolved / already applied
 
 *(entries move here once the frontend confirms the change is in)*

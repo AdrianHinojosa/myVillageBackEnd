@@ -1,5 +1,21 @@
 import { StudentsModel, IStudents } from './students.model';
+import { PersonsModel } from './persons.model';
 import { db } from '../../Config/Db.config';
+
+// Normaliza para comparar nombres: sin acentos, minúsculas, espacios colapsados.
+const RE_DIACRITICS = new RegExp('[\\u0300-\\u036f]', 'g');
+function normalizeName(sValue): string {
+    return (sValue || '').toString().normalize('NFD').replace(RE_DIACRITICS, '')
+        .toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+// Fecha a 'YYYY-MM-DD' para comparar fechas de nacimiento sin corrimiento de zona.
+function toYMD(dValue): string {
+    if (!dValue) return '';
+    const oDate = new Date(dValue);
+    if (Number.isNaN(oDate.getTime())) return '';
+    return oDate.toISOString().split('T')[0];
+}
 
 class Queries {
     constructor() {
@@ -8,6 +24,78 @@ class Queries {
     // Verify student exists
     static async verifyStudentExists(sStudentId) {
         return await StudentsModel.query().findById(sStudentId).select('*').where('bActive', true)
+    }
+
+    /**
+     * Feature 2 — verifica un folio (identidad compartida) contra nombre completo + fecha de
+     * nacimiento. Devuelve la Person SOLO si todo coincide; de lo contrario null (no se revela
+     * si el folio existe o qué dato falló). El folio es `Persons.sPersonId`.
+     */
+    static async verifyPersonByFolio(sFolio, sFullName, tBirthDate) {
+        const oPerson = await PersonsModel.query().findById(sFolio).where('bActive', true);
+        if (!oPerson) return null;
+
+        const sPersonFull = normalizeName(`${oPerson.sName} ${oPerson.sLastName} ${oPerson.sSecondLastName || ''}`);
+        if (normalizeName(sFullName) !== sPersonFull) return null;
+        if (toYMD(tBirthDate) !== toYMD(oPerson.tBirthDate)) return null;
+
+        return oPerson;
+    }
+
+    // Feature 2 — ¿este colegio ya tiene un alumno ligado a esta identidad? (evita duplicados)
+    static async findActiveStudentBySchoolAndPerson(sSchoolId, sPersonId) {
+        return await StudentsModel.query()
+            .where('sSchoolId', sSchoolId).where('sPersonId', sPersonId).where('bActive', true).first();
+    }
+
+    /**
+     * Feature 2 — alta de alumno con identidad compartida.
+     * - Con `sPersonId` (folio existente): reusa la Person; el nombre + fecha se copian de ella
+     *   (fuente de verdad de lo compartido). El resto (grado, diagnóstico, etc.) es de este colegio.
+     * - Sin `sPersonId` (alumno nuevo): crea una Person nueva a partir del nombre + fecha enviados.
+     */
+    static async insertStudentWithIdentity({sSchoolId, sPersonId, sName, sLastName, sSecondLastName, sCustomStudentId, iBirthYear, tBirthDate, sGender, sGrade, sGroup, sDiagnosis, sNotes, sCreatedBy}) {
+        return await StudentsModel.transaction(async (trx) => {
+            let oPerson;
+            if (sPersonId) {
+                oPerson = await PersonsModel.query(trx).findById(sPersonId).where('bActive', true);
+                if (!oPerson) throw new Error('PERSON_NOT_FOUND');
+            } else {
+                oPerson = await PersonsModel.query(trx).insert({
+                    sName,
+                    sLastName,
+                    sSecondLastName: sSecondLastName || '',
+                    // Guardar como 'YYYY-MM-DD' string: Joi.date() entrega Date UTC-medianoche y pg lo
+                    // serializa en hora local (México UTC-6) → guardaría un día antes y rompería el
+                    // match por folio. toYMD normaliza tanto Date como string.
+                    tBirthDate: tBirthDate ? toYMD(tBirthDate) : null,
+                    bActive: true
+                }).returning('*');
+            }
+
+            const newStudent = await StudentsModel.query(trx).insert({
+                sSchoolId,
+                sPersonId: oPerson.sPersonId,
+                // Identidad compartida: SIEMPRE se copia desde la Person.
+                sName: oPerson.sName,
+                sLastName: oPerson.sLastName,
+                sSecondLastName: oPerson.sSecondLastName,
+                tBirthDate: oPerson.tBirthDate,
+                // Lo demás es por institución.
+                sCustomStudentId,
+                iBirthYear,
+                sGender,
+                sGrade,
+                sGroup,
+                sDiagnosis,
+                sNotes,
+                sCreatedBy,
+                sLastUpdatedBy: sCreatedBy,
+                bActive: true
+            }).returning('*');
+
+            return newStudent;
+        });
     }
 
     // Verify student exists and belongs to school

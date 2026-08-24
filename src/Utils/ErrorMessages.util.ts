@@ -182,6 +182,16 @@ export default {
             en: "Your school's subscription is suspended for non-payment. Settle the payment to restore access."
         },
 
+        notTransferMode: {
+            sp: "Este colegio no está en modalidad de pago por transferencia.",
+            en: "This school is not in bank-transfer payment mode."
+        },
+
+        stripeNotForTransfer: {
+            sp: "Este colegio paga por transferencia; no aplica el cobro con tarjeta.",
+            en: "This school pays by bank transfer; card billing does not apply."
+        },
+
         bBlockedPermission: {
             sp: "Tu escuela no cuenta con acceso a la plataforma.",
             en: "Your school does not have access to the platform."
@@ -230,6 +240,19 @@ export default {
         limitReached: {
             sp: "Se ha alcanzado el límite de estudiantes permitidos para esta escuela.",
             en: "The student limit for this school has been reached."
+        },
+        // Feature 2 — alumno compartido (folio)
+        folioNotFound: {
+            sp: "No se encontró un alumno con ese folio, nombre y fecha de nacimiento.",
+            en: "No student was found with that folio, name and birth date."
+        },
+        folioMismatch: {
+            sp: "El folio no coincide con el nombre y la fecha de nacimiento.",
+            en: "The folio does not match the name and birth date."
+        },
+        alreadyLinked: {
+            sp: "Este alumno ya está registrado en tu institución.",
+            en: "This student is already registered in your institution."
         },
     },
 

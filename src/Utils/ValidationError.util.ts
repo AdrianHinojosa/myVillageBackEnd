@@ -368,8 +368,8 @@ export default {
                 en: "Please, enter a valid student folio."
             },
             sFolio: {
-                sp: "Por favor, ingresa el folio del alumno.",
-                en: "Please, enter the student folio."
+                sp: "Por favor, ingresa un folio válido.",
+                en: "Please, enter a valid folio."
             },
             sFullName: {
                 sp: "Por favor, ingresa el nombre completo del alumno.",

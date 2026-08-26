@@ -19,7 +19,7 @@ export const CreateStudentBody = Validations.JoiObjectKeys({
     iBirthYear: Validations.PositiveInteger("Students iBirthYear"),
     tBirthDate: Validations.Date("Students tBirthDate"),
     sGender: Validations.String("Students sGender"),
-    sGrade: Validations.RequiredString("Students sGrade"),
+    sGrade: Validations.String("Students sGrade"),
     sGroup: Validations.String("Students sGroup"),
     sDiagnosis: Validations.String("Students sDiagnosis"),
     sNotes: Validations.String("Students sNotes"),

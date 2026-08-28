@@ -3,6 +3,8 @@
 **Fecha:** 28/ago/2026
 **Prioridad:** ALTA — hay un cliente en producción afectado
 **Repo:** `myVillage` (frontend)
+**Verificado contra:** `origin/main` @ **`0e6b64b`** — todas las rutas y números de línea de abajo
+salen de ese commit. Si `main` ya se movió, revalida antes de aplicar.
 **Backend:** ya desplegado, no hay que esperar nada del backend
 **Esfuerzo estimado:** 2–3 horas
 
@@ -27,7 +29,7 @@ formulario, capturar una tarjeta real y recibir un error confuso. Pasó con un c
 
 ## 1. Prender el flag `TRANSFER_BILLING_ENABLED`
 
-**Archivo:** `app/utils/features.ts`
+**Archivo:** `app/utils/features.ts` — **línea 24**
 
 ```diff
 - export const TRANSFER_BILLING_ENABLED = false;
@@ -38,13 +40,21 @@ formulario, capturar una tarjeta real y recibir un error confuso. Pasó con un c
 
 El comentario del flag dice: *"main (prod): false hasta que backend acepte los campos"*.
 
-**Ese bloqueo ya no aplica.** El backend acepta y devuelve `sPaymentMethod`, `dMonthlyAmount` y
-`tNextPaymentDate` desde que se desplegó la migración `3040_Schools_transferBilling`, que ya está
-en producción. Se puede prender.
+**Ese bloqueo ya no aplica, y está verificado.** `GET /billing/summary` ya devuelve los tres campos
+que la vista de transferencia necesita:
+
+```js
+sPaymentMethod:   oSchool.sPaymentMethod || 'TRANSFER',
+dMonthlyAmount:   oSchool.dMonthlyAmount !== null && … ? Number(oSchool.dMonthlyAmount) : null,
+tNextPaymentDate: toYMDLocal(oSchool.tNextPaymentDate),
+```
+
+La migración `3040_Schools_transferBilling` está desplegada en producción. No falta nada del
+backend: **el único motivo por el que esto no funciona es el flag.**
 
 ### Qué desbloquea
 
-`app/pages/admin/billing/index.vue:169-171`:
+`app/pages/admin/billing/index.vue:169-170`:
 
 ```js
 bIsTransfer() {
@@ -60,9 +70,20 @@ Y la plantilla es:
 <template v-else>              <!-- TODA la UI de Stripe -->
 ```
 
+(el `v-if` está en la línea 10 y el `<template v-else>` en la 20)
+
 O sea: hoy **todos** los colegios caen en el `v-else` y ven Stripe. Con el flag en `true`, los que
-están en TRANSFER ven `BillingTransferCard` (estado / monto mensual / próximo pago) y nunca ven el
-formulario de tarjeta.
+están en TRANSFER ven la tarjeta de transferencia (estado / monto mensual / próximo pago) y nunca
+ven el formulario de tarjeta.
+
+> 📁 **Ojo con el nombre del archivo.** El componente se usa como `<BillingTransferCard>` pero el
+> archivo es **`app/components/billing/TransferCard.vue`** — el prefijo `Billing` se lo pone el
+> auto-import de Nuxt por la carpeta. No existe ningún `BillingTransferCard.vue`.
+
+El componente ya está escrito y ya recibe bien sus props desde `index.vue`; no hay que tocarlo. Sus
+props `bCanRegister` / `bRegistering` quedan en `false` a propósito: **solo el SuperAdmin registra
+pagos de transferencia**, desde el detalle del colegio. En la vista del colegio es read-only. Eso
+es correcto, no lo "arregles".
 
 ### Verificación
 
@@ -177,9 +198,22 @@ Ver punto 5.
 Necesitas dos colegios de prueba, uno en cada modo. El superadmin los configura en
 `/admin/schools/:id/edit`.
 
+> ⚠️ **Antes de probar, llena los datos del colegio en transferencia.** Al colegio TRANSFER
+> ponle **monto mensual** y **fecha de próximo pago** en la edición del colegio. Si los dejas
+> vacíos la tarjeta se pinta igual pero muestra `—` en el monto y sale como *vencido*, porque
+> `TransferCard.vue` hace:
+>
+> ```js
+> sAmount() { if (this.dMonthlyAmount == null || this.dMonthlyAmount === '') return '—'; … }
+> bPaid()   { const oNext = this.parseDate(this.tNextPaymentDate); if (!oNext) return false; … }
+> ```
+>
+> Eso **no** es un bug del flag; es que faltan los datos. Sin este aviso es fácil pensar que el
+> cambio no sirvió.
+
 | # | Escenario | Resultado esperado |
 |---|---|---|
-| 1 | Colegio TRANSFER → `/admin/billing` | Solo `BillingTransferCard`. Sin formulario de tarjeta, sin banners de Stripe, sin botón de cancelar. |
+| 1 | Colegio TRANSFER (con monto y fecha) → `/admin/billing` | Solo la tarjeta de transferencia, con monto y fecha correctos. Sin formulario de tarjeta, sin banners de Stripe, sin botón de cancelar. |
 | 2 | Colegio STRIPE → `/admin/billing` | Idéntico a hoy. Nada se rompió. |
 | 3 | Colegio STRIPE con tarjeta inválida (`4000 0000 0000 0002`) | Se muestra el mensaje **de Stripe** ("Tu tarjeta fue rechazada"), no el genérico. |
 | 4 | Colegio TRANSFER llamando `POST /billing/setup-intent` directo (Postman/curl) | 409 con el mensaje de transferencia. Confirma que la red de seguridad del backend está viva. |
@@ -192,9 +226,10 @@ Necesitas dos colegios de prueba, uno en cada modo. El superadmin los configura 
 Un colegio que **era** STRIPE y pasó a TRANSFER puede quedar con una suscripción activa y tarjetas
 guardadas. Hoy, con el punto 1 aplicado, deja de ver la UI para limpiarlas.
 
-Propuesta: dentro de `BillingTransferCard`, cuando `sBillingStatus` sea distinto de `'NONE'`,
-mostrar un aviso del tipo *"Este colegio tiene una suscripción de Stripe activa"* con un botón que
-llame `POST /billing/cancel` (ese endpoint sigue permitido en TRANSFER justamente para esto).
+Propuesta: dentro de `app/components/billing/TransferCard.vue`, cuando `sBillingStatus` sea
+distinto de `'NONE'`, mostrar un aviso del tipo *"Este colegio tiene una suscripción de Stripe
+activa"* con un botón que llame `POST /billing/cancel` (ese endpoint sigue permitido en TRANSFER
+justamente para esto). Requiere pasarle `sBillingStatus` como prop nueva desde `index.vue`.
 
 **No es bloqueante.** Es un caso de borde que hoy no existe en producción. Levántalo como ticket
 aparte si no da tiempo — pero no lo dejes sin registrar, porque cuando pase va a ser invisible.
@@ -204,12 +239,17 @@ aparte si no da tiempo — pero no lo dejes sin registrar, porque cuando pase va
 ## 6. Resumen ejecutable
 
 ```
-□ app/utils/features.ts          → TRANSFER_BILLING_ENABLED = true
-□ BillingCardForm.vue            → 3 ramas usan oError.response.data.message con fallback
+□ app/utils/features.ts:24                    → TRANSFER_BILLING_ENABLED = true
+□ app/components/billing/BillingCardForm.vue  → líneas 127, 134 y 140-141:
+                                                 usar oError.response.data.message con fallback
+□ cargar monto mensual + fecha de próximo pago al colegio TRANSFER de prueba
 □ probar los 5 escenarios del punto 4
 □ NO tocar SHARED_STUDENTS_ENABLED
 □ mantener .then()/.catch()/.finally(), nunca async/await con try/catch
 ```
+
+**Archivos que NO hay que tocar:** `TransferCard.vue` (ya funciona), `billing/index.vue` (el
+`v-if`/`v-else` ya está bien), y nada del backend.
 
 Dudas sobre el contrato del backend: todo está en
 [`README.md`](README.md) de esta carpeta y en `documentationForFront/NewScopeAug2026/frontEndChanges.md`.

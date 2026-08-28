@@ -667,6 +667,38 @@ Contrato para el frontend (add-student):
 
 ---
 
+## P3 hotfix — `POST /billing/setup-intent` ahora puede responder 409 (28/ago/2026)
+
+**Qué cambió en backend:** el guard de "colegio en modo transferencia" se movió al **inicio** del
+flujo de tarjetas. Antes solo lo tenía `POST /billing/payment-methods`; ahora también
+`POST /billing/setup-intent` y `POST /billing/resubscribe`.
+
+| Endpoint | Antes | Ahora |
+|---|---|---|
+| `POST /billing/setup-intent` | siempre devolvía el `sClientSecret` | **409** `Este colegio paga por transferencia; no aplica el cobro con tarjeta.` si `sPaymentMethod === 'TRANSFER'` |
+| `POST /billing/resubscribe` | creaba la suscripción | **409** mismo mensaje si el colegio está en TRANSFER |
+| `POST /billing/payment-methods` | ya devolvía 409 | sin cambios |
+
+**Por qué:** un colegio en transferencia podía capturar una tarjeta real; Stripe le creaba customer
+y payment method, y el rechazo llegaba **después**. Además `resubscribe` podía dejarlo con cobro
+automático de Stripe *encima* de la facturación manual — doble cobro.
+
+**Qué tiene que hacer el frontend (2 cosas, ver requerimiento detallado):**
+
+1. **No ofrecer la UI de tarjetas a colegios en TRANSFER.** `GET /billing/summary` ya devuelve
+   `sPaymentMethod`. Hoy `bIsTransfer` está apagado por el flag de código
+   `TRANSFER_BILLING_ENABLED = false`, así que **en producción los colegios en transferencia ven el
+   formulario de Stripe**. El 409 es la red de seguridad, no la solución.
+2. **Mostrar el mensaje real del backend** en `BillingCardForm`. Hoy el `.catch()` lo descarta y
+   pinta `billing.cards.setupError` genérico — por eso este bug tardó una sesión completa en
+   diagnosticarse: el cliente veía "verifica los datos" cuando el error real era otro.
+
+**Endpoints que NO bloquean en TRANSFER (a propósito):** `/billing/cancel`,
+`DELETE /billing/payment-methods/:id`, `PUT …/default`, `/billing/pay`, y todos los `GET`. Un
+colegio que se pasa a transferencia debe poder cancelar su suscripción y limpiar sus tarjetas.
+
+---
+
 ## Resolved / already applied
 
 *(entries move here once the frontend confirms the change is in)*

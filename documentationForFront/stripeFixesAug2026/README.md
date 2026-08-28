@@ -6,6 +6,7 @@ Arreglos posteriores al cierre de P3 (Cobranza automática), a partir de pruebas
 |---|---|---|
 | [`guia-frontend-reintentar-pago.md`](guia-frontend-reintentar-pago.md) | **frontend** | El endpoint nuevo `POST /billing/pay`, los endpoints que dejaron de responder 402 durante una suspensión, las reglas de negocio de cada uno, y el flujo de 3 pasos que el usuario tiene que seguir para recuperarse |
 | [`guia-frontend-reactivar-suscripcion.md`](guia-frontend-reactivar-suscripcion.md) | **frontend** | El endpoint nuevo `POST /billing/resubscribe`, la matriz de qué botón mostrar según `summary`, y la regla nueva: **la prueba de 30 días es una sola vez por colegio** |
+| [`requerimiento-frontend-modo-transferencia.md`](requerimiento-frontend-modo-transferencia.md) | **frontend** | ⚠️ Cliente afectado en producción. Prender `TRANSFER_BILLING_ENABLED` para que los colegios en transferencia dejen de ver el formulario de Stripe, y mostrar el mensaje real del backend en vez del genérico |
 
 ## Resumen de lo que cambió y por qué
 

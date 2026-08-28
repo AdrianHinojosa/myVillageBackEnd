@@ -209,6 +209,16 @@ class Controllers {
         const oSchool = await BillingQueries.findSchoolBilling(sSchoolId);
         if (!oSchool) return next(new MyError(404, ErrorMessages.Schools.notFound[sLang]));
 
+        // Pago por transferencia: se ignora Stripe. The guard belongs HERE, at the entry point of
+        // the card flow, and not only on the attach that follows it. Without it a TRANSFER school
+        // can type a real card into Stripe's iframe: Stripe creates a customer and a payment
+        // method, and only THEN does `attachPaymentMethod` refuse — so the user is told "no" after
+        // the card was already accepted, and the live account accumulates orphan customers and
+        // cards that belong to no subscription. Reported from production, 2026-08-28.
+        if (oSchool.sPaymentMethod === 'TRANSFER') {
+            return next(new MyError(409, ErrorMessages.Schools.stripeNotForTransfer[sLang]));
+        }
+
         const sCustomerId = await ensureStripeCustomer(oSchool);
         const oIntent = await stripe.setupIntents.create({
             customer: sCustomerId,
@@ -483,6 +493,12 @@ class Controllers {
 
         const oSchool = await BillingQueries.findSchoolBilling(sSchoolId);
         if (!oSchool) return next(new MyError(404, ErrorMessages.Schools.notFound[sLang]));
+        // The most expensive gap of the three: a school billed by bank transfer that still has a
+        // card on file would end up with a live Stripe subscription charging it automatically WHILE
+        // the superadmin keeps invoicing it manually. Double-charging a real customer.
+        if (oSchool.sPaymentMethod === 'TRANSFER') {
+            return next(new MyError(409, ErrorMessages.Schools.stripeNotForTransfer[sLang]));
+        }
         if (!hasChargeableTariff(oSchool)) {
             return next(new MyError(409, ErrorMessages.Billing.noTariff[sLang]));
         }

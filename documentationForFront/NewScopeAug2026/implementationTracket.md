@@ -861,3 +861,59 @@ cuelgan de `Students.sStudentId` (por institución), así cada colegio ve lo suy
 | commit | Punto | Qué |
 |---|---|---|
 | _(branch `feature/transfer-billing`)_ | **F2** | Alumno compartido: migración `3041`, tabla `Persons` + `Students.sPersonId`, `POST /students/verifyByFolio`, alta por folio con re-verificación y dedupe |
+
+---
+
+## Hotfix — Guard de TRANSFER en el flujo de tarjetas (28/ago/2026)
+
+**Origen:** un cliente en producción (`Rene Prueba Stripe`) no podía registrar tarjeta. Al depurar
+salieron **dos** causas distintas; ésta es la segunda, y es la que puede costar dinero real.
+
+### Causa 1 — id de Stripe de modo prueba guardado (dato, no código)
+
+El colegio tenía `sStripeCustomerId = cus_V8ofsOjVCWP996`, creado cuando producción corría con
+llaves de **prueba**. Al pasar a llaves **live**, ese id dejó de existir: los dos modos de Stripe
+son espacios de objetos separados. `ensureStripeCustomer()` devuelve el id guardado **sin
+validarlo**, así que `setupIntents.create({ customer })` respondía `resource_missing` → 500.
+
+Verificado contra Stripe live: `No such customer: 'cus_V8ofsOjVCWP996'`.
+
+Se corrige **en datos**, no en código: limpiar `sStripeCustomerId` / `sStripeSubscriptionId` /
+`sStripePriceId` de los colegios tocados durante las pruebas. Pendiente de correr en producción.
+
+### Causa 2 — el guard de TRANSFER solo estaba en un endpoint
+
+`attachPaymentMethod` rechazaba a los colegios en modo transferencia (409), pero
+**`createSetupIntent` no**. Consecuencia: un colegio en TRANSFER podía capturar una tarjeta real,
+Stripe le creaba customer + payment method, y **recién después** el attach lo rechazaba. Falla
+tardía, mensaje confuso, y objetos huérfanos acumulándose en la cuenta live.
+
+Peor todavía: **`resubscribe` tampoco tenía guard**. Un colegio en TRANSFER con tarjeta guardada
+podía terminar con una suscripción de Stripe cobrándole automáticamente **mientras** el superadmin
+le sigue facturando por transferencia. Doble cobro a un cliente real.
+
+**Hecho:** guard `sPaymentMethod === 'TRANSFER'` → **409** `Schools.stripeNotForTransfer` en
+`createSetupIntent` y en `resubscribe`. Sin mensajes nuevos: la llave ya existía.
+
+**Deliberadamente NO se puso guard en:**
+
+| Endpoint | Por qué se deja pasar |
+|---|---|
+| `POST /billing/cancel` | Un colegio que se mueve de STRIPE a TRANSFER **tiene que poder** cancelar su suscripción. Bloquearlo lo deja atrapado con cobro automático encima de la factura manual. |
+| `DELETE /billing/payment-methods/:id` | Mismo motivo: es el camino de limpieza. |
+| `PUT /billing/payment-methods/:id/default` | Inofensivo, solo ordena tarjetas existentes. |
+| `POST /billing/pay` | Liquida una factura **real ya emitida**, y ya exige que exista una factura abierta. Si un colegio pasó a TRANSFER debiendo un ciclo de Stripe, esa deuda es legítima. |
+| `GET /billing/*` | Lecturas. |
+
+La regla: **el guard va en los dos caminos que CREAN cobro, no en los que lo deshacen.**
+
+### Lo que NO se tocó y sigue pendiente
+
+- `ensureStripeCustomer()` no se auto-repara: si el id guardado ya no existe en Stripe, sigue
+  reventando en vez de crear uno nuevo. Es un cambio defensivo razonable, pero no se hizo sin
+  decisión — cambia el comportamiento ante un customer borrado a mano.
+- Limpieza de los ids de prueba en la BD de producción.
+
+| commit | Punto | Qué |
+|---|---|---|
+| _(este commit)_ | **P3 hotfix** | Guard TRANSFER en `createSetupIntent` y `resubscribe` (409 `stripeNotForTransfer`) |

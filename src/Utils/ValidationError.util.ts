@@ -147,7 +147,8 @@ export default {
         },
         Sessions: {
             Authorization: {
-                sp: 'Por favor, ingresa un token de sesión correcto.'
+                sp: 'Por favor, ingresa un token de sesión correcto.',
+                en: 'Please, enter a valid session token.'
             }
         },
 
@@ -375,6 +376,22 @@ export default {
                 sp: "Por favor, ingresa el nombre completo del alumno.",
                 en: "Please, enter the student's full name."
             },
+            sGender: {
+                sp: "Por favor, selecciona un género válido.",
+                en: "Please, select a valid gender."
+            },
+            tStartDate: {
+                sp: "Por favor, ingresa una fecha de inicio válida.",
+                en: "Please, enter a valid start date."
+            },
+            tEndDate: {
+                sp: "Por favor, ingresa una fecha de fin válida.",
+                en: "Please, enter a valid end date."
+            },
+            bDeleteImage: {
+                sp: "Por favor, indica correctamente si se elimina la imagen.",
+                en: "Please, correctly indicate whether the image is removed."
+            },
         },
 
         // ========== Goals ==========
@@ -442,6 +459,22 @@ export default {
             iBaselineValue: {
                 sp: "Por favor, ingresa un valor de línea base correcto.",
                 en: "Please, enter a valid baseline value."
+            },
+            sDirection: {
+                sp: "Por favor, selecciona una dirección válida (aumentar o disminuir).",
+                en: "Please, select a valid direction (increase or decrease)."
+            },
+            bHasSubGoals: {
+                sp: "Por favor, indica correctamente si la meta se divide en submetas.",
+                en: "Please, correctly indicate whether the goal is divided into subgoals."
+            },
+            iTargetOpportunities: {
+                sp: "Por favor, ingresa un número de oportunidades objetivo correcto.",
+                en: "Please, enter a valid number of target opportunities."
+            },
+            iTargetPercentage: {
+                sp: "Por favor, ingresa un porcentaje objetivo correcto.",
+                en: "Please, enter a valid target percentage."
             },
         },
 
@@ -572,6 +605,10 @@ export default {
                 sp: "Por favor, ingresa una fecha de fin válida.",
                 en: "Please, enter a valid end date."
             },
+            sSubGoalId: {
+                sp: "Por favor, ingresa un identificador de submeta correcto.",
+                en: "Please, enter a valid subgoal id."
+            },
         },
 
         // ========== IEPs ==========
@@ -667,6 +704,22 @@ export default {
             aObjectives: {
                 sp: "Por favor, ingresa los objetivos correctamente.",
                 en: "Please, enter the objectives correctly."
+            },
+            aTeamMembers: {
+                sp: "Por favor, ingresa el equipo de trabajo correctamente.",
+                en: "Please, enter the team members correctly."
+            },
+            dtIepStartDate: {
+                sp: "Por favor, ingresa una fecha de inicio del IEP válida.",
+                en: "Please, enter a valid IEP start date."
+            },
+            dtIepReviewDate: {
+                sp: "Por favor, ingresa una fecha de revisión del IEP válida.",
+                en: "Please, enter a valid IEP review date."
+            },
+            sNotes: {
+                sp: "Por favor, ingresa las notas correctamente.",
+                en: "Please, enter the notes correctly."
             },
         },
 
@@ -811,6 +864,24 @@ export default {
             aTasks: {
                 sp: "Por favor, revisa las tareas de la submeta.",
                 en: "Please, review the subgoal tasks."
+            },
+        },
+
+        // ========== StudentAssignments ==========
+        // The group was missing entirely: every label in studentAssignments.validations.ts
+        // pointed at nothing, so any bad id there crashed the error handler.
+        StudentAssignments: {
+            sStudentId: {
+                sp: "Por favor, ingresa un identificador de estudiante correcto.",
+                en: "Please, enter a valid student id."
+            },
+            sSchoolUserId: {
+                sp: "Por favor, ingresa un identificador de usuario correcto.",
+                en: "Please, enter a valid user id."
+            },
+            sStudentAssignmentId: {
+                sp: "Por favor, ingresa un identificador de asignación correcto.",
+                en: "Please, enter a valid assignment id."
             },
         },
 

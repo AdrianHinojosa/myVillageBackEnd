@@ -699,6 +699,31 @@ colegio que se pasa a transferencia debe poder cancelar su suscripción y limpia
 
 ---
 
+## Hotfix IEP — nada que cambiar en frontend, pero conviene saberlo (03/sep/2026)
+
+**No requiere ningún cambio de frontend.** Se arregló todo del lado del backend. Se registra aquí
+porque cambia lo que el frontend va a *recibir*.
+
+| Situación | Antes | Ahora |
+|---|---|---|
+| Guardar IEP con `aTeamMembers` que traen `bCustom` | la API **se caía** (PM2 reiniciaba) → timeout / error de red | guarda normal, 201 |
+| Guardar IEP con `dtIepStartDate: ""` o `dtIepReviewDate: ""` | **500** `invalid input syntax for type date` | guarda con la fecha en `null` |
+| Cualquier error de validación cuya etiqueta no tenga traducción | la API **se caía** | **409** con `Por favor, verifica los datos ingresados.` |
+
+**El `bCustom` se queda como está.** Es un campo legítimo del front
+(`components/iep/sections/TeamMembers.vue:120`) y la columna es jsonb: el backend ahora lo acepta y
+lo guarda tal cual. No hay que quitarlo del payload.
+
+**Mandar `''` en las fechas también se queda como está.** El backend lo convierte a `null` y eso
+mantiene la semántica de "vacié el campo, límpialo". Si el front prefiere mandar `null`
+explícitamente, funciona igual — pero **no es necesario**, y ya no rompe nada.
+
+Un detalle que sí vale la pena aprovechar: como ahora los errores de validación llegan como **409
+con mensaje traducido** en vez de tumbar la API, el interceptor de axios los muestra solos. Si
+alguna pantalla estaba tratando esos casos como "error de red", se puede simplificar.
+
+---
+
 ## Resolved / already applied
 
 *(entries move here once the frontend confirms the change is in)*

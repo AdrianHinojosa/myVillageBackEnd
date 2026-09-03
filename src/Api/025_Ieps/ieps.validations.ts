@@ -28,11 +28,18 @@ export const UpsertIepBody = Validations.JoiObjectKeys({
     dtIepStartDate: Validations.Date("IEPs dtIepStartDate"),
     dtIepReviewDate: Validations.Date("IEPs dtIepReviewDate"),
     sNotes: Validations.String("IEPs sNotes"),
+    // `aTeamMembers` is a jsonb column: it is stored as given and never read structurally, so a
+    // strict key whitelist buys nothing and costs 409s. The frontend legitimately adds `bCustom`
+    // to mark a manually-typed row (components/iep/sections/TeamMembers.vue), which the previous
+    // strict object rejected. `unknown(true)` keeps the shape hints for the known keys while
+    // letting UI-only flags through — the sibling arrays (aObjectives, aModifications,
+    // aExternalServices) validate no items at all, so this stays the stricter of the two.
     aTeamMembers: Joi.array().items(Joi.object({
         sTeamMemberId: Joi.string(),
         sName: Joi.string(),
-        sRole: Joi.string()
-    })).allow(null).error(new Error("IEPs aTeamMembers")),
+        sRole: Joi.string(),
+        bCustom: Joi.boolean()
+    }).unknown(true)).allow(null).error(new Error("IEPs aTeamMembers")),
 });
 
 export const GetIepQuery = Validations.JoiObjectKeys({

@@ -917,3 +917,95 @@ La regla: **el guard va en los dos caminos que CREAN cobro, no en los que lo des
 | commit | Punto | Qué |
 |---|---|---|
 | _(este commit)_ | **P3 hotfix** | Guard TRANSFER en `createSetupIntent` y `resubscribe` (409 `stripeNotForTransfer`) |
+
+---
+
+## Hotfix — IEP: caída del proceso y fechas vacías (03/sep/2026)
+
+**Origen:** al guardar un IEP, producción daba 500 y **development tumbaba el proceso** (PM2 lo
+reiniciaba). Eran dos fallas distintas que se veían como una.
+
+### Falla A — el error handler tumbaba la API (la grave)
+
+`ErrorHandler.mw.ts` dereferenciaba cuatro niveles a ciegas:
+
+```ts
+Messages[err.type][type][message][langCode]
+```
+
+Cada etiqueta de error de Joi es una **llave de búsqueda** en `ValidationError.util.ts`. Si falta la
+entrada, eso lanza `Cannot read properties of undefined (reading 'sp')` **desde dentro del propio
+manejador de errores** — Express no se recupera de eso, así que el proceso muere.
+
+El §2.7 del working agreement ya documentaba este trap (mordió en P10, P5 y P8). Seguía vivo.
+
+**Hecho:** acceso opcional + fallback. Si falta la entrada, se responde **409 genérico localizado**
+y se loguea en `console.error` con la llave exacta que falta, para que se arregle. Una traducción
+faltante es un descuido de desarrollo; nunca debe tirar la API.
+
+Se quitó también el `console.log(Messages[err.type][type])` de la línea 128, que vomitaba el
+catálogo completo del módulo en cada error de validación.
+
+### Falla B — 17 etiquetas sin entrada en el catálogo
+
+Escaneadas las **177** etiquetas de todos los `*.validations.ts` contra el catálogo: faltaban 17,
+cada una una caída potencial.
+
+| Módulo | Agregado |
+|---|---|
+| IEPs | `aTeamMembers`, `dtIepStartDate`, `dtIepReviewDate`, `sNotes` |
+| Goals | `sDirection`, `bHasSubGoals`, `iTargetOpportunities`, `iTargetPercentage` |
+| Students | `sGender`, `tStartDate`, `tEndDate`, `bDeleteImage` |
+| TrackingRecords | `sSubGoalId` |
+| StudentAssignments | grupo completo nuevo (`sStudentId`, `sSchoolUserId`, `sStudentAssignmentId`) |
+| Sessions | `Authorization` le faltaba el `en` (pre-existente) |
+
+`administratorModules.validations.ts` usaba la etiqueta `"Modules sAdministratorModuleId"` pero el
+grupo del catálogo se llama `AdministratorModules`. Se corrigió la **etiqueta**, en lugar de
+duplicar el mensaje en un grupo `Modules` inventado.
+
+### Falla C — `aTeamMembers` rechazaba un campo legítimo del frontend
+
+El objeto interno era estricto (`Joi.object({ sTeamMemberId, sName, sRole })`) y el frontend manda
+además `bCustom: true` para marcar las filas escritas a mano
+(`components/iep/sections/TeamMembers.vue:120`). Eso disparaba el error → etiqueta sin entrada →
+caída.
+
+**Hecho:** `bCustom` explícito + `.unknown(true)`. La columna es **jsonb**: se guarda tal cual y
+nunca se lee de forma estructural, así que una lista blanca de llaves no compra nada y cuesta 409s.
+Queda igual más estricta que sus hermanas `aObjectives` / `aModifications` / `aExternalServices`,
+que no validan sus items en absoluto.
+
+### Falla D — `''` en columnas `date`
+
+Un `<input type="date">` vacío da `''`, no `null`. `Validations.Date` **acepta `''` a propósito**
+(`.allow('')`), así que `''` es un valor de request válido que Postgres no puede guardar:
+`invalid input syntax for type date: ""`.
+
+**Hecho:** `nullifyEmptyDates()` en `ieps.queries.ts`, al lado del `stringifyJsonbFields` que ya
+vivía ahí, mapeando `'' → null` para `dtIepStartDate` y `dtIepReviewDate`. Una llave **ausente**
+sigue ausente, así que un PATCH nunca borra una fecha que el cliente no mandó.
+
+**Deliberadamente NO se tocó `Validations.Date`.** Ese validador compartido se usa sobre columnas
+`date` en Goals (`tStartDate`, `tTargetDate`), SubGoals (3 campos), TrackingRecords (`dtDate`) y
+Students (`tBirthDate`) — **todos con el mismo bug latente**. Cambiarlo arreglaría los cinco de un
+golpe, pero `.empty('')` borra la llave del payload y con eso "vaciar una fecha" dejaría de
+funcionar en silencio; y `.default(null)` haría que una llave ausente también borre. Son flujos
+vivos y muy usados: es una decisión de producto, no de hotfix. **Pendiente de decidir.**
+
+### Verificación
+
+- `npm run build` ✅ 153 archivos
+- Escaneo de etiquetas: **177 revisadas, 0 faltantes**
+- Catálogo cargado en runtime: 24 grupos, todas las entradas con `sp` + `en`
+- ErrorHandler, **6/6**: llave existente → mensaje real; grupo inexistente → 409 genérico sp;
+  campo inexistente → 409 genérico en; rama de `"allowed"` intacta; ninguna lanza
+- `aTeamMembers`, **5/5**: el payload exacto del curl que crasheaba ahora valida; sin `bCustom`
+  sigue validando; `null` permitido; `sTeamMemberId` numérico **sigue rechazado** (no se aflojaron
+  los tipos)
+- Fechas contra la BD de **development**, **4/4**: INSERT con `''` → NULL; PATCH con fecha real →
+  guarda; PATCH sin las llaves → **no** borra; PATCH con `''` → limpia. Residuo: 0
+
+| commit | Punto | Qué |
+|---|---|---|
+| _(este commit)_ | **Hotfix IEP** | Guarda en ErrorHandler, 17 entradas de catálogo, `aTeamMembers` con `bCustom`, `'' → null` en fechas del IEP |

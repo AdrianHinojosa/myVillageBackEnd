@@ -878,5 +878,11 @@ Confirmar con Adrián la base real de prod + el `sAccountType` de los 2 vivos AN
 - **Trial** `TRIAL_PERIOD_DAYS` 30→14 (todas las modalidades; solo suscripciones nuevas).
 - **Gating** (`schools.permissions.ts`): `denyForModality(aBlocked)` genérico; IEP bloqueado para `['YOU','YOU_PLUS']` (`ieps.routes.ts`); docs/records/usuarios siguen bloqueados solo para `YOU` (You+ SÍ tiene docs y usuarios). `denyTherapistAccess()` = `denyForModality(['YOU'])`. TS unions ensanchados.
 
-**Pendiente Fase 0:** adjuntar conteos reales a `getSummary`/sync (para la cuota); usar `bTrialConsumed` al crear suscripción; **espejo del motor de tarifas en el front** (`app/utils/billing.ts`).
-**Fases siguientes:** 1 registro público You/You+ + captura tarjeta + aviso de costo + recálculo al cierre (webhook); 2 landing; 3 nombre de menor enmascarado (YOU); 4 panel admin por modalidad.
+- **Conteos reales en cobranza** (`billing.controllers.ts`): helper `attachRealCounts(oSchool)` adjunta `iActiveUsers`/`iActiveStudents` (helpers `countActiveSchoolUsers` / `findCountOfActiveStudentsBySchool`) **solo** para You/You+ cobradas por Stripe (no-op para SCHOOL y para cualquier cuenta en TRANSFER). Se llama en `getSummary`, `attachPaymentMethod` (primera cuota) y `syncSubscriptionTariff` (re-tarificación del superadmin). El motor (`computeMonthlyTotal`) sigue puro/sin DB; el caller le adjunta los conteos.
+- **Trial una sola vez** (`attachPaymentMethod`): la suscripción se crea con `trial_period_days` **solo si** `bTrialConsumed !== true`; al otorgarlo se persiste `bTrialConsumed: true`. Reintentar suscripción (canceló y vuelve) ya no regala otra prueba. `bTrialConsumed` agregado al modelo `Schools`.
+- **Tests** (`unitTests/StripeSubscriptions/01_money.ts`): sección You/You+ (base, excedentes, descuento, `THERAPIST→YOU`, y la **salvaguarda** de que You en TRANSFER ignora la cuota). Trial esperado actualizado 30→14. Fórmula verificada 9/9 (los de integración requieren DB dev + Stripe sandbox).
+
+**Espejo del motor de tarifas en el front** ya existe (`app/utils/billing.ts`: `MODALITY_TIERS` + `computeQuotaTotal`, commit `e06c2c0`).
+
+**Pendiente Fase 0:** ninguno del backend (Fase 0 backend cerrada). Falta coordinar con Adrián base real de prod + `sAccountType` de los 2 vivos ANTES de migrar/deployar.
+**Fases siguientes:** 1 registro público You/You+ + captura tarjeta + aviso de costo + recálculo al cierre (webhook `invoice.upcoming`); 2 landing; 3 nombre de menor enmascarado (YOU); 4 panel admin por modalidad.

@@ -14,8 +14,26 @@ import stripe, {
     computeMonthlyTotal,
     hasChargeableTariff,
     mapStripeStatus,
-    fromStripeTimestamp
+    fromStripeTimestamp,
+    normalizeModality
 } from '../../Services/Stripe.service';
+import StudentQueries from '../023_Students/students.queries';
+import SchoolUserQueries from '../026_SchoolUsers/schoolUsers.queries';
+
+/**
+ * Punto 18 — You/You+ cobran sobre usuarios/pacientes REALES (base incluida + excedente). El motor
+ * de tarifas (`computeMonthlyTotal`) es puro/sin DB, así que el caller le adjunta los conteos activos
+ * antes de calcular. Solo aplica a You/You+ cobradas por Stripe: SCHOOL y cualquier cuenta en
+ * TRANSFER (los 2 colegios en vivo y los terapeutas migrados) NO se tocan y conservan su cobranza.
+ */
+async function attachRealCounts(oSchool: any): Promise<void> {
+    if (!oSchool || !oSchool.sSchoolId) return;
+    const sModality = normalizeModality(oSchool.sAccountType);
+    const bStripe = oSchool.sPaymentMethod !== 'TRANSFER';
+    if (!bStripe || (sModality !== 'YOU' && sModality !== 'YOU_PLUS')) return;
+    oSchool.iActiveUsers = await SchoolUserQueries.countActiveSchoolUsers(oSchool.sSchoolId);
+    oSchool.iActiveStudents = await StudentQueries.findCountOfActiveStudentsBySchool(oSchool.sSchoolId);
+}
 
 /**
  * Punto 3 — Cobranza automática (Stripe).
@@ -107,6 +125,9 @@ class Controllers {
 
         const oSchool = await BillingQueries.findSchoolBilling(sSchoolId);
         if (!oSchool) return next(new MyError(404, ErrorMessages.Schools.notFound[sLang]));
+
+        // You/You+: el total refleja usuarios/pacientes reales (no-op para SCHOOL y TRANSFER).
+        await attachRealCounts(oSchool);
 
         return res.status(200).json({
             message: SuccessMessages.Billing.getSummary[sLang],
@@ -255,6 +276,9 @@ class Controllers {
             return next(new MyError(409, ErrorMessages.Schools.stripeNotForTransfer[sLang]));
         }
 
+        // You/You+: la primera cuota se cobra sobre usuarios/pacientes reales (no-op para SCHOOL).
+        await attachRealCounts(oSchool);
+
         const sCustomerId = await ensureStripeCustomer(oSchool);
 
         // Use the id from the RESPONSE, not the request. Attaching can yield a different id than
@@ -279,14 +303,19 @@ class Controllers {
             const dTotal = computeMonthlyTotal(oSchool);
             const sPriceId = await createPriceForSchool(oSchool, dTotal);
 
-            const oSub: any = await stripe.subscriptions.create({
+            // Prueba gratis (instrucción PO 2026-08-07, fuera del alcance firmado). Se otorga UNA sola
+            // vez por colegio: si ya se consumió (p.ej. canceló y vuelve a suscribirse), se cobra desde
+            // el inicio sin nueva prueba. Punto 18.
+            const bGrantTrial = oSchool.bTrialConsumed !== true && TRIAL_PERIOD_DAYS > 0;
+            const oSubParams: any = {
                 customer: sCustomerId,
                 items: [{ price: sPriceId }],
                 default_payment_method: sAttachedId,
-                // 30-day free trial — PO instruction 2026-08-07. NOT in the signed scope document.
-                trial_period_days: TRIAL_PERIOD_DAYS,
                 metadata: { sSchoolId }
-            });
+            };
+            if (bGrantTrial) oSubParams.trial_period_days = TRIAL_PERIOD_DAYS;
+
+            const oSub: any = await stripe.subscriptions.create(oSubParams);
 
             oPatch = {
                 sStripeSubscriptionId: oSub.id,
@@ -296,6 +325,8 @@ class Controllers {
                 bCancelAtPeriodEnd: oSub.cancel_at_period_end === true,
                 iFailedAttempts: 0
             };
+            // Marca la prueba como consumida en cuanto se otorga (no se vuelve a dar).
+            if (bGrantTrial) oPatch.bTrialConsumed = true;
             await BillingQueries.patchSchoolBilling(sSchoolId, oPatch);
         }
 
@@ -454,6 +485,8 @@ export async function syncSubscriptionTariff(oSchool: any): Promise<{ bSynced: b
     if (!oSchool?.sStripeSubscriptionId) return { bSynced: false, sReason: 'no-subscription' };
 
     try {
+        // You/You+: la re-tarificación usa usuarios/pacientes reales (no-op para SCHOOL y TRANSFER).
+        await attachRealCounts(oSchool);
         const dTotal = computeMonthlyTotal(oSchool);
         if (dTotal <= 0) return { bSynced: false, sReason: 'no-chargeable-tariff' };
 

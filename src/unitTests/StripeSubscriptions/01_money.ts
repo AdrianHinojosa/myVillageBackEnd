@@ -8,7 +8,7 @@
  */
 import { section, check, setFile } from './helpers';
 import {
-    toStripeAmount, fromStripeAmount, applyDiscount, computeMonthlyTotal,
+    toStripeAmount, fromStripeAmount, applyDiscount, computeMonthlyTotal, computeQuotaTotal,
     hasChargeableTariff, mapStripeStatus, fromStripeTimestamp,
     BILLING_CURRENCY, TRIAL_PERIOD_DAYS, MAX_FAILED_ATTEMPTS
 } from '../../Services/Stripe.service';
@@ -18,7 +18,7 @@ export default async function run(): Promise<void> {
 
     section('constants match the contract');
     check('currency is MXN', BILLING_CURRENCY, 'MXN');
-    check('trial is 30 days (PO decision)', TRIAL_PERIOD_DAYS, 30);
+    check('trial is 14 days (PO decision, Punto 18)', TRIAL_PERIOD_DAYS, 14);
     check('max attempts is 3 (initial + 2 retries)', MAX_FAILED_ATTEMPTS, 3);
 
     section('peso <-> centavo conversion');
@@ -50,6 +50,21 @@ export default async function run(): Promise<void> {
     check('same with 10% off', computeMonthlyTotal({ ...oVar, dDiscountPct: 10 }), 11700);
     check('raising the teacher limit re-prices', computeMonthlyTotal({ ...oVar, iUsersLimit: 20, dDiscountPct: 10 }), 16200);
     check('zero limits -> 0', computeMonthlyTotal({ ...oVar, iUsersLimit: 0, iStudentsLimit: 0 }), 0);
+
+    section('Punto 18 — You/You+ cobran por CUOTA sobre reales (base incluida + excedente)');
+    // You: base 490 incl. 1 usuario / 10 pacientes, +$44/paciente, sin excedente de usuario.
+    check('You base (1u/10p)', computeQuotaTotal('YOU', { iActiveUsers: 1, iActiveStudents: 10 }), 490);
+    check('You +5 pacientes', computeQuotaTotal('YOU', { iActiveUsers: 1, iActiveStudents: 15 }), 710);
+    check('You usuarios extra no cobran', computeQuotaTotal('YOU', { iActiveUsers: 5, iActiveStudents: 10 }), 490);
+    // You+: base 640 incl. 4 usuarios / 10 pacientes, +$25/usuario, +$44/paciente.
+    check('You+ base (4u/10p)', computeQuotaTotal('YOU_PLUS', { iActiveUsers: 4, iActiveStudents: 10 }), 640);
+    check('You+ +2u +2p', computeQuotaTotal('YOU_PLUS', { iActiveUsers: 6, iActiveStudents: 12 }), 778);
+    check('You+ con 10% off', computeQuotaTotal('YOU_PLUS', { iActiveUsers: 6, iActiveStudents: 12, dDiscountPct: 10 }), 700.2);
+    // computeMonthlyTotal enruta a la cuota solo para You/You+ cobradas por Stripe.
+    check('computeMonthlyTotal enruta You (Stripe)', computeMonthlyTotal({ sAccountType: 'YOU', sPaymentMethod: 'STRIPE', iActiveUsers: 1, iActiveStudents: 15 }), 710);
+    check('THERAPIST normaliza a You', computeMonthlyTotal({ sAccountType: 'THERAPIST', sPaymentMethod: 'STRIPE', iActiveUsers: 1, iActiveStudents: 15 }), 710);
+    // SALVAGUARDA: una cuenta You en TRANSFER NO usa la cuota — conserva su tarifa manual (colegios/terapeutas en vivo).
+    check('You en TRANSFER ignora la cuota', computeMonthlyTotal({ sAccountType: 'YOU', sPaymentMethod: 'TRANSFER', sBillingMode: 'FIXED', dFixedAmount: 300, iActiveStudents: 99 }), 300);
 
     section('chargeability');
     check('a real tariff is chargeable', hasChargeableTariff({ sBillingMode: 'FIXED', dFixedAmount: 100 }), true);

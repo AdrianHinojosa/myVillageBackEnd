@@ -34,6 +34,8 @@ export interface ISchools {
     tCurrentPeriodEnd?: string;
     bCancelAtPeriodEnd?: boolean;
     iFailedAttempts?: number;
+    // Punto 18 — la prueba gratis se otorga una sola vez por colegio.
+    bTrialConsumed?: boolean;
     // Pago por transferencia (billing manual)
     sPaymentMethod?: string;
     dMonthlyAmount?: number;
@@ -68,6 +70,8 @@ export class SchoolsModel extends Model {
     public tCurrentPeriodEnd?: string;
     public bCancelAtPeriodEnd?: boolean;
     public iFailedAttempts?: number;
+    // Punto 18 — la prueba gratis se otorga una sola vez por colegio.
+    public bTrialConsumed?: boolean;
     // Pago por transferencia (billing manual)
     public sPaymentMethod?: string;
     public dMonthlyAmount?: number;

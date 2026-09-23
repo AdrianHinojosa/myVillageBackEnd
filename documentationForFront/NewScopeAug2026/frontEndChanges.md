@@ -667,6 +667,33 @@ Contrato para el frontend (add-student):
 
 ---
 
+## Feature 18 — My Village for You / You+ (Fase 0, backend base)
+
+Plan completo: `myVillage/docs/plan-punto18-myvillage-for-you.md`. Branch `feature/point18-for-you`.
+**No hay cambios rompientes de contrato.** Notas para el front:
+
+1. **Modalidad — `sAccountType`**: valores `SCHOOL | YOU | YOU_PLUS` (además `THERAPIST` legacy, que
+   el backend trata como `YOU`). El alta/edición de colegio ya ofrece las 3 (flag `MODALITY_YOU_ENABLED`).
+2. **Cobranza You/You+** (`GET /billing/summary`): mismos campos; `dMonthlyTotal` ahora se calcula
+   por **CUOTA sobre usuarios/pacientes REALES** (base incluida + excedente), no por límites. El front
+   ya tiene el espejo (`app/utils/billing.ts`: `MODALITY_TIERS` + `computeQuotaTotal`) para previsualizar
+   el mismo monto. Solo aplica a cuentas cobradas por Stripe; **una cuenta en TRANSFER conserva su
+   cobranza manual** (los 2 colegios vivos y terapeutas migrados no cambian).
+   - You: base $490 (incl. 1 usuario / 10 pacientes), +$44/paciente extra (usuario único, sin excedente de usuario).
+   - You+: base $640 (incl. 4 usuarios / 10 pacientes), +$25/usuario extra, +$44/paciente extra.
+   - Los incluidos CUENTAN al usuario principal (You = solo principal; You+ = principal + 3).
+3. **Prueba gratis**: ahora **14 días** (antes 30) y **una sola vez por colegio** (`bTrialConsumed`).
+   Reintentar suscripción no regala otra prueba. Aplica solo a suscripciones nuevas.
+4. **Gating**: IEP bloqueado (403) para You **y** You+; documentos/registros y creación de usuarios
+   bloqueados **solo** para You (You+ SÍ tiene docs y usuarios). El front ya oculta grado/IEP en
+   You/You+ (`bIsSchoolModality`) y docs/usuarios solo en You (`bIsTherapist`).
+
+**Pendiente (fases siguientes):** registro público You/You+ + captura de tarjeta con aviso de costo +
+recálculo al cierre de ciclo (webhook `invoice.upcoming`); landing con las 3 modalidades; enmascarado
+del nombre del menor (You); panel admin por modalidad.
+
+---
+
 ## Resolved / already applied
 
 *(entries move here once the frontend confirms the change is in)*

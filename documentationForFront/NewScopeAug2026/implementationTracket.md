@@ -861,3 +861,22 @@ cuelgan de `Students.sStudentId` (por institución), así cada colegio ve lo suy
 | commit | Punto | Qué |
 |---|---|---|
 | _(branch `feature/transfer-billing`)_ | **F2** | Alumno compartido: migración `3041`, tabla `Persons` + `Students.sPersonId`, `POST /students/verifyByFolio`, alta por folio con re-verificación y dedupe |
+
+---
+
+## Punto 18 — My Village for You / You+ (branch `feature/point18-for-you`, ramificada de `feature/transfer-and-shared-students`)
+
+Plan completo (front + back): `myVillage/docs/plan-punto18-myvillage-for-you.md`.
+
+🔒 **Restricción dura:** hay 2 colegios EN VIVO. Todo aditivo y por modalidad; SCHOOL byte-idéntico.
+Confirmar con Adrián la base real de prod + el `sAccountType` de los 2 vivos ANTES de migrar/deployar.
+
+### Fase 0 — Fundamentos (en progreso)
+- **Migración `3042_Schools_bTrialConsumed`**: `bTrialConsumed` bool default false (trial una sola vez). Aditiva.
+- **Enum modalidad** (`schools.validations.ts`): `sAccountType` acepta `SCHOOL | THERAPIST | YOU | YOU_PLUS`. `THERAPIST` se conserva y se trata como `YOU` (helper `normalizeModality`); **NO** se migran datos aún (se difiere hasta verificar los 2 vivos + deploy).
+- **Motor de tarifas** (`Stripe.service.ts`): `MODALITY_TIERS` (You $490 incl 1u/10p, +$44/paciente; You+ $640 incl 4u/10p, +$25/usuario, +$44/paciente; incluidos CUENTAN al principal). `computeQuotaTotal(modalidad, oSchool)` sobre conteos REALES (`iActiveUsers`/`iActiveStudents`). Rama en `computeMonthlyTotal` **solo para cuentas Stripe** (`sPaymentMethod!=='TRANSFER'`) → los terapeutas actuales (TRANSFER) y colegios vivos NO cambian.
+- **Trial** `TRIAL_PERIOD_DAYS` 30→14 (todas las modalidades; solo suscripciones nuevas).
+- **Gating** (`schools.permissions.ts`): `denyForModality(aBlocked)` genérico; IEP bloqueado para `['YOU','YOU_PLUS']` (`ieps.routes.ts`); docs/records/usuarios siguen bloqueados solo para `YOU` (You+ SÍ tiene docs y usuarios). `denyTherapistAccess()` = `denyForModality(['YOU'])`. TS unions ensanchados.
+
+**Pendiente Fase 0:** adjuntar conteos reales a `getSummary`/sync (para la cuota); usar `bTrialConsumed` al crear suscripción; **espejo del motor de tarifas en el front** (`app/utils/billing.ts`).
+**Fases siguientes:** 1 registro público You/You+ + captura tarjeta + aviso de costo + recálculo al cierre (webhook); 2 landing; 3 nombre de menor enmascarado (YOU); 4 panel admin por modalidad.

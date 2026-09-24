@@ -917,5 +917,10 @@ Confirmar con Adrián la base real de prod + el `sAccountType` de los 2 vivos AN
 
 **Frontend Fase 3** (dev): StudentDetail oculta los campos de apellido en YOU (`bMaskMinorName = authStore.bIsTherapist`); el nombre de archivo del PDF de reporte omite el apellido en YOU. El resto de superficies ya usa el `sFullName` enmascarado del backend.
 
-**Fases siguientes:** 4 panel admin por modalidad.
+### Fase 4 — Panel admin por modalidad (COMPLETA)
+- **`findSchoolsAnalytics`** (schools.queries): conteos activos por modalidad `iSchoolsSchool`/`iSchoolsYou`/`iSchoolsYouPlus` (`COUNT(*) FILTER (...)`; YOU incluye THERAPIST; SCHOOL incluye NULL) → expuestos en `/schools/analytics`.
+- **`findAllSchools`** + `getAllSchools` + `GetSchoolsQuery`: filtro opcional `sAccountType` (SCHOOL incluye NULL; YOU incluye THERAPIST).
+- **Frontend** (dev): dashboard con fila "Cuentas por modalidad" (3 tiles, gated `MODALITY_YOU_ENABLED`); lista de colegios con columna Modalidad + filtro (gated). i18n es/en.
+
+**🎉 Punto 18 COMPLETO — Fases 0-4 implementadas (back + front).** Pendientes de coordinación/config: Adrián (base prod + sAccountType de los 2 vivos + evento `invoice.upcoming` en Stripe); SOFEX (`MV_CONFIG` del landing + textos del cliente); decisión PO sobre supresión dura de apellidos en el detalle YOU. Merge a main + migración `3042` solo tras QA de los 2 colegios vivos.
 **Fases siguientes:** 2 landing; 3 nombre de menor enmascarado (YOU); 4 panel admin por modalidad.

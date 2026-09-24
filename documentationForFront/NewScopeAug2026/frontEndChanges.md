@@ -738,7 +738,16 @@ partes) en listas, detalle, headers, y nombres de archivo de PDF. En SCHOOL/YOU+
 Ya aplicado en el front: StudentDetail oculta los campos de apellido en YOU y el filename del PDF de
 reporte omite el apellido.
 
-**Pendiente (fases siguientes):** panel admin por modalidad (conteos + filtro).
+### Panel admin por modalidad (Fase 4)
+
+- `GET /schools/analytics` ahora devuelve `iSchoolsSchool`, `iSchoolsYou`, `iSchoolsYouPlus` (cuentas
+  activas por modalidad; YOU incluye THERAPIST; SCHOOL incluye las de `sAccountType` NULL).
+- `GET /schools` acepta el filtro opcional **`sAccountType`** (`SCHOOL` | `YOU` | `YOU_PLUS`); SCHOOL
+  incluye NULL, YOU incluye THERAPIST.
+- Ya aplicado en el front: dashboard con tiles por modalidad + lista de colegios con columna Modalidad
+  y filtro (ambos detrás de `MODALITY_YOU_ENABLED`).
+
+**Punto 18 completo (Fases 0-4).** Pendiente solo de config/coordinación (ver tracker).
 
 ---
 

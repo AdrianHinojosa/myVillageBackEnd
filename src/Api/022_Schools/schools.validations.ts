@@ -64,6 +64,9 @@ export const CreateSchoolBody = Validations.JoiObjectKeys({
 export const GetSchoolsQuery = Validations.JoiObjectKeys({
     ...Validations.Filters,
     bBlocked: Validations.Boolean("Schools bBlocked"),
+    // Punto 18 — filtro opcional por modalidad en el listado de colegios (superadmin).
+    sAccountType: Joi.string().valid('SCHOOL', 'THERAPIST', 'YOU', 'YOU_PLUS').allow(null).allow('')
+        .error(new Error("Schools sAccountType")),
 });
 
 export const GetSchoolParams = Validations.JoiObjectKeys({

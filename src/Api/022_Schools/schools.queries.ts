@@ -158,7 +158,7 @@ class Queries {
      * @param sSearch (general search by name, email, phone, city)
      * @returns
      */
-    static async findAllSchools(iPageNumber, iItemsPerPage, sSearch, bBlocked) {
+    static async findAllSchools(iPageNumber, iItemsPerPage, sSearch, bBlocked, sAccountType?) {
         return await SchoolsModel.query().modify(function (queryBuilder : any) {
             queryBuilder.select('Schools.*')
             queryBuilder.select('City.sName AS sCityName', 'City.sCityId')
@@ -206,6 +206,18 @@ class Queries {
             }
             else if (bBlocked == false) {
                 queryBuilder.where('Schools.bBlocked', false)
+            }
+
+            // Punto 18 — filtro por modalidad. YOU incluye el legacy THERAPIST; SCHOOL incluye las
+            // cuentas sin modalidad (NULL, colegios previos a Punto 5).
+            if (sAccountType === 'YOU') {
+                queryBuilder.whereIn('Schools.sAccountType', ['YOU', 'THERAPIST'])
+            } else if (sAccountType === 'SCHOOL') {
+                queryBuilder.where(function () {
+                    this.where('Schools.sAccountType', 'SCHOOL').orWhereNull('Schools.sAccountType')
+                })
+            } else if (sAccountType === 'YOU_PLUS') {
+                queryBuilder.where('Schools.sAccountType', 'YOU_PLUS')
             }
         }).orderBy('Schools.updated_at', 'desc').page((iPageNumber - 1), iItemsPerPage)
     }
@@ -367,7 +379,11 @@ class Queries {
                 SELECT
                     COUNT(*)                                          ::integer AS "iTotalSchools",
                     COUNT(*) FILTER (WHERE "bBlocked" = false)       ::integer AS "iActiveSchools",
-                    COUNT(*) FILTER (WHERE "bBlocked" = true)        ::integer AS "iInactiveSchools"
+                    COUNT(*) FILTER (WHERE "bBlocked" = true)        ::integer AS "iInactiveSchools",
+                    -- Punto 18 — cuentas ACTIVAS por modalidad (YOU incluye legacy THERAPIST; SCHOOL incluye NULL)
+                    COUNT(*) FILTER (WHERE "bBlocked" = false AND ("sAccountType" = 'SCHOOL' OR "sAccountType" IS NULL)) ::integer AS "iSchoolsSchool",
+                    COUNT(*) FILTER (WHERE "bBlocked" = false AND "sAccountType" IN ('YOU', 'THERAPIST'))               ::integer AS "iSchoolsYou",
+                    COUNT(*) FILTER (WHERE "bBlocked" = false AND "sAccountType" = 'YOU_PLUS')                          ::integer AS "iSchoolsYouPlus"
                 FROM "Schools"
                 WHERE "bActive" = true
             `),
@@ -533,6 +549,10 @@ class Queries {
             iTotalSchools:    parseInt(schools?.iTotalSchools    ?? '0'),
             iActiveSchools:   parseInt(schools?.iActiveSchools   ?? '0'),
             iInactiveSchools: parseInt(schools?.iInactiveSchools ?? '0'),
+            // Punto 18 — cuentas activas por modalidad (tiles del dashboard)
+            iSchoolsSchool:   parseInt(schools?.iSchoolsSchool   ?? '0'),
+            iSchoolsYou:      parseInt(schools?.iSchoolsYou      ?? '0'),
+            iSchoolsYouPlus:  parseInt(schools?.iSchoolsYouPlus  ?? '0'),
             iTotalStudents:   parseInt(students?.iTotalStudents  ?? '0'),
             sStudentsTrend,
             iGoalProgress:    parseInt(goalProgress?.iGoalProgress ?? '0'),

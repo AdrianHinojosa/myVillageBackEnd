@@ -895,6 +895,8 @@ Confirmar con Adrián la base real de prod + el `sAccountType` de los 2 vivos AN
 
 - **`getSummary` enriquecido** (`billing.controllers.ts`): la respuesta ahora incluye `sAccountType`, `iActiveUsers`, `iActiveStudents` (estos dos solo poblados en You/You+ por Stripe vía `attachRealCounts`; null en el resto). El front los usa para el **aviso de costo** al dar de alta usuario/paciente (calcula el excedente con el espejo `computeQuotaTotal`).
 
-**Pendiente Fase 1:** front — captura de tarjeta post-set-password mostrando el monto al término de la prueba + costo por extra; recálculo al cierre de ciclo (webhook `invoice.upcoming` en `030_Billing/001_Webhooks`).
-_(Hecho ya en front: páginas públicas de registro You/You+; diálogo de aviso de costo al dar de alta usuario/paciente — reusa `CoreDialogsCostWarning` + `getSummary` enriquecido.)_
+- **Recálculo al cierre de ciclo** (`001_Webhooks/webhooks.controllers.ts`): nuevo caso `invoice.upcoming` → `handleInvoiceUpcoming` re-tarifica la suscripción con los conteos reales vía `syncSubscriptionTariff` (solo You/You+; `proration_behavior: 'none'`, no toca el periodo ya facturado). Decisión #2 (cobro sobre reales, sin prorrateo). ⚠️ **Config Stripe:** el endpoint de webhook debe tener habilitado el evento `invoice.upcoming` en el dashboard (Adrián).
+
+**Pendiente Fase 1:** front — captura de tarjeta post-set-password mostrando el monto al término de la prueba + costo por extra.
+_(Hecho ya: registro público You/You+ (back+front); aviso de costo al dar de alta usuario/paciente (front, reusa `CoreDialogsCostWarning` + `getSummary` enriquecido); recálculo al cierre de ciclo (back).)_
 **Fases siguientes:** 2 landing; 3 nombre de menor enmascarado (YOU); 4 panel admin por modalidad.

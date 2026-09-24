@@ -13,4 +13,10 @@ router.post('/signup',
     celebrate({ body: PublicValidations.SignupBody }),
     aH(PublicController.signup));
 
+// Fase 2 — captación de colegios (solo envía correo, no crea cuenta). Mismo rate-limit anti-flood.
+router.post('/schoolLead',
+    signupRateLimit(),
+    celebrate({ body: PublicValidations.SchoolLeadBody }),
+    aH(PublicController.schoolLead));
+
 export default router;

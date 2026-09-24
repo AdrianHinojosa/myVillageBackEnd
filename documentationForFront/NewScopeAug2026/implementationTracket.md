@@ -897,6 +897,10 @@ Confirmar con Adrián la base real de prod + el `sAccountType` de los 2 vivos AN
 
 - **Recálculo al cierre de ciclo** (`001_Webhooks/webhooks.controllers.ts`): nuevo caso `invoice.upcoming` → `handleInvoiceUpcoming` re-tarifica la suscripción con los conteos reales vía `syncSubscriptionTariff` (solo You/You+; `proration_behavior: 'none'`, no toca el periodo ya facturado). Decisión #2 (cobro sobre reales, sin prorrateo). ⚠️ **Config Stripe:** el endpoint de webhook debe tener habilitado el evento `invoice.upcoming` en el dashboard (Adrián).
 
-**Pendiente Fase 1:** front — captura de tarjeta post-set-password mostrando el monto al término de la prueba + costo por extra.
-_(Hecho ya: registro público You/You+ (back+front); aviso de costo al dar de alta usuario/paciente (front, reusa `CoreDialogsCostWarning` + `getSummary` enriquecido); recálculo al cierre de ciclo (back).)_
+**Fase 1 COMPLETA** (back+front): registro público You/You+; aviso de costo al dar de alta (front, `CoreDialogsCostWarning` + `getSummary` enriquecido); recálculo al cierre de ciclo (back); desglose de cuota + monto al terminar la prueba en BillingPlanCard (front).
+
+### Fase 2 — Landing + captación Schools (en progreso)
+- **`POST /:sLang/public/schoolLead`** (módulo `031_Public`, SIN auth, mismo rate-limit): captación de colegios. **NO crea cuenta** — solo envía correo al equipo (`schoolLead.html`, plantilla nueva) a `SCHOOL_LEAD_EMAILS` (env, fallback `info@` + `lucypotes@`). Body: `sInstitution`, `sContactName`, `sEmail`, `sPhone`, `sCity?`, `sStudentsEstimate?`, `sMessage?`. Tipo de correo `schoolLead` agregado a `Mail.service`. Mensajes `SuccessMessages.Public.schoolLead` + `ValidationError.util Public.*` (sp/en).
+
+**Pendiente Fase 2:** landing estático (`SOFEX/my-village/landing/`, fuera de git) — sección de 3 modalidades + CTA "Solicita tu prueba" + cuestionario Schools que consume este endpoint + enlaces You/You+ al registro de Fase 1. Textos del cliente (placeholders por ahora).
 **Fases siguientes:** 2 landing; 3 nombre de menor enmascarado (YOU); 4 panel admin por modalidad.

@@ -1,0 +1,125 @@
+<!doctype html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Nueva solicitud de colegio</title>
+    <style type="text/css">
+		p{ margin:10px 0; padding:0; }
+		table{ border-collapse:collapse; }
+		body,#bodyTable,#bodyCell{ height:100%; margin:0; padding:0; width:100%; }
+		.templateContainer{ max-width:600px !important; }
+		.dataLabel{ font-family:'Lexend',Tahoma,Verdana,Segoe,sans-serif; font-size:12px; color:#94A3B8; text-transform:uppercase; letter-spacing:0.5px; padding:0 0 2px 0; }
+		.dataValue{ font-family:'Lexend',Tahoma,Verdana,Segoe,sans-serif; font-size:15px; color:#17364C; padding:0 0 14px 0; }
+	@media only screen and (min-width:768px){
+		.templateContainer{ width:600px !important; }
+	}
+</style></head>
+    <body>
+        <center>
+            <table align="center" border="0" cellpadding="0" cellspacing="0" height="100%" width="100%" id="bodyTable" style="background-color:#F6F9FC;">
+                <tr>
+                    <td align="center" valign="top" id="bodyCell" style="padding:20px 10px;">
+                        <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" class="templateContainer" style="background-color:#FFFFFF; border-radius:12px; overflow:hidden;">
+                            <tr>
+                                <td valign="top">
+<!-- Logo -->
+<table border="0" cellpadding="0" cellspacing="0" width="100%" style="min-width:100%;">
+    <tbody><tr>
+        <td valign="top" style="padding:30px 9px 10px 9px; text-align:center;">
+            <img align="center" alt="My Village" src="{{sAssetsUrl}}/images/logos/logo-primary.svg" width="200" style="max-width:200px; display:inline !important; vertical-align:bottom;">
+        </td>
+    </tr></tbody>
+</table>
+<!-- Rainbow Divider -->
+<table border="0" cellpadding="0" cellspacing="0" width="100%" style="min-width:100%;">
+    <tbody><tr>
+        <td style="padding:0 18px;">
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="min-width:100%; table-layout:fixed;">
+                <tbody><tr>
+                    <td style="background-color:#F77760; height:4px; width:20%;"></td>
+                    <td style="background-color:#FFBB17; height:4px; width:20%;"></td>
+                    <td style="background-color:#71D491; height:4px; width:20%;"></td>
+                    <td style="background-color:#0AA6B2; height:4px; width:20%;"></td>
+                    <td style="background-color:#F892B5; height:4px; width:20%;"></td>
+                </tr></tbody>
+            </table>
+        </td>
+    </tr></tbody>
+</table>
+<!-- Title -->
+<table border="0" cellpadding="0" cellspacing="0" width="100%" style="min-width:100%;">
+    <tbody><tr>
+        <td valign="top" style="padding:24px 18px 0 18px;">
+            <h3 style="text-align:center; margin:0;"><span style="font-size:26px"><font face="Lexend, Tahoma, Verdana, Segoe, sans-serif" color="#17364C">Nueva solicitud de prueba (Colegio)</font></span></h3>
+        </td>
+    </tr></tbody>
+</table>
+<!-- Lead data -->
+<table border="0" cellpadding="0" cellspacing="0" width="100%" style="min-width:100%;">
+    <tbody><tr>
+        <td valign="top" style="padding:24px 18px 0 18px;">
+            <div class="dataLabel">Institución</div>
+            <div class="dataValue">{{sInstitution}}</div>
+
+            <div class="dataLabel">Contacto</div>
+            <div class="dataValue">{{sContactName}}</div>
+
+            <div class="dataLabel">Correo</div>
+            <div class="dataValue"><a href="mailto:{{sEmail}}" style="color:#0AA6B2; text-decoration:none;">{{sEmail}}</a></div>
+
+            <div class="dataLabel">Teléfono</div>
+            <div class="dataValue">{{sPhone}}</div>
+
+            <div class="dataLabel">Ciudad / Estado</div>
+            <div class="dataValue">{{sCity}}</div>
+
+            <div class="dataLabel">Número aproximado de alumnos</div>
+            <div class="dataValue">{{sStudentsEstimate}}</div>
+        </td>
+    </tr></tbody>
+</table>
+<!-- Message -->
+<table border="0" cellpadding="0" cellspacing="0" width="100%" style="min-width:100%;">
+    <tbody><tr>
+        <td valign="top" style="padding:4px 18px 0 18px;">
+            <div class="dataLabel">Mensaje</div>
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="min-width:100%; background-color:#F6F9FC; border-radius:10px;">
+                <tbody><tr>
+                    <td style="padding:16px 18px; font-family:'Lexend',Tahoma,Verdana,Segoe,sans-serif; font-size:15px; color:#334155; line-height:165%; white-space:pre-wrap;">{{sMessage}}</td>
+                </tr></tbody>
+            </table>
+        </td>
+    </tr></tbody>
+</table>
+<!-- Reply CTA -->
+<table border="0" cellpadding="0" cellspacing="0" width="100%" style="min-width:100%;">
+    <tbody><tr>
+        <td style="padding:22px 18px;" valign="top" align="center">
+            <table border="0" cellpadding="0" cellspacing="0" width="70%" style="border-collapse:separate !important; border-radius:50px; background-color:#0AA6B2;">
+                <tbody><tr>
+                    <td align="center" valign="middle" style="font-family:'Lexend',Tahoma,Verdana,Segoe,sans-serif; font-size:15px; padding:14px;">
+                        <a title="Responder" href="mailto:{{sEmail}}?subject=Re: My Village para tu institución" target="_blank" style="font-weight:bold; letter-spacing:0.3px; text-decoration:none; color:#FFFFFF;">Responder al contacto</a>
+                    </td>
+                </tr></tbody>
+            </table>
+        </td>
+    </tr></tbody>
+</table>
+                                </td>
+                            </tr>
+                        </table>
+                        <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" class="templateContainer">
+                            <tr>
+                                <td valign="top" style="text-align:center; padding:16px 18px;">
+                                    <p style="font-family:'Lexend',Tahoma,Verdana,Segoe,sans-serif; font-size:12px; color:#94A3B8; margin:0;">Solicitud generada desde el sitio de My Village.</p>
+                                    <p style="font-family:'Lexend',Tahoma,Verdana,Segoe,sans-serif; font-size:12px; color:#94A3B8; margin:6px 0 0 0;">&copy; My Village 2026</p>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
+        </center>
+    </body>
+</html>

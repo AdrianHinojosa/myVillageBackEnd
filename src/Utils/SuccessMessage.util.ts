@@ -421,6 +421,10 @@ export default {
         signup: {
             sp: 'Tu cuenta fue creada. Revisa tu correo para establecer tu contraseña.',
             en: "Your account was created. Check your email to set your password."
+        },
+        schoolLead: {
+            sp: '¡Gracias! Recibimos tu solicitud y te contactaremos pronto.',
+            en: "Thank you! We received your request and will contact you soon."
         }
     },
 

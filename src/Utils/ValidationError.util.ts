@@ -838,11 +838,31 @@ export default {
             },
         },
 
-        // Punto 18 — registro público You/You+
+        // Punto 18 — registro público You/You+ y captación de colegios
         Public: {
             sAccountType: {
                 sp: "Por favor, selecciona una modalidad válida (You o You+).",
                 en: "Please, select a valid modality (You or You+)."
+            },
+            sInstitution: {
+                sp: "Por favor, ingresa el nombre de la institución.",
+                en: "Please, enter the institution name."
+            },
+            sContactName: {
+                sp: "Por favor, ingresa el nombre de contacto.",
+                en: "Please, enter the contact name."
+            },
+            sCity: {
+                sp: "Por favor, ingresa una ciudad o estado válido.",
+                en: "Please, enter a valid city or state."
+            },
+            sStudentsEstimate: {
+                sp: "Por favor, ingresa un número aproximado de alumnos válido.",
+                en: "Please, enter a valid approximate number of students."
+            },
+            sMessage: {
+                sp: "Por favor, ingresa un mensaje válido.",
+                en: "Please, enter a valid message."
             },
         },
 

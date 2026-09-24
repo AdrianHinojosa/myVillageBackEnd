@@ -23,3 +23,17 @@ export const SignupBody = Validations.JoiObjectKeys({
     sPhone: Validations.RequiredString("Schools sPhone"),
     sEmail: Validations.RequiredCorrectEmail("SchoolUsers sEmail"),
 });
+
+/**
+ * POST /public/schoolLead — captación de colegios (Fase 2). NO crea cuenta: solo dispara un correo al
+ * equipo. Los colegios se dan de alta manualmente (cobro por transferencia).
+ */
+export const SchoolLeadBody = Validations.JoiObjectKeys({
+    sInstitution: Validations.RequiredString("Public sInstitution"),
+    sContactName: Validations.RequiredString("Public sContactName"),
+    sEmail: Validations.RequiredCorrectEmail("SchoolUsers sEmail"),
+    sPhone: Validations.RequiredString("Schools sPhone"),
+    sCity: Validations.String("Public sCity"),
+    sStudentsEstimate: Validations.String("Public sStudentsEstimate"),
+    sMessage: Validations.String("Public sMessage"),
+});

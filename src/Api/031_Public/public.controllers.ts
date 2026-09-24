@@ -87,6 +87,42 @@ class Controllers {
             success: true
         });
     }
+
+    /**
+     * Fase 2 — captación de colegios desde el sitio público. NO crea cuenta (los colegios se dan de
+     * alta manualmente por transferencia): solo envía un correo al equipo con los datos del lead.
+     */
+    async schoolLead(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
+        const { sLang } = res.locals;
+        const { sInstitution, sContactName, sEmail, sPhone, sCity, sStudentsEstimate, sMessage } = req.body;
+
+        // Bandeja de captación (spec Fase 2). Configurable por env; con fallback a las dos direcciones.
+        const aLeadEmails = (process.env.SCHOOL_LEAD_EMAILS
+            || 'info@myvillage.com.mx,lucypotes@myvillage.com.mx')
+            .split(',')
+            .map((s: string) => s.trim())
+            .filter(Boolean);
+
+        MailEvent.emit('SendEmail', {
+            aEmails: aLeadEmails,
+            oData: {
+                sInstitution,
+                sContactName,
+                sEmail,
+                sPhone,
+                sCity: sCity || 'No especificada',
+                sStudentsEstimate: sStudentsEstimate || 'No especificado',
+                sMessage: sMessage || 'Sin mensaje.'
+            },
+            sType: 'schoolLead',
+            sSubject: `[Prueba Colegio] ${sInstitution}`
+        });
+
+        return res.status(200).json({
+            message: SuccessMessages.Public.schoolLead[sLang],
+            success: true
+        });
+    }
 }
 
 export default new Controllers();

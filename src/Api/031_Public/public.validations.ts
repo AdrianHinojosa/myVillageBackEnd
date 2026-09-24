@@ -18,6 +18,8 @@ export const SignupBody = Validations.JoiObjectKeys({
     sAdminName: Validations.RequiredString("SchoolUsers sName"),
     sLastName: Validations.RequiredString("SchoolUsers sLastName"),
     sSecondLastName: Validations.String("SchoolUsers sSecondLastName"),
-    sPhone: Validations.RequiredCorrectPhoneNumber("Schools sPhone"),
+    // El front manda el teléfono ya formateado ("+52 55…") vía FormsPhoneField, igual que el alta de
+    // colegios (que usa String). RequiredString lo acepta tal cual; no la regex estricta de dígitos.
+    sPhone: Validations.RequiredString("Schools sPhone"),
     sEmail: Validations.RequiredCorrectEmail("SchoolUsers sEmail"),
 });

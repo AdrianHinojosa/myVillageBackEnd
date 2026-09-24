@@ -893,5 +893,8 @@ Confirmar con Adrián la base real de prod + el `sAccountType` de los 2 vivos AN
   - **Anti-abuso:** rate-limit en memoria por IP (5/10min, best-effort mono-instancia; si se escala → Redis/WAF) + correo único (`getUserByEmail` → 409). Modalidad revalidada en el controlador (defensa, además del Joi).
   - Mensajes nuevos: `SuccessMessages.Public.signup`, `ErrorMessages.Public.tooManyRequests`/`invalidModality`, `ValidationError.util Public.sAccountType` (sp/en).
 
-**Pendiente Fase 1:** front (páginas públicas de registro You/You+ → set-password → captura de tarjeta con aviso de costo); diálogo de aviso de costo al dar de alta usuario/paciente; recálculo al cierre de ciclo (webhook `invoice.upcoming` en `030_Billing/001_Webhooks`).
+- **`getSummary` enriquecido** (`billing.controllers.ts`): la respuesta ahora incluye `sAccountType`, `iActiveUsers`, `iActiveStudents` (estos dos solo poblados en You/You+ por Stripe vía `attachRealCounts`; null en el resto). El front los usa para el **aviso de costo** al dar de alta usuario/paciente (calcula el excedente con el espejo `computeQuotaTotal`).
+
+**Pendiente Fase 1:** front — captura de tarjeta post-set-password mostrando el monto al término de la prueba + costo por extra; recálculo al cierre de ciclo (webhook `invoice.upcoming` en `030_Billing/001_Webhooks`).
+_(Hecho ya en front: páginas públicas de registro You/You+; diálogo de aviso de costo al dar de alta usuario/paciente — reusa `CoreDialogsCostWarning` + `getSummary` enriquecido.)_
 **Fases siguientes:** 2 landing; 3 nombre de menor enmascarado (YOU); 4 panel admin por modalidad.

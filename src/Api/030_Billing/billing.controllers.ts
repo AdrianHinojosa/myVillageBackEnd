@@ -153,6 +153,12 @@ class Controllers {
                 // iUsersLimit — the column predates the billing feature.
                 iTeachersLimit: oSchool.iUsersLimit ?? null,
                 iStudentsLimit: oSchool.iStudentsLimit ?? null,
+                // Punto 18 — modalidad + conteos activos reales (You/You+), para el aviso de costo del
+                // front al dar de alta usuario/paciente. `attachRealCounts` los pobló arriba solo en
+                // You/You+ por Stripe; en el resto van null (el aviso no aplica).
+                sAccountType: oSchool.sAccountType || 'SCHOOL',
+                iActiveUsers: oSchool.iActiveUsers ?? null,
+                iActiveStudents: oSchool.iActiveStudents ?? null,
                 // Surfaced so nobody mistakes a sandbox for production while testing.
                 bTestMode: isStripeTestMode()
             },

@@ -712,6 +712,18 @@ paciente/usuario extra (usar el espejo `computeQuotaTotal` de `app/utils/billing
 
 Errores: `409` correo en uso; `429` demasiados intentos (rate-limit); `400/409` validación de campos.
 
+### `GET /billing/summary` enriquecido (para el aviso de costo)
+
+La respuesta ahora incluye 3 campos nuevos (además de los existentes):
+- `sAccountType`: `"SCHOOL" | "YOU" | "YOU_PLUS"` (modalidad de la cuenta).
+- `iActiveUsers`, `iActiveStudents`: conteos activos REALES — **solo** en You/You+ por Stripe; `null`
+  en SCHOOL/TRANSFER (donde el aviso de costo no aplica).
+
+Uso en el front: al dar de alta usuario/paciente en You/You+, calcular el excedente con el espejo
+`computeQuotaTotal(sAccountType, iActiveUsers/Students +1, dDiscountPct)` y confirmar el costo antes
+de crear. Ya implementado con el componente reutilizable `CoreDialogsCostWarning` (solo se muestra a
+perfiles con visibilidad de cobranza: usuario principal o superadmin, y solo si hay excedente real).
+
 **Pendiente (fases siguientes):** diálogo de aviso de costo al dar de alta usuario/paciente; recálculo
 al cierre de ciclo (webhook `invoice.upcoming`); landing con las 3 modalidades; enmascarado del nombre
 del menor (You); panel admin por modalidad.

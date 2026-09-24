@@ -902,5 +902,8 @@ Confirmar con Adrián la base real de prod + el `sAccountType` de los 2 vivos AN
 ### Fase 2 — Landing + captación Schools (en progreso)
 - **`POST /:sLang/public/schoolLead`** (módulo `031_Public`, SIN auth, mismo rate-limit): captación de colegios. **NO crea cuenta** — solo envía correo al equipo (`schoolLead.html`, plantilla nueva) a `SCHOOL_LEAD_EMAILS` (env, fallback `info@` + `lucypotes@`). Body: `sInstitution`, `sContactName`, `sEmail`, `sPhone`, `sCity?`, `sStudentsEstimate?`, `sMessage?`. Tipo de correo `schoolLead` agregado a `Mail.service`. Mensajes `SuccessMessages.Public.schoolLead` + `ValidationError.util Public.*` (sp/en).
 
-**Pendiente Fase 2:** landing estático (`SOFEX/my-village/landing/`, fuera de git) — sección de 3 modalidades + CTA "Solicita tu prueba" + cuestionario Schools que consume este endpoint + enlaces You/You+ al registro de Fase 1. Textos del cliente (placeholders por ahora).
+- **Landing** (`SOFEX/my-village/landing/`, estático, **fuera de git** — deploy manual por SOFEX): CTA "Solicitar Demo"→"Solicita tu prueba" (nav+hero) → `#modalidades`; sección de 3 modalidades (Schools/You/You+); Schools "Dale clic aquí"→cuestionario `#solicitud-colegio` que hace `POST /public/schoolLead`; You/You+ enlazan a `/signup/you[-plus]` de la app. **TODO SOFEX** en `js/main.js` (`MV_CONFIG`): fijar `apiBase` (base del API hasta antes de `/public`) y `appUrl` (dominio de la plataforma). **Textos = placeholders** hasta que el cliente los entregue.
+
+**Fase 2 COMPLETA** (back: `schoolLead`; landing: modalidades + cuestionario). Pendiente solo config/textos de SOFEX/cliente.
+**Fases siguientes:** 3 nombre de menor enmascarado (YOU); 4 panel admin por modalidad.
 **Fases siguientes:** 2 landing; 3 nombre de menor enmascarado (YOU); 4 panel admin por modalidad.

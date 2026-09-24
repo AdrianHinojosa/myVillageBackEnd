@@ -724,9 +724,21 @@ Uso en el front: al dar de alta usuario/paciente en You/You+, calcular el excede
 de crear. Ya implementado con el componente reutilizable `CoreDialogsCostWarning` (solo se muestra a
 perfiles con visibilidad de cobranza: usuario principal o superadmin, y solo si hay excedente real).
 
-**Pendiente (fases siguientes):** diálogo de aviso de costo al dar de alta usuario/paciente; recálculo
-al cierre de ciclo (webhook `invoice.upcoming`); landing con las 3 modalidades; enmascarado del nombre
-del menor (You); panel admin por modalidad.
+### Enmascarado de nombre de menor (Fase 3, solo YOU)
+
+En cuentas **YOU** (terapeuta), las respuestas de alumnos ya vienen enmascaradas:
+- `GET /students` (lista): `sFullName` = primer nombre + iniciales ("Lucía P. A.") y `sLastName`/
+  `sSecondLastName` = **null**.
+- `GET /students/:id` (detalle): `sFullName` enmascarado, pero **conserva** `sName`/`sLastName`/
+  `sSecondLastName` crudos (los necesita el formulario de edición del terapeuta).
+- `GET /students/:id/report`: `oStudent.sFullName` enmascarado.
+
+Regla para el front en YOU: **siempre mostrar `sFullName`** (nunca reconstruir el nombre desde las
+partes) en listas, detalle, headers, y nombres de archivo de PDF. En SCHOOL/YOU+ no cambia nada.
+Ya aplicado en el front: StudentDetail oculta los campos de apellido en YOU y el filename del PDF de
+reporte omite el apellido.
+
+**Pendiente (fases siguientes):** panel admin por modalidad (conteos + filtro).
 
 ---
 

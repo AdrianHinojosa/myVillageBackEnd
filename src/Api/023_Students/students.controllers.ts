@@ -16,6 +16,9 @@ import { formatHelpTypesForFrontend } from '../024_Goals/003_TrackingRecords/hel
 import { db } from '../../Config/Db.config';
 import StorageServices from '../../Services/Storage.services';
 
+// Privacy (Punto 18 Fase 3 — enmascarado de nombre de menor en YOU)
+import { applyMinorNameMasking } from '../../Utils/studentPrivacy.util';
+
 // Messages
 import SuccessMessages from '../../Utils/SuccessMessage.util';
 import ErrorMessages from '../../Utils/ErrorMessages.util';
@@ -117,6 +120,9 @@ class Controllers {
         const myStudents = await StudentQueries.findAllStudents(sSchoolId, iPageNumber, iItemsPerPage, sSearch, sGrade, aAssignedStudentIds);
         const iNumPages = Math.ceil(myStudents.total / Number(iItemsPerPage));
 
+        // YOU: nombre de menor enmascarado en la lista (sin apellidos crudos). No-op en SCHOOL/YOU+.
+        (myStudents.results || []).forEach((oRow: any) => applyMinorNameMasking(oRow, res.locals.sAccountType, false));
+
         // Get school's student limit
         const mySchool = await SchoolQueries.verifySchoolExists(sSchoolId);
         const iStudentsLimit = mySchool ? mySchool.iStudentsLimit : 0;
@@ -148,6 +154,10 @@ class Controllers {
         if (!myStudent) {
             return next(new MyError(404, ErrorMessages.Students.notFound[sLang]));
         }
+
+        // YOU: sFullName enmascarado; se conservan las partes crudas (bKeepRawParts) porque el
+        // formulario de edición del terapeuta las precarga (evita perder el apellido al guardar).
+        applyMinorNameMasking(myStudent, res.locals.sAccountType, true);
 
         return res.status(201).json({
             message: SuccessMessages.Students.getOneStudent[sLang],
@@ -272,6 +282,9 @@ class Controllers {
         if (!myStudent) {
             return next(new MyError(404, ErrorMessages.Students.notFound[sLang]));
         }
+
+        // YOU: el reporte usa el nombre enmascarado del menor.
+        applyMinorNameMasking(myStudent, res.locals.sAccountType, false);
 
         // Default date range: current month (use local date, not UTC)
         // Note: Joi.date() converts query params to JS Date objects, so we must convert back to YYYY-MM-DD strings

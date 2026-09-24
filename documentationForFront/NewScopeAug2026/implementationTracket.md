@@ -905,5 +905,17 @@ Confirmar con Adrián la base real de prod + el `sAccountType` de los 2 vivos AN
 - **Landing** (`SOFEX/my-village/landing/`, estático, **fuera de git** — deploy manual por SOFEX): CTA "Solicitar Demo"→"Solicita tu prueba" (nav+hero) → `#modalidades`; sección de 3 modalidades (Schools/You/You+); Schools "Dale clic aquí"→cuestionario `#solicitud-colegio` que hace `POST /public/schoolLead`; You/You+ enlazan a `/signup/you[-plus]` de la app. **TODO SOFEX** en `js/main.js` (`MV_CONFIG`): fijar `apiBase` (base del API hasta antes de `/public`) y `appUrl` (dominio de la plataforma). **Textos = placeholders** hasta que el cliente los entregue.
 
 **Fase 2 COMPLETA** (back: `schoolLead`; landing: modalidades + cuestionario). Pendiente solo config/textos de SOFEX/cliente.
-**Fases siguientes:** 3 nombre de menor enmascarado (YOU); 4 panel admin por modalidad.
+
+### Fase 3 — Protección de datos de menores (solo YOU) (en progreso)
+- **`studentPrivacy.util.ts`** (nuevo): `isYouModality`, `maskMinorName` (primer nombre + iniciales, "Lucía P. A."), `applyMinorNameMasking(oStudent, sAccountType, bKeepRawParts)`.
+- **`students.controllers.ts`** aplica el enmascarado según `res.locals.sAccountType` (solo YOU/THERAPIST; no-op SCHOOL/YOU+):
+  - `getAllStudents` (lista): `sFullName` enmascarado + `sLastName`/`sSecondLastName` = **null** (suprimidos).
+  - `getOneStudent` (detalle): `sFullName` enmascarado pero **conserva** las partes crudas (`bKeepRawParts=true`) — el formulario de edición del propio terapeuta las necesita para precargar y no borrar el apellido al guardar.
+  - `getStudentReport`: `sFullName` enmascarado (el PDF de reporte lo usa).
+- Nota: IEP está bloqueado en YOU (Fase 0), así que su PDF no aplica. El concat de nombre en `studentAssignments` es de USUARIOS (terapeutas), no de menores → no se toca.
+- ⚠️ **Decisión pendiente PO:** `getOneStudent` conserva apellidos crudos para el form de edición (si no, el alta/edición del terapeuta perdería el apellido). Si se quiere supresión dura también en el detalle, hay que rediseñar el flujo de edición de nombre en YOU.
+
+**Frontend Fase 3** (dev): StudentDetail oculta los campos de apellido en YOU (`bMaskMinorName = authStore.bIsTherapist`); el nombre de archivo del PDF de reporte omite el apellido en YOU. El resto de superficies ya usa el `sFullName` enmascarado del backend.
+
+**Fases siguientes:** 4 panel admin por modalidad.
 **Fases siguientes:** 2 landing; 3 nombre de menor enmascarado (YOU); 4 panel admin por modalidad.

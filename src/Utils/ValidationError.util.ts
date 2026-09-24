@@ -838,5 +838,13 @@ export default {
             },
         },
 
+        // Punto 18 — registro público You/You+
+        Public: {
+            sAccountType: {
+                sp: "Por favor, selecciona una modalidad válida (You o You+).",
+                en: "Please, select a valid modality (You or You+)."
+            },
+        },
+
     }
 }

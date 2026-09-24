@@ -885,4 +885,13 @@ Confirmar con Adrián la base real de prod + el `sAccountType` de los 2 vivos AN
 **Espejo del motor de tarifas en el front** ya existe (`app/utils/billing.ts`: `MODALITY_TIERS` + `computeQuotaTotal`, commit `e06c2c0`).
 
 **Pendiente Fase 0:** ninguno del backend (Fase 0 backend cerrada). Falta coordinar con Adrián base real de prod + `sAccountType` de los 2 vivos ANTES de migrar/deployar.
-**Fases siguientes:** 1 registro público You/You+ + captura tarjeta + aviso de costo + recálculo al cierre (webhook `invoice.upcoming`); 2 landing; 3 nombre de menor enmascarado (YOU); 4 panel admin por modalidad.
+
+### Fase 1 — Registro público You/You+ (en progreso)
+- **Módulo nuevo `031_Public`** (`public.controllers/routes/validations/rateLimit`):
+  - `POST /:sLang/public/signup` **SIN auth** (como login/recovery). Body: `sAccountType` (**YOU|YOU_PLUS**, SCHOOL rechazado), `sAdminName`, `sLastName`, `sSecondLastName?`, `sPhone`, `sEmail`. Responde `{ message, success }` 201.
+  - Reusa **exactamente** el alta de `schools.controllers.createSchool`: `insertSchool` (school+admin user+schoolUser en una transacción) → token de recuperación 72h → email `newSchool` con link `/set-password/:token`. El nombre de cuenta (`sName`) se deriva del nombre de la persona; `sCreatedBy: null` (autoservicio; columna nullable); `sPaymentMethod: 'STRIPE'` (You/You+ cobran con tarjeta; la cuota arranca al capturar tarjeta).
+  - **Anti-abuso:** rate-limit en memoria por IP (5/10min, best-effort mono-instancia; si se escala → Redis/WAF) + correo único (`getUserByEmail` → 409). Modalidad revalidada en el controlador (defensa, además del Joi).
+  - Mensajes nuevos: `SuccessMessages.Public.signup`, `ErrorMessages.Public.tooManyRequests`/`invalidModality`, `ValidationError.util Public.sAccountType` (sp/en).
+
+**Pendiente Fase 1:** front (páginas públicas de registro You/You+ → set-password → captura de tarjeta con aviso de costo); diálogo de aviso de costo al dar de alta usuario/paciente; recálculo al cierre de ciclo (webhook `invoice.upcoming` en `030_Billing/001_Webhooks`).
+**Fases siguientes:** 2 landing; 3 nombre de menor enmascarado (YOU); 4 panel admin por modalidad.

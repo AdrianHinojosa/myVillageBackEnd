@@ -688,9 +688,33 @@ Plan completo: `myVillage/docs/plan-punto18-myvillage-for-you.md`. Branch `featu
    bloqueados **solo** para You (You+ SÍ tiene docs y usuarios). El front ya oculta grado/IEP en
    You/You+ (`bIsSchoolModality`) y docs/usuarios solo en You (`bIsTherapist`).
 
-**Pendiente (fases siguientes):** registro público You/You+ + captura de tarjeta con aviso de costo +
-recálculo al cierre de ciclo (webhook `invoice.upcoming`); landing con las 3 modalidades; enmascarado
-del nombre del menor (You); panel admin por modalidad.
+### Registro público (Fase 1) — `POST /:sLang/public/signup` (SIN auth)
+
+Para las páginas públicas de registro You/You+. No requiere token. Body:
+```
+{
+  "sAccountType": "YOU" | "YOU_PLUS",   // SCHOOL NO se acepta aquí (alta manual)
+  "sAdminName": string,                  // nombre(s) del usuario principal
+  "sLastName": string,                   // apellido paterno
+  "sSecondLastName": string,             // opcional
+  "sPhone": string,                      // celular (8-12 dígitos)
+  "sEmail": string                       // correo (único; 409 si ya existe)
+}
+```
+Respuesta OK (201): `{ message, success: true }`. El backend crea la cuenta + usuario principal,
+manda correo de bienvenida con el link `/set-password/:token` (72h) — **mismo flujo que ya usa el
+alta de colegios**. El nombre de la cuenta se arma solo del nombre de la persona (no se pide aparte).
+
+Flujo del front: formulario público → `POST /public/signup` → pantalla "revisa tu correo" → el usuario
+abre el link → `/set-password/[token]` (ya existe) → login → captura de tarjeta (`BillingCardForm.vue`
++ Stripe Elements) mostrando **antes** el monto al término de la prueba (14 días) y el costo por
+paciente/usuario extra (usar el espejo `computeQuotaTotal` de `app/utils/billing.ts`).
+
+Errores: `409` correo en uso; `429` demasiados intentos (rate-limit); `400/409` validación de campos.
+
+**Pendiente (fases siguientes):** diálogo de aviso de costo al dar de alta usuario/paciente; recálculo
+al cierre de ciclo (webhook `invoice.upcoming`); landing con las 3 modalidades; enmascarado del nombre
+del menor (You); panel admin por modalidad.
 
 ---
 

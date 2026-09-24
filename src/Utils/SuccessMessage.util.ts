@@ -416,4 +416,12 @@ export default {
         }
     },
 
+    // ========  Public (Punto 18 — registro You/You+)  ==================
+    Public: {
+        signup: {
+            sp: 'Tu cuenta fue creada. Revisa tu correo para establecer tu contraseña.',
+            en: "Your account was created. Check your email to set your password."
+        }
+    },
+
 };

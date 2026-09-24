@@ -393,4 +393,16 @@ export default {
         },
     },
 
+    // ==== Public (Punto 18 — registro You/You+): =======
+    Public: {
+        tooManyRequests: {
+            sp: "Demasiados intentos de registro. Espera unos minutos e inténtalo de nuevo.",
+            en: "Too many signup attempts. Please wait a few minutes and try again."
+        },
+        invalidModality: {
+            sp: "El registro en línea solo está disponible para las modalidades You y You+.",
+            en: "Online signup is only available for the You and You+ modalities."
+        },
+    },
+
 };

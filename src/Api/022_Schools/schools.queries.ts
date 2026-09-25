@@ -210,7 +210,7 @@ class Queries {
 
             // Punto 18 — filtro por modalidad. YOU incluye el legacy THERAPIST; SCHOOL incluye las
             // cuentas sin modalidad (NULL, colegios previos a Punto 5).
-            if (sAccountType === 'YOU') {
+            if (sAccountType === 'YOU' || sAccountType === 'THERAPIST') {
                 queryBuilder.whereIn('Schools.sAccountType', ['YOU', 'THERAPIST'])
             } else if (sAccountType === 'SCHOOL') {
                 queryBuilder.where(function () {

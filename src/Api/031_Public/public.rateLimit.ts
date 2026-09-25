@@ -10,17 +10,29 @@ import ErrorMessages from '../../Utils/ErrorMessages.util';
  * La validación de correo único es la defensa principal; esto solo frena floods.
  */
 const iWindowMs = 10 * 60 * 1000; // 10 minutos
-const iMaxHits = 5;               // máx. altas por IP en la ventana
+const iMaxHits = 5;               // máx. peticiones por IP+ruta en la ventana
 
 const oHits: Map<string, number[]> = new Map();
 
+/**
+ * IP real del cliente. Detrás de CloudFront/ALB/nginx `req.ip` es la IP del proxy (todo el tráfico
+ * compartiría un solo bucket y bloquearía a todos). Tomamos el primer salto de `X-Forwarded-For`.
+ */
+function getClientIp(req: Request): string {
+    const xff = req.headers['x-forwarded-for'];
+    if (typeof xff === 'string' && xff.length) return xff.split(',')[0].trim();
+    if (Array.isArray(xff) && xff.length) return String(xff[0]).split(',')[0].trim();
+    return (req.ip || req.socket?.remoteAddress || 'unknown').toString();
+}
+
 export function signupRateLimit() {
     return (req: Request, res: Response, next: NextFunction) => {
-        const sIp = (req.ip || req.socket?.remoteAddress || 'unknown').toString();
+        // Bucket por IP + ruta (signup y schoolLead no comparten cupo).
+        const sKey = `${getClientIp(req)}|${req.baseUrl}${req.path}`;
         const iNow = Date.now();
 
         // Conserva solo los hits dentro de la ventana vigente.
-        const aRecent = (oHits.get(sIp) || []).filter((t) => iNow - t < iWindowMs);
+        const aRecent = (oHits.get(sKey) || []).filter((t) => iNow - t < iWindowMs);
 
         if (aRecent.length >= iMaxHits) {
             const { sLang } = res.locals;
@@ -28,7 +40,7 @@ export function signupRateLimit() {
         }
 
         aRecent.push(iNow);
-        oHits.set(sIp, aRecent);
+        oHits.set(sKey, aRecent);
         return next();
     };
 }

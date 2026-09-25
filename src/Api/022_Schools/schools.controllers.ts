@@ -87,10 +87,10 @@ class Controllers {
     // Get ALL Schools.
     async getAllSchools(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
         const {sLang} = res.locals;
-        const {iPageNumber, iItemsPerPage, sSearch, bBlocked} = req.query;
+        const {iPageNumber, iItemsPerPage, sSearch, bBlocked, sAccountType} = req.query;
 
         // GET ALL schools
-        const mySchools = await SchoolQueries.findAllSchools(iPageNumber, iItemsPerPage, sSearch, bBlocked);
+        const mySchools = await SchoolQueries.findAllSchools(iPageNumber, iItemsPerPage, sSearch, bBlocked, sAccountType);
         const iNumPages = Math.ceil( mySchools.total / Number(iItemsPerPage) );
 
         return res.status(201).json({

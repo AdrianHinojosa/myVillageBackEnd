@@ -131,7 +131,7 @@ export const verifySchoolUserPermissions = (sArrModules: Permission[], oOptions:
     res.locals.sSchoolId = schoolUserSession.sSchoolId;
     res.locals.sType = schoolUserSession.sType || 'ADMINISTRATION';
     // P5 — the school was already fetched above, so denyTherapistAccess() costs no extra query
-    res.locals.sAccountType = (mySchool.sAccountType || 'SCHOOL') as 'SCHOOL' | 'THERAPIST';
+    res.locals.sAccountType = (mySchool.sAccountType || 'SCHOOL') as 'SCHOOL' | 'THERAPIST' | 'YOU' | 'YOU_PLUS';
     res.locals.sBillingStatus = (mySchool.sBillingStatus || 'NONE') as typeof res.locals.sBillingStatus;
 
     // Refresh Token for 120 hours (5 days)
@@ -161,13 +161,23 @@ export const denyFacultyAccess = () => async (req: Request, res: Response, next:
  * Place AFTER a school auth middleware — it reads `res.locals.sAccountType`, which those set.
  * Reads only locals, so it adds no database query.
  */
-export const denyTherapistAccess = () => async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+// Normaliza modalidad (THERAPIST legacy == YOU). Punto 18.
+const normalizeModality = (s: string | null | undefined): string => (s === 'THERAPIST' ? 'YOU' : (s || 'SCHOOL'));
+
+/**
+ * Punto 18 — bloquea el acceso (403) para las modalidades indicadas. Reusa el mensaje
+ * `therapistNotAllowed`. Ej.: IEP bloqueado para ['YOU','YOU_PLUS']; docs/usuarios para ['YOU'].
+ */
+export const denyForModality = (aBlocked: string[]) => async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { sLang, sAccountType } = res.locals;
-    if (sAccountType === 'THERAPIST') {
+    if (aBlocked.includes(normalizeModality(sAccountType))) {
         return next(new MyError(403, ErrorMessages.Schools.therapistNotAllowed[sLang]));
     }
     return next();
 };
+
+// Compat: bloquea a las cuentas tipo "You" (terapeuta único). Equivale a denyForModality(['YOU']).
+export const denyTherapistAccess = () => denyForModality(['YOU']);
 
 
 // Verify if School User has ANY of the specified permissions
@@ -230,7 +240,7 @@ export const verifySchoolUserHasAnyPermissions = (sArrModules: Permission[]) => 
     res.locals.sSchoolId = schoolUserSession.sSchoolId;
     res.locals.sType = schoolUserSession.sType || 'ADMINISTRATION';
     // P5 — the school was already fetched above, so denyTherapistAccess() costs no extra query
-    res.locals.sAccountType = (mySchool.sAccountType || 'SCHOOL') as 'SCHOOL' | 'THERAPIST';
+    res.locals.sAccountType = (mySchool.sAccountType || 'SCHOOL') as 'SCHOOL' | 'THERAPIST' | 'YOU' | 'YOU_PLUS';
     res.locals.sBillingStatus = (mySchool.sBillingStatus || 'NONE') as typeof res.locals.sBillingStatus;
 
     // Refresh Token for 120 hours (5 days)

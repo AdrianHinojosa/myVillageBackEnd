@@ -721,6 +721,87 @@ explícitamente, funciona igual — pero **no es necesario**, y ya no rompe nada
 Un detalle que sí vale la pena aprovechar: como ahora los errores de validación llegan como **409
 con mensaje traducido** en vez de tumbar la API, el interceptor de axios los muestra solos. Si
 alguna pantalla estaba tratando esos casos como "error de red", se puede simplificar.
+## Feature 18 — My Village for You / You+ (Fase 0, backend base)
+
+Plan completo: `myVillage/docs/plan-punto18-myvillage-for-you.md`. Branch `feature/point18-for-you`.
+**No hay cambios rompientes de contrato.** Notas para el front:
+
+1. **Modalidad — `sAccountType`**: valores `SCHOOL | YOU | YOU_PLUS` (además `THERAPIST` legacy, que
+   el backend trata como `YOU`). El alta/edición de colegio ya ofrece las 3 (flag `MODALITY_YOU_ENABLED`).
+2. **Cobranza You/You+** (`GET /billing/summary`): mismos campos; `dMonthlyTotal` ahora se calcula
+   por **CUOTA sobre usuarios/pacientes REALES** (base incluida + excedente), no por límites. El front
+   ya tiene el espejo (`app/utils/billing.ts`: `MODALITY_TIERS` + `computeQuotaTotal`) para previsualizar
+   el mismo monto. Solo aplica a cuentas cobradas por Stripe; **una cuenta en TRANSFER conserva su
+   cobranza manual** (los 2 colegios vivos y terapeutas migrados no cambian).
+   - You: base $490 (incl. 1 usuario / 10 pacientes), +$44/paciente extra (usuario único, sin excedente de usuario).
+   - You+: base $640 (incl. 4 usuarios / 10 pacientes), +$25/usuario extra, +$44/paciente extra.
+   - Los incluidos CUENTAN al usuario principal (You = solo principal; You+ = principal + 3).
+3. **Prueba gratis**: ahora **14 días** (antes 30) y **una sola vez por colegio** (`bTrialConsumed`).
+   Reintentar suscripción no regala otra prueba. Aplica solo a suscripciones nuevas.
+4. **Gating**: IEP bloqueado (403) para You **y** You+; documentos/registros y creación de usuarios
+   bloqueados **solo** para You (You+ SÍ tiene docs y usuarios). El front ya oculta grado/IEP en
+   You/You+ (`bIsSchoolModality`) y docs/usuarios solo en You (`bIsTherapist`).
+
+### Registro público (Fase 1) — `POST /:sLang/public/signup` (SIN auth)
+
+Para las páginas públicas de registro You/You+. No requiere token. Body:
+```
+{
+  "sAccountType": "YOU" | "YOU_PLUS",   // SCHOOL NO se acepta aquí (alta manual)
+  "sAdminName": string,                  // nombre(s) del usuario principal
+  "sLastName": string,                   // apellido paterno
+  "sSecondLastName": string,             // opcional
+  "sPhone": string,                      // celular (8-12 dígitos)
+  "sEmail": string                       // correo (único; 409 si ya existe)
+}
+```
+Respuesta OK (201): `{ message, success: true }`. El backend crea la cuenta + usuario principal,
+manda correo de bienvenida con el link `/set-password/:token` (72h) — **mismo flujo que ya usa el
+alta de colegios**. El nombre de la cuenta se arma solo del nombre de la persona (no se pide aparte).
+
+Flujo del front: formulario público → `POST /public/signup` → pantalla "revisa tu correo" → el usuario
+abre el link → `/set-password/[token]` (ya existe) → login → captura de tarjeta (`BillingCardForm.vue`
++ Stripe Elements) mostrando **antes** el monto al término de la prueba (14 días) y el costo por
+paciente/usuario extra (usar el espejo `computeQuotaTotal` de `app/utils/billing.ts`).
+
+Errores: `409` correo en uso; `429` demasiados intentos (rate-limit); `400/409` validación de campos.
+
+### `GET /billing/summary` enriquecido (para el aviso de costo)
+
+La respuesta ahora incluye 3 campos nuevos (además de los existentes):
+- `sAccountType`: `"SCHOOL" | "YOU" | "YOU_PLUS"` (modalidad de la cuenta).
+- `iActiveUsers`, `iActiveStudents`: conteos activos REALES — **solo** en You/You+ por Stripe; `null`
+  en SCHOOL/TRANSFER (donde el aviso de costo no aplica).
+
+Uso en el front: al dar de alta usuario/paciente en You/You+, calcular el excedente con el espejo
+`computeQuotaTotal(sAccountType, iActiveUsers/Students +1, dDiscountPct)` y confirmar el costo antes
+de crear. Ya implementado con el componente reutilizable `CoreDialogsCostWarning` (solo se muestra a
+perfiles con visibilidad de cobranza: usuario principal o superadmin, y solo si hay excedente real).
+
+### Enmascarado de nombre de menor (Fase 3, solo YOU)
+
+En cuentas **YOU** (terapeuta), las respuestas de alumnos ya vienen enmascaradas:
+- `GET /students` (lista): `sFullName` = primer nombre + iniciales ("Lucía P. A.") y `sLastName`/
+  `sSecondLastName` = **null**.
+- `GET /students/:id` (detalle): `sFullName` enmascarado, pero **conserva** `sName`/`sLastName`/
+  `sSecondLastName` crudos (los necesita el formulario de edición del terapeuta).
+- `GET /students/:id/report`: `oStudent.sFullName` enmascarado.
+
+Regla para el front en YOU: **siempre mostrar `sFullName`** (nunca reconstruir el nombre desde las
+partes) en listas, detalle, headers, y nombres de archivo de PDF. En SCHOOL/YOU+ no cambia nada.
+Ya aplicado en el front: StudentDetail oculta los campos de apellido en YOU y el filename del PDF de
+reporte omite el apellido.
+
+### Panel admin por modalidad (Fase 4)
+
+- `GET /schools/analytics` ahora devuelve `iSchoolsSchool`, `iSchoolsYou`, `iSchoolsYouPlus` (cuentas
+  activas por modalidad; YOU incluye THERAPIST; SCHOOL incluye las de `sAccountType` NULL).
+- `GET /schools` acepta el filtro opcional **`sAccountType`** (`SCHOOL` | `YOU` | `YOU_PLUS`); SCHOOL
+  incluye NULL, YOU incluye THERAPIST.
+- Ya aplicado en el front: dashboard con tiles por modalidad + lista de colegios con columna Modalidad
+  y filtro (ambos detrás de `MODALITY_YOU_ENABLED`).
+
+**Punto 18 completo (Fases 0-4).** Pendiente solo de config/coordinación (ver tracker).
 
 ---
 

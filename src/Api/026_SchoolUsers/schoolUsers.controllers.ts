@@ -8,6 +8,8 @@ import Services from '../../Services/Index.services';
 import mailer from '../../Services/Mail.service';
 import SuccessMessages from '../../Utils/SuccessMessage.util';
 import ErrorMessages from '../../Utils/ErrorMessages.util';
+// Modalidad (Punto 18 — You/You+ cobran por uso real, sin tope de límite de usuarios)
+import { isQuotaBasedModality } from '../../Utils/modality.util';
 
 class Controllers {
     constructor() {};
@@ -41,8 +43,9 @@ class Controllers {
         if (!mySchool) {
             return next(new MyError(404, ErrorMessages.Schools.notFound[sLang]));
         }
+        // El tope de usuarios NO aplica a You/You+ (cobran por uso real, sin límite configurado).
         const iCurrentUsers = await SchoolUserCrudQueries.countActiveSchoolUsers(sSchoolId);
-        if (iCurrentUsers >= mySchool.iUsersLimit) {
+        if (!isQuotaBasedModality(mySchool.sAccountType) && iCurrentUsers >= mySchool.iUsersLimit) {
             return next(new MyError(403, ErrorMessages.SchoolUsers.limitReached[sLang]));
         }
 

@@ -24,6 +24,7 @@ import SupportRoutes from '../029_Support/support.routes';
 import SubGoalRoutes from '../024_Goals/004_SubGoals/subGoals.routes';
 import BillingRoutes from '../030_Billing/billing.routes';
 import BillingWebhookRoutes from '../030_Billing/001_Webhooks/webhooks.routes';
+import PublicRoutes from '../031_Public/public.routes';
 
 
 function BaseRoute(env: string, module: string): string {
@@ -56,6 +57,8 @@ export default (app: Application, env: string) : void => {
     app.use(BaseRoute(env, 'support'), celebrate({ params: LanguageParams }), aH(Language()), aH(SupportRoutes));
     app.use(BaseRoute(env, 'subGoals'), celebrate({ params: LanguageParams }), aH(Language()), aH(SubGoalRoutes));
     app.use(BaseRoute(env, 'billing'), celebrate({ params: LanguageParams }), aH(Language()), aH(BillingRoutes));
+    // Punto 18 — registro público You/You+ (sin auth; con :sLang para email/mensajes).
+    app.use(BaseRoute(env, 'public'), celebrate({ params: LanguageParams }), aH(Language()), aH(PublicRoutes));
 
 
     app.all(`*`, (req: Request, res: Response, next: NextFunction): object => {

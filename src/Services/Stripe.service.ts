@@ -16,12 +16,29 @@ import Stripe from 'stripe';
 
 export const BILLING_CURRENCY: string = 'MXN';
 
-// Trial length for a new subscription. NOTE: a free trial is NOT in the signed scope document —
-// it was added on PO instruction (2026-08-07) as a concession to the client.
+// Trial length for a new subscription. Se conserva 30 (valor vigente de Development). El plan de
+// Punto 18 propone 14 días (decisión PO 2026-09-22) — PENDIENTE de confirmar con PO/Adrián antes de
+// cambiarlo, ya que afectaría también a las suscripciones Stripe de SCHOOL.
 export const TRIAL_PERIOD_DAYS: number = 30;
 
 // The contract allows the initial attempt plus two retries.
 export const MAX_FAILED_ATTEMPTS: number = 3;
+
+/**
+ * Punto 18 — tarifas por modalidad (cuota incluida + excedente por unidad). Los "incluidos"
+ * CUENTAN al usuario principal (decisión PO 2026-09-22): You = 1 usuario (solo principal),
+ * You+ = 4 usuarios (principal + 3). Precios en MXN, SIN IVA (el IVA se agrega/muestra aparte).
+ */
+export const MODALITY_TIERS: Record<string, { dBase: number; iIncludedUsers: number; iIncludedStudents: number; dPerUser: number; dPerStudent: number }> = {
+    YOU:      { dBase: 490, iIncludedUsers: 1, iIncludedStudents: 10, dPerUser: 0,  dPerStudent: 44 },
+    YOU_PLUS: { dBase: 640, iIncludedUsers: 4, iIncludedStudents: 10, dPerUser: 25, dPerStudent: 44 },
+};
+
+/** THERAPIST (legacy P5) se trata como YOU. SCHOOL y demás pasan tal cual. */
+export function normalizeModality(sAccountType: string | null | undefined): string {
+    if (sAccountType === 'THERAPIST') return 'YOU';
+    return sAccountType || 'SCHOOL';
+}
 
 /** Stripe subscription state, mirrored onto Schools.sBillingStatus. */
 export type TBillingStatus = 'NONE' | 'TRIALING' | 'ACTIVE' | 'PAST_DUE' | 'SUSPENDED' | 'CANCELED';
@@ -99,6 +116,16 @@ export function applyDiscount(dSubtotal: number, dDiscountPct: number | null | u
 export function computeMonthlyTotal(oSchool: any): number {
     if (!oSchool) return 0;
 
+    // Punto 18 — modalidades You/You+ cobran por CUOTA (base incluida + excedente sobre reales).
+    // Salvaguarda: solo aplica a cuentas cobradas por Stripe. Los terapeutas actuales quedaron en
+    // TRANSFER (migración 3040), así que NO entran aquí y conservan su cobranza actual (decisión #7)
+    // — y los colegios en vivo (SCHOOL, también TRANSFER) tampoco se ven afectados.
+    const sModality = normalizeModality(oSchool.sAccountType);
+    const bStripe = oSchool.sPaymentMethod !== 'TRANSFER';
+    if (bStripe && (sModality === 'YOU' || sModality === 'YOU_PLUS')) {
+        return computeQuotaTotal(sModality, oSchool);
+    }
+
     let dSubtotal = 0;
     if (oSchool.sBillingMode === 'VARIABLE') {
         const dPerTeacher = Number(oSchool.dAmountPerTeacher) || 0;
@@ -110,6 +137,26 @@ export function computeMonthlyTotal(oSchool: any): number {
         dSubtotal = Number(oSchool.dFixedAmount) || 0;
     }
 
+    return applyDiscount(dSubtotal, oSchool.dDiscountPct);
+}
+
+/**
+ * Punto 18 — total mensual de una cuenta You/You+ por cuota + excedente.
+ *
+ * Se cobra sobre los usuarios/pacientes REALMENTE dados de alta (no sobre límites), con piso en la
+ * tarifa base. Esto DIVERGE a propósito de la regla de VARIABLE (que usa límites) — decisión PO
+ * 2026-09-22, solo para You/You+. El recálculo en vivo se hace al cierre de ciclo (webhook), pero la
+ * fórmula es esta. El caller debe adjuntar los conteos reales (`iActiveUsers`/`iActiveStudents`, o
+ * `iUsers`/`iStudents` como en el listado de colegios).
+ */
+export function computeQuotaTotal(sModality: string, oSchool: any): number {
+    const oTier = MODALITY_TIERS[sModality];
+    if (!oTier) return 0;
+    const iUsers = Number(oSchool.iActiveUsers ?? oSchool.iUsers) || 0;
+    const iStudents = Number(oSchool.iActiveStudents ?? oSchool.iStudents) || 0;
+    const dUserOverage = Math.max(0, iUsers - oTier.iIncludedUsers) * oTier.dPerUser;
+    const dStudentOverage = Math.max(0, iStudents - oTier.iIncludedStudents) * oTier.dPerStudent;
+    const dSubtotal = oTier.dBase + dUserOverage + dStudentOverage;
     return applyDiscount(dSubtotal, oSchool.dDiscountPct);
 }
 

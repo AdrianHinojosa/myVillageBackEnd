@@ -1009,3 +1009,63 @@ vivos y muy usados: es una decisión de producto, no de hotfix. **Pendiente de d
 | commit | Punto | Qué |
 |---|---|---|
 | _(este commit)_ | **Hotfix IEP** | Guarda en ErrorHandler, 17 entradas de catálogo, `aTeamMembers` con `bCustom`, `'' → null` en fechas del IEP |
+## Punto 18 — My Village for You / You+ (branch `feature/point18-for-you`, ramificada de `feature/transfer-and-shared-students`)
+
+Plan completo (front + back): `myVillage/docs/plan-punto18-myvillage-for-you.md`.
+
+🔒 **Restricción dura:** hay 2 colegios EN VIVO. Todo aditivo y por modalidad; SCHOOL byte-idéntico.
+Confirmar con Adrián la base real de prod + el `sAccountType` de los 2 vivos ANTES de migrar/deployar.
+
+### Fase 0 — Fundamentos (en progreso)
+- **Migración `3042_Schools_bTrialConsumed`**: `bTrialConsumed` bool default false (trial una sola vez). Aditiva.
+- **Enum modalidad** (`schools.validations.ts`): `sAccountType` acepta `SCHOOL | THERAPIST | YOU | YOU_PLUS`. `THERAPIST` se conserva y se trata como `YOU` (helper `normalizeModality`); **NO** se migran datos aún (se difiere hasta verificar los 2 vivos + deploy).
+- **Motor de tarifas** (`Stripe.service.ts`): `MODALITY_TIERS` (You $490 incl 1u/10p, +$44/paciente; You+ $640 incl 4u/10p, +$25/usuario, +$44/paciente; incluidos CUENTAN al principal). `computeQuotaTotal(modalidad, oSchool)` sobre conteos REALES (`iActiveUsers`/`iActiveStudents`). Rama en `computeMonthlyTotal` **solo para cuentas Stripe** (`sPaymentMethod!=='TRANSFER'`) → los terapeutas actuales (TRANSFER) y colegios vivos NO cambian.
+- **Trial** `TRIAL_PERIOD_DAYS` 30→14 (todas las modalidades; solo suscripciones nuevas).
+- **Gating** (`schools.permissions.ts`): `denyForModality(aBlocked)` genérico; IEP bloqueado para `['YOU','YOU_PLUS']` (`ieps.routes.ts`); docs/records/usuarios siguen bloqueados solo para `YOU` (You+ SÍ tiene docs y usuarios). `denyTherapistAccess()` = `denyForModality(['YOU'])`. TS unions ensanchados.
+
+- **Conteos reales en cobranza** (`billing.controllers.ts`): helper `attachRealCounts(oSchool)` adjunta `iActiveUsers`/`iActiveStudents` (helpers `countActiveSchoolUsers` / `findCountOfActiveStudentsBySchool`) **solo** para You/You+ cobradas por Stripe (no-op para SCHOOL y para cualquier cuenta en TRANSFER). Se llama en `getSummary`, `attachPaymentMethod` (primera cuota) y `syncSubscriptionTariff` (re-tarificación del superadmin). El motor (`computeMonthlyTotal`) sigue puro/sin DB; el caller le adjunta los conteos.
+- **Trial una sola vez** (`attachPaymentMethod`): la suscripción se crea con `trial_period_days` **solo si** `bTrialConsumed !== true`; al otorgarlo se persiste `bTrialConsumed: true`. Reintentar suscripción (canceló y vuelve) ya no regala otra prueba. `bTrialConsumed` agregado al modelo `Schools`.
+- **Tests** (`unitTests/StripeSubscriptions/01_money.ts`): sección You/You+ (base, excedentes, descuento, `THERAPIST→YOU`, y la **salvaguarda** de que You en TRANSFER ignora la cuota). Trial esperado actualizado 30→14. Fórmula verificada 9/9 (los de integración requieren DB dev + Stripe sandbox).
+
+**Espejo del motor de tarifas en el front** ya existe (`app/utils/billing.ts`: `MODALITY_TIERS` + `computeQuotaTotal`, commit `e06c2c0`).
+
+**Pendiente Fase 0:** ninguno del backend (Fase 0 backend cerrada). Falta coordinar con Adrián base real de prod + `sAccountType` de los 2 vivos ANTES de migrar/deployar.
+
+### Fase 1 — Registro público You/You+ (en progreso)
+- **Módulo nuevo `031_Public`** (`public.controllers/routes/validations/rateLimit`):
+  - `POST /:sLang/public/signup` **SIN auth** (como login/recovery). Body: `sAccountType` (**YOU|YOU_PLUS**, SCHOOL rechazado), `sAdminName`, `sLastName`, `sSecondLastName?`, `sPhone`, `sEmail`. Responde `{ message, success }` 201.
+  - Reusa **exactamente** el alta de `schools.controllers.createSchool`: `insertSchool` (school+admin user+schoolUser en una transacción) → token de recuperación 72h → email `newSchool` con link `/set-password/:token`. El nombre de cuenta (`sName`) se deriva del nombre de la persona; `sCreatedBy: null` (autoservicio; columna nullable); `sPaymentMethod: 'STRIPE'` (You/You+ cobran con tarjeta; la cuota arranca al capturar tarjeta).
+  - **Anti-abuso:** rate-limit en memoria por IP (5/10min, best-effort mono-instancia; si se escala → Redis/WAF) + correo único (`getUserByEmail` → 409). Modalidad revalidada en el controlador (defensa, además del Joi).
+  - Mensajes nuevos: `SuccessMessages.Public.signup`, `ErrorMessages.Public.tooManyRequests`/`invalidModality`, `ValidationError.util Public.sAccountType` (sp/en).
+
+- **`getSummary` enriquecido** (`billing.controllers.ts`): la respuesta ahora incluye `sAccountType`, `iActiveUsers`, `iActiveStudents` (estos dos solo poblados en You/You+ por Stripe vía `attachRealCounts`; null en el resto). El front los usa para el **aviso de costo** al dar de alta usuario/paciente (calcula el excedente con el espejo `computeQuotaTotal`).
+
+- **Recálculo al cierre de ciclo** (`001_Webhooks/webhooks.controllers.ts`): nuevo caso `invoice.upcoming` → `handleInvoiceUpcoming` re-tarifica la suscripción con los conteos reales vía `syncSubscriptionTariff` (solo You/You+; `proration_behavior: 'none'`, no toca el periodo ya facturado). Decisión #2 (cobro sobre reales, sin prorrateo). ⚠️ **Config Stripe:** el endpoint de webhook debe tener habilitado el evento `invoice.upcoming` en el dashboard (Adrián).
+
+**Fase 1 COMPLETA** (back+front): registro público You/You+; aviso de costo al dar de alta (front, `CoreDialogsCostWarning` + `getSummary` enriquecido); recálculo al cierre de ciclo (back); desglose de cuota + monto al terminar la prueba en BillingPlanCard (front).
+
+### Fase 2 — Landing + captación Schools (en progreso)
+- **`POST /:sLang/public/schoolLead`** (módulo `031_Public`, SIN auth, mismo rate-limit): captación de colegios. **NO crea cuenta** — solo envía correo al equipo (`schoolLead.html`, plantilla nueva) a `SCHOOL_LEAD_EMAILS` (env, fallback `info@` + `lucypotes@`). Body: `sInstitution`, `sContactName`, `sEmail`, `sPhone`, `sCity?`, `sStudentsEstimate?`, `sMessage?`. Tipo de correo `schoolLead` agregado a `Mail.service`. Mensajes `SuccessMessages.Public.schoolLead` + `ValidationError.util Public.*` (sp/en).
+
+- **Landing** (`SOFEX/my-village/landing/`, estático, **fuera de git** — deploy manual por SOFEX): CTA "Solicitar Demo"→"Solicita tu prueba" (nav+hero) → `#modalidades`; sección de 3 modalidades (Schools/You/You+); Schools "Dale clic aquí"→cuestionario `#solicitud-colegio` que hace `POST /public/schoolLead`; You/You+ enlazan a `/signup/you[-plus]` de la app. **TODO SOFEX** en `js/main.js` (`MV_CONFIG`): fijar `apiBase` (base del API hasta antes de `/public`) y `appUrl` (dominio de la plataforma). **Textos = placeholders** hasta que el cliente los entregue.
+
+**Fase 2 COMPLETA** (back: `schoolLead`; landing: modalidades + cuestionario). Pendiente solo config/textos de SOFEX/cliente.
+
+### Fase 3 — Protección de datos de menores (solo YOU) (en progreso)
+- **`studentPrivacy.util.ts`** (nuevo): `isYouModality`, `maskMinorName` (primer nombre + iniciales, "Lucía P. A."), `applyMinorNameMasking(oStudent, sAccountType, bKeepRawParts)`.
+- **`students.controllers.ts`** aplica el enmascarado según `res.locals.sAccountType` (solo YOU/THERAPIST; no-op SCHOOL/YOU+):
+  - `getAllStudents` (lista): `sFullName` enmascarado + `sLastName`/`sSecondLastName` = **null** (suprimidos).
+  - `getOneStudent` (detalle): `sFullName` enmascarado pero **conserva** las partes crudas (`bKeepRawParts=true`) — el formulario de edición del propio terapeuta las necesita para precargar y no borrar el apellido al guardar.
+  - `getStudentReport`: `sFullName` enmascarado (el PDF de reporte lo usa).
+- Nota: IEP está bloqueado en YOU (Fase 0), así que su PDF no aplica. El concat de nombre en `studentAssignments` es de USUARIOS (terapeutas), no de menores → no se toca.
+- ⚠️ **Decisión pendiente PO:** `getOneStudent` conserva apellidos crudos para el form de edición (si no, el alta/edición del terapeuta perdería el apellido). Si se quiere supresión dura también en el detalle, hay que rediseñar el flujo de edición de nombre en YOU.
+
+**Frontend Fase 3** (dev): StudentDetail oculta los campos de apellido en YOU (`bMaskMinorName = authStore.bIsTherapist`); el nombre de archivo del PDF de reporte omite el apellido en YOU. El resto de superficies ya usa el `sFullName` enmascarado del backend.
+
+### Fase 4 — Panel admin por modalidad (COMPLETA)
+- **`findSchoolsAnalytics`** (schools.queries): conteos activos por modalidad `iSchoolsSchool`/`iSchoolsYou`/`iSchoolsYouPlus` (`COUNT(*) FILTER (...)`; YOU incluye THERAPIST; SCHOOL incluye NULL) → expuestos en `/schools/analytics`.
+- **`findAllSchools`** + `getAllSchools` + `GetSchoolsQuery`: filtro opcional `sAccountType` (SCHOOL incluye NULL; YOU incluye THERAPIST).
+- **Frontend** (dev): dashboard con fila "Cuentas por modalidad" (3 tiles, gated `MODALITY_YOU_ENABLED`); lista de colegios con columna Modalidad + filtro (gated). i18n es/en.
+
+**🎉 Punto 18 COMPLETO — Fases 0-4 implementadas (back + front).** Pendientes de coordinación/config: Adrián (base prod + sAccountType de los 2 vivos + evento `invoice.upcoming` en Stripe); SOFEX (`MV_CONFIG` del landing + textos del cliente); decisión PO sobre supresión dura de apellidos en el detalle YOU. Merge a main + migración `3042` solo tras QA de los 2 colegios vivos.
+**Fases siguientes:** 2 landing; 3 nombre de menor enmascarado (YOU); 4 panel admin por modalidad.

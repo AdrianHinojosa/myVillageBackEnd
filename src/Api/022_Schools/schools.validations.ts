@@ -1,8 +1,12 @@
 import { Joi } from 'celebrate';
 import * as Validations from '../../Middlewares/Validations.mw';
 
-// P5 — account type. Optional on the wire; defaults to SCHOOL so existing callers are unaffected.
-export const AccountType = Joi.string().valid('SCHOOL', 'THERAPIST')
+// P5 + Punto 18 — modalidad de cuenta. Opcional en el wire; default SCHOOL.
+//   SCHOOL     → colegio (todas las funciones)
+//   YOU        → terapeuta/paciente, usuario único, sin docs, sin IEP  (= el antiguo THERAPIST)
+//   YOU_PLUS   → centro/terapeutas/pacientes, multiusuario + docs, solo IEP restringido
+// THERAPIST se conserva por tolerancia: se trata como YOU en todo el código hasta migrar los datos.
+export const AccountType = Joi.string().valid('SCHOOL', 'THERAPIST', 'YOU', 'YOU_PLUS')
     .allow(null).allow('').error(new Error("Schools sAccountType"));
 
 /**
@@ -60,6 +64,9 @@ export const CreateSchoolBody = Validations.JoiObjectKeys({
 export const GetSchoolsQuery = Validations.JoiObjectKeys({
     ...Validations.Filters,
     bBlocked: Validations.Boolean("Schools bBlocked"),
+    // Punto 18 — filtro opcional por modalidad en el listado de colegios (superadmin).
+    sAccountType: Joi.string().valid('SCHOOL', 'THERAPIST', 'YOU', 'YOU_PLUS').allow(null).allow('')
+        .error(new Error("Schools sAccountType")),
 });
 
 export const GetSchoolParams = Validations.JoiObjectKeys({

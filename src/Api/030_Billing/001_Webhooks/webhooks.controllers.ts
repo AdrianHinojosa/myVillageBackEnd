@@ -2,12 +2,14 @@ import { Response, Request, NextFunction } from 'express';
 
 import BillingQueries from '../billing.queries';
 import MailEvent from '../../../Services/Mail.service';
+import { syncSubscriptionTariff } from '../billing.controllers';
 import stripe, {
     MAX_FAILED_ATTEMPTS,
     isStripeConfigured,
     fromStripeAmount,
     mapStripeStatus,
-    fromStripeTimestamp
+    fromStripeTimestamp,
+    normalizeModality
 } from '../../../Services/Stripe.service';
 
 /**
@@ -174,6 +176,30 @@ async function handleSubscriptionChanged(oSub: any): Promise<void> {
     await BillingQueries.patchSchoolBilling(oSchool.sSchoolId, oPatch);
 }
 
+/**
+ * Punto 18 — recálculo al cierre de ciclo (decisión #2: You/You+ se cobran sobre usuarios/pacientes
+ * REALES, sin prorrateo). Stripe emite `invoice.upcoming` antes de renovar; ahí re-tarificamos el
+ * precio de la suscripción con los conteos actuales para que la próxima factura refleje el uso real.
+ *
+ * `syncSubscriptionTariff` adjunta los conteos reales, recalcula con el motor de cuota y actualiza el
+ * precio con `proration_behavior: 'none'` (no toca el periodo ya facturado). Solo aplica a You/You+;
+ * SCHOOL (fija/variable/transferencia) no se re-tarifica aquí. Best-effort: si Stripe falla, se loguea
+ * y la factura sale con el precio previo (se corrige en el siguiente ciclo o al editar la tarifa).
+ */
+async function handleInvoiceUpcoming(oInvoice: any): Promise<void> {
+    const oSchool = await BillingQueries.findSchoolByStripeCustomer(String(oInvoice.customer));
+    if (!oSchool) {
+        console.error('Webhook invoice.upcoming: no school for customer', oInvoice.customer);
+        return;
+    }
+
+    const sModality = normalizeModality(oSchool.sAccountType);
+    if (sModality !== 'YOU' && sModality !== 'YOU_PLUS') return;
+
+    const oResult = await syncSubscriptionTariff(oSchool);
+    console.log(`Webhook invoice.upcoming: re-tarifa ${oSchool.sSchoolId} →`, oResult);
+}
+
 class Controllers {
     constructor() {};
 
@@ -221,6 +247,10 @@ class Controllers {
                 case 'customer.subscription.updated':
                 case 'customer.subscription.deleted':
                     await handleSubscriptionChanged(oEvent.data.object);
+                    break;
+                case 'invoice.upcoming':
+                    // Punto 18 — recálculo al cierre de ciclo (You/You+ sobre reales).
+                    await handleInvoiceUpcoming(oEvent.data.object);
                     break;
                 default:
                     // Everything else is acknowledged and ignored on purpose.

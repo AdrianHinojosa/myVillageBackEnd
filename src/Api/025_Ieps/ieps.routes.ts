@@ -3,7 +3,7 @@ import aH from "express-async-handler";
 import { celebrate } from "celebrate";
 import IepController from './ieps.controllers';
 import * as IepValidations from './ieps.validations';
-import { verifySchoolUserPermissions, denyTherapistAccess } from '../../Middlewares/001_Permissions.mw.ts/schools.permissions';
+import { verifySchoolUserPermissions, denyForModality } from '../../Middlewares/001_Permissions.mw.ts/schools.permissions';
 
 const router = Router();
 
@@ -12,7 +12,7 @@ const router = Router();
 router.post('/',
     celebrate({ body: IepValidations.UpsertIepBody }),
     aH(verifySchoolUserPermissions([{ sModuleName: 'General', sActionCode: 'WRITE' }])),
-    aH(denyTherapistAccess() as any),
+    aH(denyForModality(['YOU', 'YOU_PLUS']) as any),
     aH(IepController.upsertIep)
 );
 
@@ -21,7 +21,7 @@ router.post('/',
 router.get('/',
     celebrate({ query: IepValidations.GetIepQuery }),
     aH(verifySchoolUserPermissions([{ sModuleName: 'General', sActionCode: 'READ' }])),
-    aH(denyTherapistAccess() as any),
+    aH(denyForModality(['YOU', 'YOU_PLUS']) as any),
     aH(IepController.getIep)
 );
 

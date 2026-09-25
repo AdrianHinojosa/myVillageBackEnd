@@ -15,8 +15,26 @@ import stripe, {
     hasChargeableTariff,
     mapStripeStatus,
     fromStripeTimestamp,
-    fromStripeAmount
+    fromStripeAmount,
+    normalizeModality
 } from '../../Services/Stripe.service';
+import StudentQueries from '../023_Students/students.queries';
+import SchoolUserQueries from '../026_SchoolUsers/schoolUsers.queries';
+
+/**
+ * Punto 18 — You/You+ cobran sobre usuarios/pacientes REALES (base incluida + excedente). El motor
+ * de tarifas (`computeMonthlyTotal`) es puro/sin DB, así que el caller le adjunta los conteos activos
+ * antes de calcular. Solo aplica a You/You+ cobradas por Stripe: SCHOOL y cualquier cuenta en
+ * TRANSFER (los 2 colegios en vivo y los terapeutas migrados) NO se tocan y conservan su cobranza.
+ */
+async function attachRealCounts(oSchool: any): Promise<void> {
+    if (!oSchool || !oSchool.sSchoolId) return;
+    const sModality = normalizeModality(oSchool.sAccountType);
+    const bStripe = oSchool.sPaymentMethod !== 'TRANSFER';
+    if (!bStripe || (sModality !== 'YOU' && sModality !== 'YOU_PLUS')) return;
+    oSchool.iActiveUsers = await SchoolUserQueries.countActiveSchoolUsers(oSchool.sSchoolId);
+    oSchool.iActiveStudents = await StudentQueries.findCountOfActiveStudentsBySchool(oSchool.sSchoolId);
+}
 
 /**
  * Punto 3 — Cobranza automática (Stripe).
@@ -135,6 +153,9 @@ class Controllers {
         const oSchool = await BillingQueries.findSchoolBilling(sSchoolId);
         if (!oSchool) return next(new MyError(404, ErrorMessages.Schools.notFound[sLang]));
 
+        // You/You+: el total refleja usuarios/pacientes reales (no-op para SCHOOL y TRANSFER).
+        await attachRealCounts(oSchool);
+
         return res.status(200).json({
             message: SuccessMessages.Billing.getSummary[sLang],
             results: {
@@ -159,6 +180,12 @@ class Controllers {
                 // iUsersLimit — the column predates the billing feature.
                 iTeachersLimit: oSchool.iUsersLimit ?? null,
                 iStudentsLimit: oSchool.iStudentsLimit ?? null,
+                // Punto 18 — modalidad + conteos activos reales (You/You+), para el aviso de costo del
+                // front al dar de alta usuario/paciente. `attachRealCounts` los pobló arriba solo en
+                // You/You+ por Stripe; en el resto van null (el aviso no aplica).
+                sAccountType: oSchool.sAccountType || 'SCHOOL',
+                iActiveUsers: oSchool.iActiveUsers ?? null,
+                iActiveStudents: oSchool.iActiveStudents ?? null,
                 // Surfaced so nobody mistakes a sandbox for production while testing.
                 bTestMode: isStripeTestMode()
             },
@@ -292,6 +319,9 @@ class Controllers {
             return next(new MyError(409, ErrorMessages.Schools.stripeNotForTransfer[sLang]));
         }
 
+        // You/You+: la primera cuota se cobra sobre usuarios/pacientes reales (no-op para SCHOOL).
+        await attachRealCounts(oSchool);
+
         const sCustomerId = await ensureStripeCustomer(oSchool);
 
         // Use the id from the RESPONSE, not the request. Attaching can yield a different id than
@@ -316,9 +346,9 @@ class Controllers {
             const dTotal = computeMonthlyTotal(oSchool);
             const sPriceId = await createPriceForSchool(oSchool, dTotal);
 
-            // 30-day free trial — PO instruction 2026-08-07, NOT in the signed scope document — and
-            // once per school (PO, 2026-08-19). A school that already had a subscription starts
-            // billing immediately.
+            // 30-day free trial — PO instruction 2026-08-07, NOT in the signed scope document — y una
+            // sola vez por colegio (PO, 2026-08-19), vía bTrialAlreadyUsed (consulta Stripe, sin
+            // columna). Se conserva este enfoque de Adrián; el bTrialConsumed de Point 18 se descartó.
             const bUsed = await bTrialAlreadyUsed(sCustomerId);
 
             const oSub: any = await stripe.subscriptions.create({
@@ -669,6 +699,8 @@ export async function syncSubscriptionTariff(oSchool: any): Promise<{ bSynced: b
     if (!oSchool?.sStripeSubscriptionId) return { bSynced: false, sReason: 'no-subscription' };
 
     try {
+        // You/You+: la re-tarificación usa usuarios/pacientes reales (no-op para SCHOOL y TRANSFER).
+        await attachRealCounts(oSchool);
         const dTotal = computeMonthlyTotal(oSchool);
         if (dTotal <= 0) return { bSynced: false, sReason: 'no-chargeable-tariff' };
 

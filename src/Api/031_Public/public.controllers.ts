@@ -103,7 +103,7 @@ class Controllers {
             .map((s: string) => s.trim())
             .filter(Boolean);
 
-        MailEvent.emit('SendEmail', {
+        mailer.emit('SendEmail', {
             aEmails: aLeadEmails,
             oData: {
                 sInstitution,

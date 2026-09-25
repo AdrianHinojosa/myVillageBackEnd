@@ -18,6 +18,8 @@ import StorageServices from '../../Services/Storage.services';
 
 // Privacy (Punto 18 Fase 3 — enmascarado de nombre de menor en YOU)
 import { applyMinorNameMasking } from '../../Utils/studentPrivacy.util';
+// Modalidad (Punto 18 — You/You+ cobran por uso real, sin tope de límite)
+import { isQuotaBasedModality } from '../../Utils/modality.util';
 
 // Messages
 import SuccessMessages from '../../Utils/SuccessMessage.util';
@@ -63,8 +65,9 @@ class Controllers {
             return next(new MyError(404, ErrorMessages.Schools.notFound[sLang]));
         }
 
+        // El tope de alumnos NO aplica a You/You+ (cobran por uso real, sin límite configurado).
         const iCurrentStudents = await StudentQueries.findCountOfActiveStudentsBySchool(sSchoolId);
-        if (iCurrentStudents >= mySchool.iStudentsLimit) {
+        if (!isQuotaBasedModality(mySchool.sAccountType) && iCurrentStudents >= mySchool.iStudentsLimit) {
             return next(new MyError(400, ErrorMessages.Students.limitReached[sLang]));
         }
 

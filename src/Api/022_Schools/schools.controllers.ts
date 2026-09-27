@@ -60,10 +60,13 @@ class Controllers {
         // CREATE Recovery Session Token.
         await RecoverySessionQueries.insertTokenByUserId(Token, myObject.user.sUserId, ExpiredDate);
 
-        let sMyUrl = `https://${process.env.NODE_ENV}.${process.env.SCHOOLS_PLATFORM}/set-password/${Token}`;
+        // Protocolo desde URL_TYPE (http en dev/S3-website, https en prod). Antes iba hardcodeado a
+        // https, lo que rompía el link en el sitio de dev (S3 website endpoint no sirve https).
+        const sProto = process.env.URL_TYPE || 'https';
+        let sMyUrl = `${sProto}://${process.env.NODE_ENV}.${process.env.SCHOOLS_PLATFORM}/set-password/${Token}`;
 
         if (process.env.NODE_ENV === 'production') {
-            sMyUrl = `https://${process.env.SCHOOLS_PLATFORM}/set-password/${Token}`;
+            sMyUrl = `${sProto}://${process.env.SCHOOLS_PLATFORM}/set-password/${Token}`;
         }
 
         await mailer.emit('SendEmail', {

@@ -6,7 +6,7 @@ import Handlebars from 'handlebars';
 import * as FsAux from 'fs/promises';
 
 interface IMailTypes {
-    sType: 'newAdmin' | 'forgotPassword' | 'newSchool' | 'supportTicket' | 'billingPastDue' | 'schoolLead'
+    sType: 'newAdmin' | 'forgotPassword' | 'newSchool' | 'supportTicket' | 'billingPastDue' | 'schoolLead' | 'schoolLeadThanks'
 }
 
 interface IMail {

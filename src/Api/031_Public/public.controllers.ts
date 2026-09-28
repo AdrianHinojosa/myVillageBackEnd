@@ -124,6 +124,17 @@ class Controllers {
             sSubject: `[Prueba Colegio] ${sInstitution}`
         });
 
+        // Acuse al colegio que llenó el formulario ("Gracias por tu información, te contactaremos").
+        // NO crea cuenta ni manda link de contraseña — eso es solo para el registro You/You+.
+        if (sEmail) {
+            mailer.emit('SendEmail', {
+                aEmails: [sEmail],
+                oData: { sContactName: sContactName || '', sInstitution },
+                sType: 'schoolLeadThanks',
+                sSubject: 'Gracias por tu solicitud — My Village'
+            });
+        }
+
         return res.status(200).json({
             message: SuccessMessages.Public.schoolLead[sLang],
             success: true

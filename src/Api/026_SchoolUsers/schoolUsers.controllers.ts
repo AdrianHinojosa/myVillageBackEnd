@@ -49,6 +49,12 @@ class Controllers {
             return next(new MyError(403, ErrorMessages.SchoolUsers.limitReached[sLang]));
         }
 
+        // Punto 18 — You/You+ (cobradas por Stripe) deben tener tarjeta/suscripción antes de agregar
+        // usuarios. La prueba de 14 días arranca al capturar la tarjeta.
+        if (isQuotaBasedModality(mySchool.sAccountType) && mySchool.sPaymentMethod !== 'TRANSFER' && !mySchool.sStripeSubscriptionId) {
+            return next(new MyError(402, ErrorMessages.Billing.needsPaymentMethod[sLang]));
+        }
+
         // Check email uniqueness within school
         const existingUser = await SchoolUserCrudQueries.emailExistsInSchool(sSchoolId, sEmail);
         if (existingUser) {

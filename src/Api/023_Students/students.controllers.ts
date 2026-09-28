@@ -71,6 +71,12 @@ class Controllers {
             return next(new MyError(400, ErrorMessages.Students.limitReached[sLang]));
         }
 
+        // Punto 18 — You/You+ (cobradas por Stripe) deben tener tarjeta/suscripción antes de dar de
+        // alta perfiles. La prueba de 14 días arranca al capturar la tarjeta.
+        if (isQuotaBasedModality(mySchool.sAccountType) && mySchool.sPaymentMethod !== 'TRANSFER' && !mySchool.sStripeSubscriptionId) {
+            return next(new MyError(402, ErrorMessages.Billing.needsPaymentMethod[sLang]));
+        }
+
         // Feature 2 — alta por folio existente: re-verifica identidad (defensa) y evita duplicados.
         if (sPersonId) {
             const sFullName = [sName, sLastName, sSecondLastName].filter(Boolean).join(' ');

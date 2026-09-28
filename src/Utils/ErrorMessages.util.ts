@@ -379,6 +379,11 @@ export default {
             sp: "Tu colegio no tiene una tarifa configurada. Contacta al administrador.",
             en: "Your school has no configured tariff. Please contact the administrator."
         },
+        // Punto 18 — You/You+ deben registrar su tarjeta antes de dar de alta perfiles/usuarios.
+        needsPaymentMethod: {
+            sp: "Para empezar a usar la plataforma, primero registra tu método de pago en Facturación. Tu prueba de 14 días inicia al capturar tu tarjeta.",
+            en: "To start using the platform, first add your payment method under Billing. Your 14-day trial begins once you add your card."
+        },
         // P3 recovery — "Reintentar pago" (2026-08-19).
         nothingToPay: {
             sp: "No hay un cobro pendiente por pagar en este momento.",

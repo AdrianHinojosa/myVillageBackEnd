@@ -62,11 +62,14 @@ class Controllers {
 
         // Protocolo desde URL_TYPE (http en dev/S3-website, https en prod). Antes iba hardcodeado a
         // https, lo que rompía el link en el sitio de dev (S3 website endpoint no sirve https).
-        const sProto = process.env.URL_TYPE || 'https';
-        let sMyUrl = `${sProto}://${process.env.NODE_ENV}.${process.env.SCHOOLS_PLATFORM}/set-password/${Token}`;
+        const sProto = (process.env.URL_TYPE || 'https').trim();
+        // Sanitiza SCHOOLS_PLATFORM: recorta espacios y cualquier comentario inline (#...) que pueda
+        // venir pegado en el env (p.ej. "...amazonaws.com   # keep as-is") y romper el link del correo.
+        const sPlatform = (process.env.SCHOOLS_PLATFORM || '').trim().split(/[\s#]/)[0];
+        let sMyUrl = `${sProto}://${process.env.NODE_ENV}.${sPlatform}/set-password/${Token}`;
 
         if (process.env.NODE_ENV === 'production') {
-            sMyUrl = `${sProto}://${process.env.SCHOOLS_PLATFORM}/set-password/${Token}`;
+            sMyUrl = `${sProto}://${sPlatform}/set-password/${Token}`;
         }
 
         await mailer.emit('SendEmail', {

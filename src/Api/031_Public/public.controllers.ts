@@ -88,6 +88,24 @@ class Controllers {
             sType: 'newSchool'
         });
 
+        // Notificación al equipo (Lucy) de que alguien se registró — cualquier vertiente You/You+.
+        const aNotifyEmails = (process.env.SIGNUP_NOTIFY_EMAILS || 'lucy.potes@myvillage.com.mx')
+            .split(',')
+            .map((s: string) => s.trim())
+            .filter(Boolean);
+        const sModalityLabel = sAccountType === 'YOU_PLUS' ? 'My Village for You+' : 'My Village for You';
+        mailer.emit('SendEmail', {
+            aEmails: aNotifyEmails,
+            sSubject: `[Nuevo registro] ${sModalityLabel} — ${sName}`,
+            oData: {
+                sModalityLabel,
+                sFullName: sName,
+                sEmail,
+                sPhone
+            },
+            sType: 'signupNotify'
+        });
+
         return res.status(201).json({
             message: SuccessMessages.Public.signup[sLang],
             success: true

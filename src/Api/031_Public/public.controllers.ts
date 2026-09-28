@@ -122,7 +122,7 @@ class Controllers {
 
         // Bandeja de captación (spec Fase 2). Configurable por env; con fallback a las dos direcciones.
         const aLeadEmails = (process.env.SCHOOL_LEAD_EMAILS
-            || 'info@myvillage.com.mx,lucypotes@myvillage.com.mx')
+            || 'info@myvillage.com.mx,lucy.potes@myvillage.com.mx')
             .split(',')
             .map((s: string) => s.trim())
             .filter(Boolean);

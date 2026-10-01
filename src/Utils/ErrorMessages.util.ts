@@ -202,6 +202,11 @@ export default {
             en: "Error fetching school analytics."
         },
 
+        operationSummaryError: {
+            sp: "Error al obtener el resumen de operación.",
+            en: "Error fetching the operation summary."
+        },
+
     },
 
     SchoolUsers: {

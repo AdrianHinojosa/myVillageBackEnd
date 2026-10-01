@@ -1069,3 +1069,21 @@ Confirmar con Adrián la base real de prod + el `sAccountType` de los 2 vivos AN
 
 **🎉 Punto 18 COMPLETO — Fases 0-4 implementadas (back + front).** Pendientes de coordinación/config: Adrián (base prod + sAccountType de los 2 vivos + evento `invoice.upcoming` en Stripe); SOFEX (`MV_CONFIG` del landing + textos del cliente); decisión PO sobre supresión dura de apellidos en el detalle YOU. Merge a main + migración `3042` solo tras QA de los 2 colegios vivos.
 **Fases siguientes:** 2 landing; 3 nombre de menor enmascarado (YOU); 4 panel admin por modalidad.
+
+### Resumen de operación por modalidad (feedback Lucy, oct-2026)
+Origen: feedback de Lucy sobre el panel admin ("quitar promedios", "picarle a cada modalidad",
+"accesos por modalidad en el sidebar", "ver si se usa la plataforma"). Decisión de producto: **resumen
+en vivo** (sin histórico, sin cron, sin filtros de fecha) en una tab nueva del dashboard + exportable.
+
+- **`findOperationSummary`** (schools.queries): resumen en vivo por modalidad. Una sola query agrupada
+  por modalidad normalizada (`SCHOOL` incluye NULL; `YOU` incluye `THERAPIST`; `YOU_PLUS`) que devuelve,
+  sobre cuentas **activas y no bloqueadas**: `iAccounts`, `iUsers` (SchoolUsers activos), `iStudents`
+  (Students activos), `iGoals` (metas `ACTIVE`, solo padres) y `dProgress` (promedio real a nivel meta:
+  `SUM(dProgress)/SUM(metas)`, no promedio de promedios). Siempre devuelve las 3 modalidades (0 si no hay).
+- **`GET /schools/operationSummary`** (controller `getOperationSummary`, ruta nueva ANTES de `/:sSchoolId`,
+  permiso `General READ`): responde `{ message, aSummary, success }`. Sin parámetros.
+- Mensajes: `SuccessMessages.Schools.getOperationSummary` + `ErrorMessages.Schools.operationSummaryError` (sp/en).
+- **Validado en local**: SQL directa + endpoint vía login superadmin (lucy.potes) → 200 con las 3 modalidades.
+- **Frontend** (dev): dashboard en tabs (General / Operación); se **quitaron los promedios** y los tiles
+  de modalidad migraron a la tab Operación como tabla clickeable (fila → lista filtrada `?sAccountType=`);
+  export PDF (captura) + Excel (CSV); sidebar superadmin con 3 accesos por modalidad.

@@ -153,6 +153,10 @@ export default {
         getAnalytics: {
             sp: 'Se ha obtenido exitosamente la analítica de escuelas',
             en: "The school analytics were successfully found"
+        },
+        getOperationSummary: {
+            sp: 'Se ha obtenido exitosamente el resumen de operación',
+            en: "The operation summary was successfully found"
         }
     },
 

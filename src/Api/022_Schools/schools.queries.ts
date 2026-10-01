@@ -568,6 +568,75 @@ class Queries {
     }
 
 
+    // Punto 18 — Resumen de operación "en vivo" por modalidad (tab Operación del dashboard).
+    // Cuenta el estado ACTUAL (sin filtros de fecha): por cada modalidad (SCHOOL incluye NULL/legacy;
+    // YOU incluye THERAPIST; YOU_PLUS) devuelve cuentas, usuarios, estudiantes, metas activas y el
+    // progreso promedio real a nivel meta (SUM(progreso)/SUM(metas), no promedio de promedios).
+    // El front arma la fila TOTAL; aquí solo devolvemos las 3 modalidades siempre presentes.
+    static async findOperationSummary() {
+        const result = await db.raw(`
+            SELECT
+                CASE
+                    WHEN sc."sAccountType" = 'YOU_PLUS'            THEN 'YOU_PLUS'
+                    WHEN sc."sAccountType" IN ('YOU', 'THERAPIST') THEN 'YOU'
+                    ELSE 'SCHOOL'
+                END                                                                 AS "sModality",
+                COUNT(DISTINCT sc."sSchoolId")                            ::integer  AS "iAccounts",
+                COALESCE(SUM(u_cnt.cnt), 0)                              ::integer  AS "iUsers",
+                COALESCE(SUM(s_cnt.cnt), 0)                              ::integer  AS "iStudents",
+                COALESCE(SUM(g_agg.cnt), 0)                             ::integer  AS "iGoals",
+                COALESCE(ROUND((SUM(g_agg.sum_prog) / NULLIF(SUM(g_agg.cnt), 0))::numeric, 0), 0) ::integer AS "dProgress"
+            FROM "Schools" sc
+            LEFT JOIN (
+                SELECT su."sSchoolId", COUNT(su."sSchoolUserId") AS cnt
+                FROM "SchoolUsers" su
+                JOIN "Users" u ON u."sUserId" = su."sSchoolUserId" AND u."bActive" = true
+                GROUP BY su."sSchoolId"
+            ) AS u_cnt ON u_cnt."sSchoolId" = sc."sSchoolId"
+            LEFT JOIN (
+                SELECT "sSchoolId", COUNT("sStudentId") AS cnt
+                FROM "Students"
+                WHERE "bActive" = true
+                GROUP BY "sSchoolId"
+            ) AS s_cnt ON s_cnt."sSchoolId" = sc."sSchoolId"
+            LEFT JOIN (
+                SELECT s."sSchoolId",
+                       COUNT(g."sGoalId")          AS cnt,
+                       COALESCE(SUM(g."dProgress"), 0) AS sum_prog
+                FROM "Goals" g
+                JOIN "Students" s ON s."sStudentId" = g."sStudentId" AND s."bActive" = true
+                WHERE g."bActive" = true AND g."sStatus" = 'ACTIVE' AND g."sParentGoalId" IS NULL
+                GROUP BY s."sSchoolId"
+            ) AS g_agg ON g_agg."sSchoolId" = sc."sSchoolId"
+            WHERE sc."bActive" = true AND sc."bBlocked" = false
+            GROUP BY 1
+        `);
+
+        // Siempre devolver las 3 modalidades, aunque alguna tenga 0 cuentas (para que la tab se vea completa).
+        const aModalities = ['SCHOOL', 'YOU_PLUS', 'YOU'];
+        const oByModality = {};
+        for (const row of result.rows) {
+            oByModality[row.sModality] = {
+                sModality:  row.sModality,
+                iAccounts:  parseInt(row.iAccounts  ?? '0'),
+                iUsers:     parseInt(row.iUsers     ?? '0'),
+                iStudents:  parseInt(row.iStudents  ?? '0'),
+                iGoals:     parseInt(row.iGoals     ?? '0'),
+                dProgress:  parseInt(row.dProgress  ?? '0'),
+            };
+        }
+
+        return aModalities.map((sModality) => oByModality[sModality] || {
+            sModality,
+            iAccounts: 0,
+            iUsers: 0,
+            iStudents: 0,
+            iGoals: 0,
+            dProgress: 0,
+        });
+    }
+
+
     // Registra un pago por transferencia: avanza el ciclo mensual +1 mes (desde el vencimiento
     // anterior, o desde hoy si aún no hay uno) y deja el pago en el historial para auditoría.
     static async registerTransferPayment(sSchoolId, sLastUpdatedBy) {

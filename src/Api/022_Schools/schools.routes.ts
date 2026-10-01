@@ -15,6 +15,11 @@ router.get('/analytics',
         aH(verifyAdminPermissions(  [  {sModuleName: 'General', sActionCode: 'READ' }  ])),
         aH(SchoolController.getSchoolsAnalytics));
 
+// Operation summary — resumen por modalidad en vivo (tab Operación del dashboard)
+router.get('/operationSummary',
+        aH(verifyAdminPermissions(  [  {sModuleName: 'General', sActionCode: 'READ' }  ])),
+        aH(SchoolController.getOperationSummary));
+
 // Create
 router.post('/',
             celebrate({ body: SchoolValidations.CreateSchoolBody }),

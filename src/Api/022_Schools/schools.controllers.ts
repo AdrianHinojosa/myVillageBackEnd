@@ -304,6 +304,25 @@ class Controllers {
         }
     }
 
+
+    // Get operation summary (resumen por modalidad, en vivo, sin filtros de fecha)
+    async getOperationSummary(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
+        const {sLang} = res.locals;
+
+        try {
+            const aSummary = await SchoolQueries.findOperationSummary();
+
+            return res.status(200).json({
+                message: SuccessMessages.Schools.getOperationSummary[sLang],
+                aSummary,
+                success: true
+            })
+        } catch (err) {
+            console.error('Operation summary query error:', err);
+            return next(new MyError(500, ErrorMessages.Schools.operationSummaryError[sLang]));
+        }
+    }
+
 }
 
 export default new Controllers();

@@ -803,6 +803,17 @@ reporte omite el apellido.
 
 **Punto 18 completo (Fases 0-4).** Pendiente solo de config/coordinación (ver tracker).
 
+### Resumen de operación por modalidad (feedback Lucy, oct-2026)
+
+- Endpoint nuevo **`GET /schools/operationSummary`** (permiso `General READ`, sin parámetros). Devuelve
+  `{ message, aSummary, success }` donde `aSummary` es un arreglo con las 3 modalidades (orden: `SCHOOL`,
+  `YOU_PLUS`, `YOU`), cada una con: `sModality`, `iAccounts`, `iUsers`, `iStudents`, `iGoals`, `dProgress`.
+  Datos **en vivo** (sin filtros de fecha). `SCHOOL` incluye cuentas con `sAccountType` NULL; `YOU` incluye
+  `THERAPIST`.
+- Ya aplicado en el front (dev): tab "Operación" en el dashboard (tabla por modalidad + export PDF/Excel),
+  promedios eliminados, filas clickeables y accesos de modalidad en el sidebar (todo detrás de
+  `MODALITY_YOU_ENABLED`). Usa el filtro ya existente `GET /schools?sAccountType=`.
+
 ---
 
 ## Resolved / already applied

@@ -10,7 +10,7 @@ import {
     pickFixture, mintAuth, snapshotSchool, restoreSchool, setTariff, readSchool,
     deletePaymentsFor, hasStripe, trackCustomer, trackSubscription
 } from './helpers';
-import stripe from '../../Services/Stripe.service';
+import stripe, { TRIAL_PERIOD_DAYS } from '../../Services/Stripe.service';
 
 export default async function run(): Promise<void> {
     setFile('04_cards');
@@ -60,7 +60,7 @@ export default async function run(): Promise<void> {
         check('failure counter starts at 0', Number(oSchool2.iFailedAttempts), 0);
 
         const oSub: any = await stripe.subscriptions.retrieve(oSchool2.sStripeSubscriptionId);
-        check('trial really is 30 days', Math.round((oSub.trial_end - oSub.trial_start) / 86400), 30);
+        check(`trial really is ${TRIAL_PERIOD_DAYS} days`, Math.round((oSub.trial_end - oSub.trial_start) / 86400), TRIAL_PERIOD_DAYS);
         const oPrice: any = await stripe.prices.retrieve(oSchool2.sStripePriceId);
         check('Stripe price is 1170000 centavos', oPrice.unit_amount, 1170000);
         check('currency mxn', oPrice.currency, 'mxn');

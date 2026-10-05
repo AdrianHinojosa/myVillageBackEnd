@@ -733,8 +733,11 @@ Plan completo: `myVillage/docs/plan-punto18-myvillage-for-you.md`. Branch `featu
    ya tiene el espejo (`app/utils/billing.ts`: `MODALITY_TIERS` + `computeQuotaTotal`) para previsualizar
    el mismo monto. Solo aplica a cuentas cobradas por Stripe; **una cuenta en TRANSFER conserva su
    cobranza manual** (los 2 colegios vivos y terapeutas migrados no cambian).
-   - You: base $490 (incl. 1 usuario / 10 pacientes), +$44/paciente extra (usuario único, sin excedente de usuario).
-   - You+: base $640 (incl. 4 usuarios / 10 pacientes), +$25/usuario extra, +$44/paciente extra.
+   - You: base **$568.40** (incl. 1 usuario / 10 pacientes), **+$51.04**/paciente extra (usuario único, sin excedente de usuario).
+   - You+: base **$742.40** (incl. 4 usuarios / 10 pacientes), **+$29.00**/usuario extra, **+$51.04**/paciente extra.
+   - ⚠️ **Montos CON IVA incluido** (decisión PO 2026-10-05). Son los que se muestran y los que se cobran:
+     Stripe recibe la cifra tal cual y NO lleva tax rate. Equivalencia con la cotización firmada, que lista
+     precios sin IVA: 490→568.40, 640→742.40, 44→51.04, 25→29.00.
    - Los incluidos CUENTAN al usuario principal (You = solo principal; You+ = principal + 3).
 3. **Prueba gratis**: ahora **14 días** (antes 30) y **una sola vez por colegio** (`bTrialConsumed`).
    Reintentar suscripción no regala otra prueba. Aplica solo a suscripciones nuevas.

@@ -16,7 +16,7 @@ import { db } from '../../Config/Db.config';
 import stripe from '../../Services/Stripe.service';
 import {
     results, assertSafeDatabase, assertSafeStripe, hasStripe,
-    releaseSessions, releaseStripe
+    releaseSessions, releaseStripe, destroyFixtures, countFixtureResidue, FIXTURE_TAG
 } from './helpers';
 
 interface ISuite { sName: string; run: () => Promise<void>; }
@@ -51,6 +51,10 @@ const aSuites: ISuite[] = [
     console.log(`  webhook  : ${process.env.STRIPE_WEBHOOK_SECRET ? 'secret present' : 'no secret — a local one is generated for signature tests'}`);
     if (aFilters.length) console.log(`  filter   : ${aFilters.join(', ')}`);
 
+    // Clear anything an interrupted run left behind, so this run starts from a known state.
+    const iStale = await destroyFixtures();
+    console.log(`  fixtures : own school per file, tagged "${FIXTURE_TAG}"${iStale ? ` (removed ${iStale} stale)` : ''}`);
+
     for (const oSuite of aSuites) {
         if (aFilters.length && !aFilters.some(f => oSuite.sName.startsWith(f))) continue;
         console.log(`\n▸ ${oSuite.sName}`);
@@ -67,6 +71,8 @@ const aSuites: ISuite[] = [
     console.log('\n▸ teardown');
     await releaseSessions();
     console.log('     test sessions removed');
+    const iRemoved = await destroyFixtures();
+    console.log(`     ${iRemoved} fixture school(s) removed with their users and payments`);
     if (hasStripe()) {
         const oFreed = await releaseStripe(stripe);
         console.log(`     stripe sandbox cleaned: ${oFreed.subs} subscription(s), ${oFreed.customers} customer(s), ${oFreed.clocks} clock(s)`);
@@ -78,8 +84,9 @@ const aSuites: ISuite[] = [
         (select count(*)::int from myvillageschema."Schools" where "sStripeCustomerId" like 'cus_unittest%') stray_customers,
         (select count(*)::int from myvillageschema."Schools" where "sBillingStatus" = 'SUSPENDED') suspended`);
     const oR = oResidue.rows[0];
-    const bClean = oR.stray_payments === 0 && oR.stray_customers === 0 && oR.suspended === 0;
-    console.log(`     residue: ${oR.stray_payments} stray payment(s), ${oR.stray_customers} stray customer id(s), ${oR.suspended} suspended school(s) ${bClean ? '— clean' : '— ⚠️ NOT CLEAN'}`);
+    const iFixtureLeft = await countFixtureResidue();
+    const bClean = oR.stray_payments === 0 && oR.stray_customers === 0 && oR.suspended === 0 && iFixtureLeft === 0;
+    console.log(`     residue: ${oR.stray_payments} stray payment(s), ${oR.stray_customers} stray customer id(s), ${oR.suspended} suspended school(s), ${iFixtureLeft} fixture row(s) ${bClean ? '— clean' : '— ⚠️ NOT CLEAN'}`);
     if (!bClean) {
         results.fail++;
         results.failures.push('teardown :: the suite left residue in the database');

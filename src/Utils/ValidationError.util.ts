@@ -147,7 +147,8 @@ export default {
         },
         Sessions: {
             Authorization: {
-                sp: 'Por favor, ingresa un token de sesión correcto.'
+                sp: 'Por favor, ingresa un token de sesión correcto.',
+                en: 'Please, enter a valid session token.'
             }
         },
 
@@ -247,6 +248,20 @@ export default {
                 en: "Please, enter a discount percentage between 0 and 100."
             },
 
+            // Pago por transferencia (billing manual)
+            sPaymentMethod: {
+                sp: "Por favor, selecciona un método de pago válido (Stripe o transferencia).",
+                en: "Please, select a valid payment method (Stripe or transfer)."
+            },
+            dMonthlyAmount: {
+                sp: "Por favor, ingresa un monto mensual válido.",
+                en: "Please, enter a valid monthly amount."
+            },
+            tNextPaymentDate: {
+                sp: "Por favor, ingresa una fecha de vencimiento válida.",
+                en: "Please, enter a valid due date."
+            },
+
             // P5 — Modo terapeuta
             sAccountType: {
                 sp: "Por favor, selecciona un tipo de cuenta válido (colegio o terapeuta).",
@@ -344,6 +359,39 @@ export default {
                 sp: "Por favor, ingresa notas correctas.",
                 en: "Please, enter valid notes."
             },
+            // Feature 2 — alumno compartido (folio)
+            tBirthDate: {
+                sp: "Por favor, ingresa una fecha de nacimiento válida.",
+                en: "Please, enter a valid birth date."
+            },
+            sPersonId: {
+                sp: "Por favor, ingresa un folio de alumno válido.",
+                en: "Please, enter a valid student folio."
+            },
+            sFolio: {
+                sp: "Por favor, ingresa un folio válido.",
+                en: "Please, enter a valid folio."
+            },
+            sFullName: {
+                sp: "Por favor, ingresa el nombre completo del alumno.",
+                en: "Please, enter the student's full name."
+            },
+            sGender: {
+                sp: "Por favor, selecciona un género válido.",
+                en: "Please, select a valid gender."
+            },
+            tStartDate: {
+                sp: "Por favor, ingresa una fecha de inicio válida.",
+                en: "Please, enter a valid start date."
+            },
+            tEndDate: {
+                sp: "Por favor, ingresa una fecha de fin válida.",
+                en: "Please, enter a valid end date."
+            },
+            bDeleteImage: {
+                sp: "Por favor, indica correctamente si se elimina la imagen.",
+                en: "Please, correctly indicate whether the image is removed."
+            },
         },
 
         // ========== Goals ==========
@@ -411,6 +459,22 @@ export default {
             iBaselineValue: {
                 sp: "Por favor, ingresa un valor de línea base correcto.",
                 en: "Please, enter a valid baseline value."
+            },
+            sDirection: {
+                sp: "Por favor, selecciona una dirección válida (aumentar o disminuir).",
+                en: "Please, select a valid direction (increase or decrease)."
+            },
+            bHasSubGoals: {
+                sp: "Por favor, indica correctamente si la meta se divide en submetas.",
+                en: "Please, correctly indicate whether the goal is divided into subgoals."
+            },
+            iTargetOpportunities: {
+                sp: "Por favor, ingresa un número de oportunidades objetivo correcto.",
+                en: "Please, enter a valid number of target opportunities."
+            },
+            iTargetPercentage: {
+                sp: "Por favor, ingresa un porcentaje objetivo correcto.",
+                en: "Please, enter a valid target percentage."
             },
         },
 
@@ -541,6 +605,10 @@ export default {
                 sp: "Por favor, ingresa una fecha de fin válida.",
                 en: "Please, enter a valid end date."
             },
+            sSubGoalId: {
+                sp: "Por favor, ingresa un identificador de submeta correcto.",
+                en: "Please, enter a valid subgoal id."
+            },
         },
 
         // ========== IEPs ==========
@@ -636,6 +704,22 @@ export default {
             aObjectives: {
                 sp: "Por favor, ingresa los objetivos correctamente.",
                 en: "Please, enter the objectives correctly."
+            },
+            aTeamMembers: {
+                sp: "Por favor, ingresa el equipo de trabajo correctamente.",
+                en: "Please, enter the team members correctly."
+            },
+            dtIepStartDate: {
+                sp: "Por favor, ingresa una fecha de inicio del IEP válida.",
+                en: "Please, enter a valid IEP start date."
+            },
+            dtIepReviewDate: {
+                sp: "Por favor, ingresa una fecha de revisión del IEP válida.",
+                en: "Please, enter a valid IEP review date."
+            },
+            sNotes: {
+                sp: "Por favor, ingresa las notas correctamente.",
+                en: "Please, enter the notes correctly."
             },
         },
 
@@ -783,6 +867,24 @@ export default {
             },
         },
 
+        // ========== StudentAssignments ==========
+        // The group was missing entirely: every label in studentAssignments.validations.ts
+        // pointed at nothing, so any bad id there crashed the error handler.
+        StudentAssignments: {
+            sStudentId: {
+                sp: "Por favor, ingresa un identificador de estudiante correcto.",
+                en: "Please, enter a valid student id."
+            },
+            sSchoolUserId: {
+                sp: "Por favor, ingresa un identificador de usuario correcto.",
+                en: "Please, enter a valid user id."
+            },
+            sStudentAssignmentId: {
+                sp: "Por favor, ingresa un identificador de asignación correcto.",
+                en: "Please, enter a valid assignment id."
+            },
+        },
+
         // P3 — Cobranza
         Billing: {
             sPaymentMethodId: {
@@ -804,6 +906,34 @@ export default {
             sCategory: {
                 sp: "Por favor, selecciona una categoría válida.",
                 en: "Please, select a valid category."
+            },
+        },
+
+        // Punto 18 — registro público You/You+ y captación de colegios
+        Public: {
+            sAccountType: {
+                sp: "Por favor, selecciona una modalidad válida (You o You+).",
+                en: "Please, select a valid modality (You or You+)."
+            },
+            sInstitution: {
+                sp: "Por favor, ingresa el nombre de la institución.",
+                en: "Please, enter the institution name."
+            },
+            sContactName: {
+                sp: "Por favor, ingresa el nombre de contacto.",
+                en: "Please, enter the contact name."
+            },
+            sCity: {
+                sp: "Por favor, ingresa una ciudad o estado válido.",
+                en: "Please, enter a valid city or state."
+            },
+            sStudentsEstimate: {
+                sp: "Por favor, ingresa un número aproximado de alumnos válido.",
+                en: "Please, enter a valid approximate number of students."
+            },
+            sMessage: {
+                sp: "Por favor, ingresa un mensaje válido.",
+                en: "Please, enter a valid message."
             },
         },
 

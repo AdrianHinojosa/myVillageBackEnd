@@ -16,12 +16,43 @@ import Stripe from 'stripe';
 
 export const BILLING_CURRENCY: string = 'MXN';
 
-// Trial length for a new subscription. NOTE: a free trial is NOT in the signed scope document —
-// it was added on PO instruction (2026-08-07) as a concession to the client.
-export const TRIAL_PERIOD_DAYS: number = 30;
+// Trial length for a new subscription. 14 días — confirmado por PO el 2026-10-05, en línea con la
+// tabla de tarifas del cliente ("14 días gratis de prueba") y con lo que la pantalla de registro ya
+// promete. Aplica a TODAS las modalidades, incluidas las suscripciones Stripe de SCHOOL: es un solo
+// valor global, no un parámetro por modalidad.
+//
+// Solo afecta a suscripciones NUEVAS. Las que ya existen en Stripe conservan el periodo con el que
+// se crearon; Stripe no re-aplica la prueba de forma retroactiva.
+export const TRIAL_PERIOD_DAYS: number = 14;
 
 // The contract allows the initial attempt plus two retries.
 export const MAX_FAILED_ATTEMPTS: number = 3;
+
+/**
+ * Punto 18 — tarifas por modalidad (cuota incluida + excedente por unidad). Los "incluidos"
+ * CUENTAN al usuario principal (decisión PO 2026-09-22): You = 1 usuario (solo principal),
+ * You+ = 4 usuarios (principal + 3).
+ *
+ * ⚠️ MONTOS CON IVA YA INCLUIDO (decisión PO 2026-10-05). Lo que se guarda es lo que se cobra:
+ * Stripe recibe esta cifra tal cual y NO lleva tax rate — si se le agregara uno, cobraría 16%
+ * sobre un monto que ya lo trae. La cotización firmada lista los precios SIN IVA; el mapeo es:
+ *
+ *   You       base   $490.00 + IVA = $568.40     paciente extra  $44.00 + IVA = $51.04
+ *   You+      base   $640.00 + IVA = $742.40     usuario extra   $25.00 + IVA = $29.00
+ *
+ * Espejo EXACTO del frontend (`app/utils/billing.ts MODALITY_TIERS`): si cambia uno, cambia el
+ * otro, o el monto que la pantalla previsualiza deja de ser el que Stripe cobra.
+ */
+export const MODALITY_TIERS: Record<string, { dBase: number; iIncludedUsers: number; iIncludedStudents: number; dPerUser: number; dPerStudent: number }> = {
+    YOU:      { dBase: 568.40, iIncludedUsers: 1, iIncludedStudents: 10, dPerUser: 0,     dPerStudent: 51.04 },
+    YOU_PLUS: { dBase: 742.40, iIncludedUsers: 4, iIncludedStudents: 10, dPerUser: 29.00, dPerStudent: 51.04 },
+};
+
+/** THERAPIST (legacy P5) se trata como YOU. SCHOOL y demás pasan tal cual. */
+export function normalizeModality(sAccountType: string | null | undefined): string {
+    if (sAccountType === 'THERAPIST') return 'YOU';
+    return sAccountType || 'SCHOOL';
+}
 
 /** Stripe subscription state, mirrored onto Schools.sBillingStatus. */
 export type TBillingStatus = 'NONE' | 'TRIALING' | 'ACTIVE' | 'PAST_DUE' | 'SUSPENDED' | 'CANCELED';
@@ -99,6 +130,16 @@ export function applyDiscount(dSubtotal: number, dDiscountPct: number | null | u
 export function computeMonthlyTotal(oSchool: any): number {
     if (!oSchool) return 0;
 
+    // Punto 18 — modalidades You/You+ cobran por CUOTA (base incluida + excedente sobre reales).
+    // Salvaguarda: solo aplica a cuentas cobradas por Stripe. Los terapeutas actuales quedaron en
+    // TRANSFER (migración 3040), así que NO entran aquí y conservan su cobranza actual (decisión #7)
+    // — y los colegios en vivo (SCHOOL, también TRANSFER) tampoco se ven afectados.
+    const sModality = normalizeModality(oSchool.sAccountType);
+    const bStripe = oSchool.sPaymentMethod !== 'TRANSFER';
+    if (bStripe && (sModality === 'YOU' || sModality === 'YOU_PLUS')) {
+        return computeQuotaTotal(sModality, oSchool);
+    }
+
     let dSubtotal = 0;
     if (oSchool.sBillingMode === 'VARIABLE') {
         const dPerTeacher = Number(oSchool.dAmountPerTeacher) || 0;
@@ -110,6 +151,26 @@ export function computeMonthlyTotal(oSchool: any): number {
         dSubtotal = Number(oSchool.dFixedAmount) || 0;
     }
 
+    return applyDiscount(dSubtotal, oSchool.dDiscountPct);
+}
+
+/**
+ * Punto 18 — total mensual de una cuenta You/You+ por cuota + excedente.
+ *
+ * Se cobra sobre los usuarios/pacientes REALMENTE dados de alta (no sobre límites), con piso en la
+ * tarifa base. Esto DIVERGE a propósito de la regla de VARIABLE (que usa límites) — decisión PO
+ * 2026-09-22, solo para You/You+. El recálculo en vivo se hace al cierre de ciclo (webhook), pero la
+ * fórmula es esta. El caller debe adjuntar los conteos reales (`iActiveUsers`/`iActiveStudents`, o
+ * `iUsers`/`iStudents` como en el listado de colegios).
+ */
+export function computeQuotaTotal(sModality: string, oSchool: any): number {
+    const oTier = MODALITY_TIERS[sModality];
+    if (!oTier) return 0;
+    const iUsers = Number(oSchool.iActiveUsers ?? oSchool.iUsers) || 0;
+    const iStudents = Number(oSchool.iActiveStudents ?? oSchool.iStudents) || 0;
+    const dUserOverage = Math.max(0, iUsers - oTier.iIncludedUsers) * oTier.dPerUser;
+    const dStudentOverage = Math.max(0, iStudents - oTier.iIncludedStudents) * oTier.dPerStudent;
+    const dSubtotal = oTier.dBase + dUserOverage + dStudentOverage;
     return applyDiscount(dSubtotal, oSchool.dDiscountPct);
 }
 

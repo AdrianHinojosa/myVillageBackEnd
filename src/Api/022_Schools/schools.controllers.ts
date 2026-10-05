@@ -29,6 +29,10 @@ class Controllers {
             dAmountPerTeacher,
             dAmountPerStudent,
             dDiscountPct,
+            // Pago por transferencia
+            sPaymentMethod,
+            dMonthlyAmount,
+            tNextPaymentDate,
 
             // User info
             sAdminName,
@@ -49,17 +53,23 @@ class Controllers {
             return next(new MyError(401, ErrorMessages.Authentication.invalidToken[sLang]));
         }
 
-        const myObject = await SchoolQueries.insertSchool({sName, sPhone, sEmail, sAddress: null, sCityId: null, iUsersLimit, iStudentsLimit, sAccountType, sBillingMode, dFixedAmount, dAmountPerTeacher, dAmountPerStudent, dDiscountPct, sCreatedBy, sAdminName, sLastName, sSecondLastName});
+        const myObject = await SchoolQueries.insertSchool({sName, sPhone, sEmail, sAddress: null, sCityId: null, iUsersLimit, iStudentsLimit, sAccountType, sBillingMode, dFixedAmount, dAmountPerTeacher, dAmountPerStudent, dDiscountPct, sPaymentMethod, dMonthlyAmount, tNextPaymentDate, sCreatedBy, sAdminName, sLastName, sSecondLastName});
 
         const Token: string = Services.CreateRandomToken(64);
         const ExpiredDate: Date = Services.ExpireToken(new Date(), 4320); //72 hours
         // CREATE Recovery Session Token.
         await RecoverySessionQueries.insertTokenByUserId(Token, myObject.user.sUserId, ExpiredDate);
 
-        let sMyUrl = `https://${process.env.NODE_ENV}.${process.env.SCHOOLS_PLATFORM}/set-password/${Token}`;
+        // Protocolo desde URL_TYPE (http en dev/S3-website, https en prod). Antes iba hardcodeado a
+        // https, lo que rompía el link en el sitio de dev (S3 website endpoint no sirve https).
+        const sProto = (process.env.URL_TYPE || 'https').trim();
+        // Sanitiza SCHOOLS_PLATFORM: recorta espacios y cualquier comentario inline (#...) que pueda
+        // venir pegado en el env (p.ej. "...amazonaws.com   # keep as-is") y romper el link del correo.
+        const sPlatform = (process.env.SCHOOLS_PLATFORM || '').trim().split(/[\s#]/)[0];
+        let sMyUrl = `${sProto}://${process.env.NODE_ENV}.${sPlatform}/set-password/${Token}`;
 
         if (process.env.NODE_ENV === 'production') {
-            sMyUrl = `https://${process.env.SCHOOLS_PLATFORM}/set-password/${Token}`;
+            sMyUrl = `${sProto}://${sPlatform}/set-password/${Token}`;
         }
 
         await mailer.emit('SendEmail', {
@@ -83,10 +93,10 @@ class Controllers {
     // Get ALL Schools.
     async getAllSchools(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
         const {sLang} = res.locals;
-        const {iPageNumber, iItemsPerPage, sSearch, bBlocked} = req.query;
+        const {iPageNumber, iItemsPerPage, sSearch, bBlocked, sAccountType} = req.query;
 
         // GET ALL schools
-        const mySchools = await SchoolQueries.findAllSchools(iPageNumber, iItemsPerPage, sSearch, bBlocked);
+        const mySchools = await SchoolQueries.findAllSchools(iPageNumber, iItemsPerPage, sSearch, bBlocked, sAccountType);
         const iNumPages = Math.ceil( mySchools.total / Number(iItemsPerPage) );
 
         return res.status(201).json({
@@ -131,6 +141,10 @@ class Controllers {
             dAmountPerTeacher,
             dAmountPerStudent,
             dDiscountPct,
+            // Pago por transferencia
+            sPaymentMethod,
+            dMonthlyAmount,
+            tNextPaymentDate,
         } = req.body;
 
         // Validate that the school Exists
@@ -140,7 +154,7 @@ class Controllers {
         const sLastUpdatedBy = res.locals.sUserId;
 
         // Update school
-        const updatedSchool = await SchoolQueries.updateSchool(sSchoolId, { sName, sPhone, sCityId: null, iUsersLimit, iStudentsLimit, sAccountType, sBillingMode, dFixedAmount, dAmountPerTeacher, dAmountPerStudent, dDiscountPct, sLastUpdatedBy })
+        const updatedSchool = await SchoolQueries.updateSchool(sSchoolId, { sName, sPhone, sCityId: null, iUsersLimit, iStudentsLimit, sAccountType, sBillingMode, dFixedAmount, dAmountPerTeacher, dAmountPerStudent, dDiscountPct, sPaymentMethod, dMonthlyAmount, tNextPaymentDate, sLastUpdatedBy })
 
         // P3 — a tariff or limit change must reach Stripe, or the next renewal would still charge
         // the old amount. Applied with no proration, so the period already invoiced is untouched
@@ -156,6 +170,30 @@ class Controllers {
             sStripeSyncReason: oSync.sReason || null,
             success: true
         })
+    }
+
+
+    // Registra un pago por transferencia (solo superadmin). Avanza el ciclo mensual +1 mes.
+    async registerTransferPayment(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
+        const {sLang} = res.locals;
+        const {sSchoolId} = req.params;
+
+        const mySchool = await SchoolQueries.verifySchoolExists(sSchoolId);
+        if (!mySchool) {return next(new MyError(404, ErrorMessages.Schools.notFound[sLang])) }
+
+        // Solo aplica a colegios en modo transferencia; los de Stripe se cobran automáticamente.
+        if (mySchool.sPaymentMethod !== 'TRANSFER') {
+            return next(new MyError(409, ErrorMessages.Schools.notTransferMode[sLang]));
+        }
+
+        const sLastUpdatedBy = res.locals.sUserId;
+        const updatedSchool = await SchoolQueries.registerTransferPayment(sSchoolId, sLastUpdatedBy);
+
+        return res.status(201).json({
+            message: SuccessMessages.Schools.registerTransferPayment[sLang],
+            school: updatedSchool,
+            success: true
+        });
     }
 
 
@@ -263,6 +301,25 @@ class Controllers {
         } catch (err) {
             console.error('Analytics query error:', err);
             return next(new MyError(500, ErrorMessages.Schools.analyticsError[sLang]));
+        }
+    }
+
+
+    // Get operation summary (resumen por modalidad, en vivo, sin filtros de fecha)
+    async getOperationSummary(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
+        const {sLang} = res.locals;
+
+        try {
+            const aSummary = await SchoolQueries.findOperationSummary();
+
+            return res.status(200).json({
+                message: SuccessMessages.Schools.getOperationSummary[sLang],
+                aSummary,
+                success: true
+            })
+        } catch (err) {
+            console.error('Operation summary query error:', err);
+            return next(new MyError(500, ErrorMessages.Schools.operationSummaryError[sLang]));
         }
     }
 

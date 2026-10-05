@@ -22,7 +22,7 @@ declare module 'express' {
             sSchoolId?: string;
             sType?: 'FACULTY' | 'ADMINISTRATION';
             /** P5 — account type of the school in res.locals.sSchoolId. Set by the school auth middlewares. */
-            sAccountType?: 'SCHOOL' | 'THERAPIST';
+            sAccountType?: 'SCHOOL' | 'THERAPIST' | 'YOU' | 'YOU_PLUS';
             /** P3 — subscription state of that school. Set by the school auth middlewares. */
             sBillingStatus?: 'NONE' | 'TRIALING' | 'ACTIVE' | 'PAST_DUE' | 'SUSPENDED' | 'CANCELED';
 

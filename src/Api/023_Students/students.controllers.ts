@@ -16,6 +16,11 @@ import { formatHelpTypesForFrontend } from '../024_Goals/003_TrackingRecords/hel
 import { db } from '../../Config/Db.config';
 import StorageServices from '../../Services/Storage.services';
 
+// Privacy (Punto 18 Fase 3 — enmascarado de nombre de menor en YOU)
+import { applyMinorNameMasking } from '../../Utils/studentPrivacy.util';
+// Modalidad (Punto 18 — You/You+ cobran por uso real, sin tope de límite)
+import { isQuotaBasedModality } from '../../Utils/modality.util';
+
 // Messages
 import SuccessMessages from '../../Utils/SuccessMessage.util';
 import ErrorMessages from '../../Utils/ErrorMessages.util';
@@ -24,10 +29,35 @@ class Controllers {
     constructor() {
     };
 
+    // Feature 2 — verifica un folio (identidad compartida) con nombre completo + fecha de nacimiento.
+    // Se usa en el alta cuando el colegio quiere cargar un alumno que ya existe en otra institución.
+    async verifyByFolio(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
+        const {sLang} = res.locals;
+        const {sFolio, sFullName, tBirthDate} = req.body;
+
+        const oPerson = await StudentQueries.verifyPersonByFolio(sFolio, sFullName, tBirthDate);
+        if (!oPerson) {
+            // Genérico a propósito: no revela si el folio existe ni qué dato no coincidió.
+            return next(new MyError(404, ErrorMessages.Students.folioNotFound[sLang]));
+        }
+
+        return res.status(200).json({
+            message: SuccessMessages.Students.folioVerified[sLang],
+            person: {
+                sPersonId: oPerson.sPersonId,
+                sName: oPerson.sName,
+                sLastName: oPerson.sLastName,
+                sSecondLastName: oPerson.sSecondLastName,
+                tBirthDate: oPerson.tBirthDate,
+            },
+            success: true
+        });
+    }
+
     // Create a student
     async createStudent(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
         const {sLang, sSchoolId, sUserId} = res.locals;
-        const {sName, sLastName, sSecondLastName, sCustomStudentId, iBirthYear, tBirthDate, sGender, sGrade, sGroup, sDiagnosis, sNotes} = req.body;
+        const {sPersonId, sName, sLastName, sSecondLastName, sCustomStudentId, iBirthYear, tBirthDate, sGender, sGrade, sGroup, sDiagnosis, sNotes} = req.body;
 
         // Validate student limit
         const mySchool = await SchoolQueries.verifySchoolExists(sSchoolId);
@@ -35,14 +65,35 @@ class Controllers {
             return next(new MyError(404, ErrorMessages.Schools.notFound[sLang]));
         }
 
+        // El tope de alumnos NO aplica a You/You+ (cobran por uso real, sin límite configurado).
         const iCurrentStudents = await StudentQueries.findCountOfActiveStudentsBySchool(sSchoolId);
-        if (iCurrentStudents >= mySchool.iStudentsLimit) {
+        if (!isQuotaBasedModality(mySchool.sAccountType) && iCurrentStudents >= mySchool.iStudentsLimit) {
             return next(new MyError(400, ErrorMessages.Students.limitReached[sLang]));
         }
 
-        // Insert student
-        const newStudent = await StudentQueries.insertStudent({
+        // Punto 18 — You/You+ (cobradas por Stripe) deben tener tarjeta/suscripción antes de dar de
+        // alta perfiles. La prueba de 14 días arranca al capturar la tarjeta.
+        if (isQuotaBasedModality(mySchool.sAccountType) && mySchool.sPaymentMethod !== 'TRANSFER' && !mySchool.sStripeSubscriptionId) {
+            return next(new MyError(402, ErrorMessages.Billing.needsPaymentMethod[sLang]));
+        }
+
+        // Feature 2 — alta por folio existente: re-verifica identidad (defensa) y evita duplicados.
+        if (sPersonId) {
+            const sFullName = [sName, sLastName, sSecondLastName].filter(Boolean).join(' ');
+            const oPerson = await StudentQueries.verifyPersonByFolio(sPersonId, sFullName, tBirthDate);
+            if (!oPerson) {
+                return next(new MyError(409, ErrorMessages.Students.folioMismatch[sLang]));
+            }
+            const oExisting = await StudentQueries.findActiveStudentBySchoolAndPerson(sSchoolId, sPersonId);
+            if (oExisting) {
+                return next(new MyError(409, ErrorMessages.Students.alreadyLinked[sLang]));
+            }
+        }
+
+        // Insert student (crea o reusa la identidad compartida según venga sPersonId)
+        const newStudent = await StudentQueries.insertStudentWithIdentity({
             sSchoolId,
+            sPersonId,
             sName,
             sLastName,
             sSecondLastName,
@@ -78,6 +129,9 @@ class Controllers {
         const myStudents = await StudentQueries.findAllStudents(sSchoolId, iPageNumber, iItemsPerPage, sSearch, sGrade, aAssignedStudentIds);
         const iNumPages = Math.ceil(myStudents.total / Number(iItemsPerPage));
 
+        // YOU: nombre de menor enmascarado en la lista (sin apellidos crudos). No-op en SCHOOL/YOU+.
+        (myStudents.results || []).forEach((oRow: any) => applyMinorNameMasking(oRow, res.locals.sAccountType, false));
+
         // Get school's student limit
         const mySchool = await SchoolQueries.verifySchoolExists(sSchoolId);
         const iStudentsLimit = mySchool ? mySchool.iStudentsLimit : 0;
@@ -109,6 +163,10 @@ class Controllers {
         if (!myStudent) {
             return next(new MyError(404, ErrorMessages.Students.notFound[sLang]));
         }
+
+        // YOU: sFullName enmascarado; se conservan las partes crudas (bKeepRawParts) porque el
+        // formulario de edición del terapeuta las precarga (evita perder el apellido al guardar).
+        applyMinorNameMasking(myStudent, res.locals.sAccountType, true);
 
         return res.status(201).json({
             message: SuccessMessages.Students.getOneStudent[sLang],
@@ -233,6 +291,9 @@ class Controllers {
         if (!myStudent) {
             return next(new MyError(404, ErrorMessages.Students.notFound[sLang]));
         }
+
+        // YOU: el reporte usa el nombre enmascarado del menor.
+        applyMinorNameMasking(myStudent, res.locals.sAccountType, false);
 
         // Default date range: current month (use local date, not UTC)
         // Note: Joi.date() converts query params to JS Date objects, so we must convert back to YYYY-MM-DD strings

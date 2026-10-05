@@ -182,6 +182,16 @@ export default {
             en: "Your school's subscription is suspended for non-payment. Settle the payment to restore access."
         },
 
+        notTransferMode: {
+            sp: "Este colegio no está en modalidad de pago por transferencia.",
+            en: "This school is not in bank-transfer payment mode."
+        },
+
+        stripeNotForTransfer: {
+            sp: "Este colegio paga por transferencia; no aplica el cobro con tarjeta.",
+            en: "This school pays by bank transfer; card billing does not apply."
+        },
+
         bBlockedPermission: {
             sp: "Tu escuela no cuenta con acceso a la plataforma.",
             en: "Your school does not have access to the platform."
@@ -190,6 +200,11 @@ export default {
         analyticsError: {
             sp: "Error al obtener las analíticas de escuelas.",
             en: "Error fetching school analytics."
+        },
+
+        operationSummaryError: {
+            sp: "Error al obtener el resumen de operación.",
+            en: "Error fetching the operation summary."
         },
 
     },
@@ -230,6 +245,19 @@ export default {
         limitReached: {
             sp: "Se ha alcanzado el límite de estudiantes permitidos para esta escuela.",
             en: "The student limit for this school has been reached."
+        },
+        // Feature 2 — alumno compartido (folio)
+        folioNotFound: {
+            sp: "No se encontró un alumno con ese folio, nombre y fecha de nacimiento.",
+            en: "No student was found with that folio, name and birth date."
+        },
+        folioMismatch: {
+            sp: "El folio no coincide con el nombre y la fecha de nacimiento.",
+            en: "The folio does not match the name and birth date."
+        },
+        alreadyLinked: {
+            sp: "Este alumno ya está registrado en tu institución.",
+            en: "This student is already registered in your institution."
         },
     },
 
@@ -356,6 +384,28 @@ export default {
             sp: "Tu colegio no tiene una tarifa configurada. Contacta al administrador.",
             en: "Your school has no configured tariff. Please contact the administrator."
         },
+        // Punto 18 — You/You+ deben registrar su tarjeta antes de dar de alta perfiles/usuarios.
+        needsPaymentMethod: {
+            sp: "Para empezar a usar la plataforma, primero registra tu método de pago en Facturación. Tu prueba de 14 días inicia al capturar tu tarjeta.",
+            en: "To start using the platform, first add your payment method under Billing. Your 14-day trial begins once you add your card."
+        },
+        // P3 recovery — "Reintentar pago" (2026-08-19).
+        nothingToPay: {
+            sp: "No hay un cobro pendiente por pagar en este momento.",
+            en: "There is no outstanding charge to pay right now."
+        },
+        noDefaultCard: {
+            sp: "Registra una tarjeta y márcala como predeterminada antes de reintentar el pago.",
+            en: "Add a card and set it as the default before retrying the payment."
+        },
+        alreadySubscribed: {
+            sp: "Tu colegio ya tiene una suscripción activa.",
+            en: "Your school already has an active subscription."
+        },
+        paymentRetryFailed: {
+            sp: "No pudimos procesar el pago con la tarjeta registrada. Verifica los datos o usa otra tarjeta.",
+            en: "We could not process the payment with the card on file. Check the details or use another card."
+        },
     },
 
     // ==== Support: =======
@@ -367,6 +417,18 @@ export default {
         sendTicketFailed: {
             sp: "No se pudo enviar el reporte. Intenta de nuevo.",
             en: "The report could not be sent. Please try again."
+        },
+    },
+
+    // ==== Public (Punto 18 — registro You/You+): =======
+    Public: {
+        tooManyRequests: {
+            sp: "Demasiados intentos de registro. Espera unos minutos e inténtalo de nuevo.",
+            en: "Too many signup attempts. Please wait a few minutes and try again."
+        },
+        invalidModality: {
+            sp: "El registro en línea solo está disponible para las modalidades You y You+.",
+            en: "Online signup is only available for the You and You+ modalities."
         },
     },
 

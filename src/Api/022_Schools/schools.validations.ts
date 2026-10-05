@@ -1,8 +1,12 @@
 import { Joi } from 'celebrate';
 import * as Validations from '../../Middlewares/Validations.mw';
 
-// P5 — account type. Optional on the wire; defaults to SCHOOL so existing callers are unaffected.
-export const AccountType = Joi.string().valid('SCHOOL', 'THERAPIST')
+// P5 + Punto 18 — modalidad de cuenta. Opcional en el wire; default SCHOOL.
+//   SCHOOL     → colegio (todas las funciones)
+//   YOU        → terapeuta/paciente, usuario único, sin docs, sin IEP  (= el antiguo THERAPIST)
+//   YOU_PLUS   → centro/terapeutas/pacientes, multiusuario + docs, solo IEP restringido
+// THERAPIST se conserva por tolerancia: se trata como YOU en todo el código hasta migrar los datos.
+export const AccountType = Joi.string().valid('SCHOOL', 'THERAPIST', 'YOU', 'YOU_PLUS')
     .allow(null).allow('').error(new Error("Schools sAccountType"));
 
 /**
@@ -27,6 +31,19 @@ export const BillingFields = {
     // 0-100; the service clamps as well, but reject nonsense at the edge.
     dDiscountPct: Joi.number().min(0).max(100).allow(null)
         .error(new Error("Schools dDiscountPct")),
+
+    // ---- Pago por transferencia (billing manual) ----
+    // 'STRIPE' -> cobro automático con tarjeta ; 'TRANSFER' -> cobro manual por transferencia.
+    // Todo opcional/anulable: partial edits no deben borrar la config. Los existentes quedan
+    // en 'TRANSFER' por default de la columna.
+    sPaymentMethod: Joi.string().valid('STRIPE', 'TRANSFER').allow(null).allow('')
+        .error(new Error("Schools sPaymentMethod")),
+    dMonthlyAmount: Validations.PositiveMonetaryValue("Schools dMonthlyAmount").allow(null),
+    // Fecha SOLO 'YYYY-MM-DD' como string. NO Joi.date(): éste coerciona a Date UTC-medianoche
+    // y pg lo serializa en hora local (México UTC-6) → se guarda un día antes. Como string se
+    // almacena tal cual en la columna `date`, sin corrimiento de zona.
+    tNextPaymentDate: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).allow(null).allow('')
+        .error(new Error("Schools tNextPaymentDate")),
 };
 
 export const CreateSchoolBody = Validations.JoiObjectKeys({
@@ -47,6 +64,9 @@ export const CreateSchoolBody = Validations.JoiObjectKeys({
 export const GetSchoolsQuery = Validations.JoiObjectKeys({
     ...Validations.Filters,
     bBlocked: Validations.Boolean("Schools bBlocked"),
+    // Punto 18 — filtro opcional por modalidad en el listado de colegios (superadmin).
+    sAccountType: Joi.string().valid('SCHOOL', 'THERAPIST', 'YOU', 'YOU_PLUS').allow(null).allow('')
+        .error(new Error("Schools sAccountType")),
 });
 
 export const GetSchoolParams = Validations.JoiObjectKeys({

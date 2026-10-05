@@ -625,6 +625,200 @@ Recorded so nobody "fixes" these later:
 
 ---
 
+## Feature 1 — Pago por transferencia (contrato, ya implementado en el frontend)
+
+El frontend (branch `dev` de `myVillage`) ya envía/lee estos nombres exactos; se listan para
+referencia y para el equipo de backend:
+
+1. **Colegio (`POST /schools`, `PUT /schools/:id`)** — nuevos campos, todos opcionales:
+   - `sPaymentMethod`: `'STRIPE' | 'TRANSFER'` (default `'TRANSFER'`).
+   - `dMonthlyAmount`: número (monto mensual, solo en TRANSFER).
+   - `tNextPaymentDate`: fecha `YYYY-MM-DD` (primera fecha de vencimiento; el front la manda como `tNextPaymentDate`, ya con el mapeo `dt→t`).
+2. **`GET /billing/summary`** (envelope `results`) — ahora incluye `sPaymentMethod`, `dMonthlyAmount`,
+   `tNextPaymentDate`. En modo TRANSFER el frontend muestra una tarjeta manual (Estado Pagado/Pendiente
+   derivado de `tNextPaymentDate` vs hoy, Monto, Próximo pago) en vez de la UI de Stripe.
+3. **`GET /schools/:id`** — devuelve `sPaymentMethod`, `dMonthlyAmount`, `tNextPaymentDate` (ya vienen
+   con `select *`). El detalle del colegio (superadmin) muestra la tarjeta con botón "Registrar pago".
+4. **Nuevo endpoint `POST /schools/:id/billing/registerTransferPayment`** (superadmin) — sin body;
+   avanza el ciclo +1 mes y responde con `{ message, school, success }`. El front lo llama desde el
+   detalle del colegio.
+5. **Flag de frontend** `TRANSFER_BILLING_ENABLED` (`app/utils/features.ts`): ON en `dev`, OFF en
+   `main` hasta que backend despliegue estos campos. Al desplegar backend, prender en prod.
+
+---
+
+## Feature 2 — Alumno compartido entre instituciones (folio)
+
+Contrato para el frontend (add-student):
+
+1. **Verificar folio — `POST /students/verifyByFolio`** (auth SchoolAdmin). Body:
+   `{ sFolio: uuid, sFullName: string, tBirthDate: 'YYYY-MM-DD' }`. Respuesta OK:
+   `{ message, person: { sPersonId, sName, sLastName, sSecondLastName, tBirthDate }, success }`.
+   Si no coincide → **404** con mensaje genérico (mostrar "no se encontró"; no revela detalles).
+2. **Crear alumno — `POST /students`** ahora acepta **`sPersonId`** (el folio) opcional:
+   - Con `sPersonId`: liga el alumno a esa identidad. El backend **re-verifica** (manda también
+     `sName`/`sLastName`/`tBirthDate`, que vienen precargados del verify) y **copia nombre+fecha
+     de la identidad** (aunque el front los mande, gana la Person). Resto de campos = por institución.
+     Errores: `409 folioMismatch` (no coincide), `409 alreadyLinked` (ya está en este colegio).
+   - Sin `sPersonId`: alta normal (crea la identidad compartida automáticamente).
+3. **`GET /students/:id`** ahora devuelve **`sPersonId`** (el folio). Mostrarlo en el detalle del
+   alumno para copiar/compartir con otra institución.
+4. Nada más cambia en las listas/reportes: siguen scoped por colegio (cada colegio ve lo suyo).
+
+---
+
+## P3 hotfix — `POST /billing/setup-intent` ahora puede responder 409 (28/ago/2026)
+
+**Qué cambió en backend:** el guard de "colegio en modo transferencia" se movió al **inicio** del
+flujo de tarjetas. Antes solo lo tenía `POST /billing/payment-methods`; ahora también
+`POST /billing/setup-intent` y `POST /billing/resubscribe`.
+
+| Endpoint | Antes | Ahora |
+|---|---|---|
+| `POST /billing/setup-intent` | siempre devolvía el `sClientSecret` | **409** `Este colegio paga por transferencia; no aplica el cobro con tarjeta.` si `sPaymentMethod === 'TRANSFER'` |
+| `POST /billing/resubscribe` | creaba la suscripción | **409** mismo mensaje si el colegio está en TRANSFER |
+| `POST /billing/payment-methods` | ya devolvía 409 | sin cambios |
+
+**Por qué:** un colegio en transferencia podía capturar una tarjeta real; Stripe le creaba customer
+y payment method, y el rechazo llegaba **después**. Además `resubscribe` podía dejarlo con cobro
+automático de Stripe *encima* de la facturación manual — doble cobro.
+
+**Qué tiene que hacer el frontend (2 cosas, ver requerimiento detallado):**
+
+1. **No ofrecer la UI de tarjetas a colegios en TRANSFER.** `GET /billing/summary` ya devuelve
+   `sPaymentMethod`. Hoy `bIsTransfer` está apagado por el flag de código
+   `TRANSFER_BILLING_ENABLED = false`, así que **en producción los colegios en transferencia ven el
+   formulario de Stripe**. El 409 es la red de seguridad, no la solución.
+2. **Mostrar el mensaje real del backend** en `BillingCardForm`. Hoy el `.catch()` lo descarta y
+   pinta `billing.cards.setupError` genérico — por eso este bug tardó una sesión completa en
+   diagnosticarse: el cliente veía "verifica los datos" cuando el error real era otro.
+
+**Endpoints que NO bloquean en TRANSFER (a propósito):** `/billing/cancel`,
+`DELETE /billing/payment-methods/:id`, `PUT …/default`, `/billing/pay`, y todos los `GET`. Un
+colegio que se pasa a transferencia debe poder cancelar su suscripción y limpiar sus tarjetas.
+
+---
+
+## Hotfix IEP — nada que cambiar en frontend, pero conviene saberlo (03/sep/2026)
+
+**No requiere ningún cambio de frontend.** Se arregló todo del lado del backend. Se registra aquí
+porque cambia lo que el frontend va a *recibir*.
+
+| Situación | Antes | Ahora |
+|---|---|---|
+| Guardar IEP con `aTeamMembers` que traen `bCustom` | la API **se caía** (PM2 reiniciaba) → timeout / error de red | guarda normal, 201 |
+| Guardar IEP con `dtIepStartDate: ""` o `dtIepReviewDate: ""` | **500** `invalid input syntax for type date` | guarda con la fecha en `null` |
+| Cualquier error de validación cuya etiqueta no tenga traducción | la API **se caía** | **409** con `Por favor, verifica los datos ingresados.` |
+
+**El `bCustom` se queda como está.** Es un campo legítimo del front
+(`components/iep/sections/TeamMembers.vue:120`) y la columna es jsonb: el backend ahora lo acepta y
+lo guarda tal cual. No hay que quitarlo del payload.
+
+**Mandar `''` en las fechas también se queda como está.** El backend lo convierte a `null` y eso
+mantiene la semántica de "vacié el campo, límpialo". Si el front prefiere mandar `null`
+explícitamente, funciona igual — pero **no es necesario**, y ya no rompe nada.
+
+Un detalle que sí vale la pena aprovechar: como ahora los errores de validación llegan como **409
+con mensaje traducido** en vez de tumbar la API, el interceptor de axios los muestra solos. Si
+alguna pantalla estaba tratando esos casos como "error de red", se puede simplificar.
+## Feature 18 — My Village for You / You+ (Fase 0, backend base)
+
+Plan completo: `myVillage/docs/plan-punto18-myvillage-for-you.md`. Branch `feature/point18-for-you`.
+**No hay cambios rompientes de contrato.** Notas para el front:
+
+1. **Modalidad — `sAccountType`**: valores `SCHOOL | YOU | YOU_PLUS` (además `THERAPIST` legacy, que
+   el backend trata como `YOU`). El alta/edición de colegio ya ofrece las 3 (flag `MODALITY_YOU_ENABLED`).
+2. **Cobranza You/You+** (`GET /billing/summary`): mismos campos; `dMonthlyTotal` ahora se calcula
+   por **CUOTA sobre usuarios/pacientes REALES** (base incluida + excedente), no por límites. El front
+   ya tiene el espejo (`app/utils/billing.ts`: `MODALITY_TIERS` + `computeQuotaTotal`) para previsualizar
+   el mismo monto. Solo aplica a cuentas cobradas por Stripe; **una cuenta en TRANSFER conserva su
+   cobranza manual** (los 2 colegios vivos y terapeutas migrados no cambian).
+   - You: base **$568.40** (incl. 1 usuario / 10 pacientes), **+$51.04**/paciente extra (usuario único, sin excedente de usuario).
+   - You+: base **$742.40** (incl. 4 usuarios / 10 pacientes), **+$29.00**/usuario extra, **+$51.04**/paciente extra.
+   - ⚠️ **Montos CON IVA incluido** (decisión PO 2026-10-05). Son los que se muestran y los que se cobran:
+     Stripe recibe la cifra tal cual y NO lleva tax rate. Equivalencia con la cotización firmada, que lista
+     precios sin IVA: 490→568.40, 640→742.40, 44→51.04, 25→29.00.
+   - Los incluidos CUENTAN al usuario principal (You = solo principal; You+ = principal + 3).
+3. **Prueba gratis**: ahora **14 días** (antes 30) y **una sola vez por colegio** (`bTrialConsumed`).
+   Reintentar suscripción no regala otra prueba. Aplica solo a suscripciones nuevas.
+4. **Gating**: IEP bloqueado (403) para You **y** You+; documentos/registros y creación de usuarios
+   bloqueados **solo** para You (You+ SÍ tiene docs y usuarios). El front ya oculta grado/IEP en
+   You/You+ (`bIsSchoolModality`) y docs/usuarios solo en You (`bIsTherapist`).
+
+### Registro público (Fase 1) — `POST /:sLang/public/signup` (SIN auth)
+
+Para las páginas públicas de registro You/You+. No requiere token. Body:
+```
+{
+  "sAccountType": "YOU" | "YOU_PLUS",   // SCHOOL NO se acepta aquí (alta manual)
+  "sAdminName": string,                  // nombre(s) del usuario principal
+  "sLastName": string,                   // apellido paterno
+  "sSecondLastName": string,             // opcional
+  "sPhone": string,                      // celular (8-12 dígitos)
+  "sEmail": string                       // correo (único; 409 si ya existe)
+}
+```
+Respuesta OK (201): `{ message, success: true }`. El backend crea la cuenta + usuario principal,
+manda correo de bienvenida con el link `/set-password/:token` (72h) — **mismo flujo que ya usa el
+alta de colegios**. El nombre de la cuenta se arma solo del nombre de la persona (no se pide aparte).
+
+Flujo del front: formulario público → `POST /public/signup` → pantalla "revisa tu correo" → el usuario
+abre el link → `/set-password/[token]` (ya existe) → login → captura de tarjeta (`BillingCardForm.vue`
++ Stripe Elements) mostrando **antes** el monto al término de la prueba (14 días) y el costo por
+paciente/usuario extra (usar el espejo `computeQuotaTotal` de `app/utils/billing.ts`).
+
+Errores: `409` correo en uso; `429` demasiados intentos (rate-limit); `400/409` validación de campos.
+
+### `GET /billing/summary` enriquecido (para el aviso de costo)
+
+La respuesta ahora incluye 3 campos nuevos (además de los existentes):
+- `sAccountType`: `"SCHOOL" | "YOU" | "YOU_PLUS"` (modalidad de la cuenta).
+- `iActiveUsers`, `iActiveStudents`: conteos activos REALES — **solo** en You/You+ por Stripe; `null`
+  en SCHOOL/TRANSFER (donde el aviso de costo no aplica).
+
+Uso en el front: al dar de alta usuario/paciente en You/You+, calcular el excedente con el espejo
+`computeQuotaTotal(sAccountType, iActiveUsers/Students +1, dDiscountPct)` y confirmar el costo antes
+de crear. Ya implementado con el componente reutilizable `CoreDialogsCostWarning` (solo se muestra a
+perfiles con visibilidad de cobranza: usuario principal o superadmin, y solo si hay excedente real).
+
+### Enmascarado de nombre de menor (Fase 3, solo YOU)
+
+En cuentas **YOU** (terapeuta), las respuestas de alumnos ya vienen enmascaradas:
+- `GET /students` (lista): `sFullName` = primer nombre + iniciales ("Lucía P. A.") y `sLastName`/
+  `sSecondLastName` = **null**.
+- `GET /students/:id` (detalle): `sFullName` enmascarado, pero **conserva** `sName`/`sLastName`/
+  `sSecondLastName` crudos (los necesita el formulario de edición del terapeuta).
+- `GET /students/:id/report`: `oStudent.sFullName` enmascarado.
+
+Regla para el front en YOU: **siempre mostrar `sFullName`** (nunca reconstruir el nombre desde las
+partes) en listas, detalle, headers, y nombres de archivo de PDF. En SCHOOL/YOU+ no cambia nada.
+Ya aplicado en el front: StudentDetail oculta los campos de apellido en YOU y el filename del PDF de
+reporte omite el apellido.
+
+### Panel admin por modalidad (Fase 4)
+
+- `GET /schools/analytics` ahora devuelve `iSchoolsSchool`, `iSchoolsYou`, `iSchoolsYouPlus` (cuentas
+  activas por modalidad; YOU incluye THERAPIST; SCHOOL incluye las de `sAccountType` NULL).
+- `GET /schools` acepta el filtro opcional **`sAccountType`** (`SCHOOL` | `YOU` | `YOU_PLUS`); SCHOOL
+  incluye NULL, YOU incluye THERAPIST.
+- Ya aplicado en el front: dashboard con tiles por modalidad + lista de colegios con columna Modalidad
+  y filtro (ambos detrás de `MODALITY_YOU_ENABLED`).
+
+**Punto 18 completo (Fases 0-4).** Pendiente solo de config/coordinación (ver tracker).
+
+### Resumen de operación por modalidad (feedback Lucy, oct-2026)
+
+- Endpoint nuevo **`GET /schools/operationSummary`** (permiso `General READ`, sin parámetros). Devuelve
+  `{ message, aSummary, success }` donde `aSummary` es un arreglo con las 3 modalidades (orden: `SCHOOL`,
+  `YOU_PLUS`, `YOU`), cada una con: `sModality`, `iAccounts`, `iUsers`, `iStudents`, `iGoals`, `dProgress`.
+  Datos **en vivo** (sin filtros de fecha). `SCHOOL` incluye cuentas con `sAccountType` NULL; `YOU` incluye
+  `THERAPIST`.
+- Ya aplicado en el front (dev): tab "Operación" en el dashboard (tabla por modalidad + export PDF/Excel),
+  promedios eliminados, filas clickeables y accesos de modalidad en el sidebar (todo detrás de
+  `MODALITY_YOU_ENABLED`). Usa el filtro ya existente `GET /schools?sAccountType=`.
+
+---
+
 ## Resolved / already applied
 
 *(entries move here once the frontend confirms the change is in)*

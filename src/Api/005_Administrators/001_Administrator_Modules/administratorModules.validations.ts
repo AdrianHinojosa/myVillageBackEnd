@@ -8,7 +8,9 @@ class Rules {
 
         this.GetModuleParams = Validations.JoiObjectKeys({
             ...Validations.Filters,
-            sAdministratorModuleId: Validations.UUID("Modules sAdministratorModuleId"),
+            // Label must match the catalogue group name in ValidationError.util.ts, which is
+            // `AdministratorModules`. It said "Modules", so the lookup resolved to nothing.
+            sAdministratorModuleId: Validations.UUID("AdministratorModules sAdministratorModuleId"),
         });
 
     }

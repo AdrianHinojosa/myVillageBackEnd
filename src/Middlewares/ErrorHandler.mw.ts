@@ -125,11 +125,24 @@ export default () => async (err: IErrHandler, req: Request, res: Response, next:
                 err.message.split(" ")[0],
                 err.message.split(" ")[1],
             ];
-            console.log( Messages[err.type][type])
 
-            return next(
-                new MyError(409, Messages[err.type][type][message][langCode])
-            );
+            // Every Joi error label is a LOOKUP KEY into ValidationError.util.ts, not free text.
+            // This used to dereference the four levels blind, so a label with no catalogue entry
+            // threw `Cannot read properties of undefined (reading 'sp')` from inside the error
+            // handler itself — which Express cannot recover from, so PM2 restarted the process.
+            // A missing translation is a developer oversight; it must never take the API down.
+            // Reported from DEV, 2026-09-03: label "IEPs aTeamMembers" had no entry.
+            const sTranslated = Messages?.[err.type]?.[type]?.[message]?.[langCode];
+            if (!sTranslated) {
+                // Logged loudly so the gap gets fixed, but answered as a normal validation error.
+                console.error(`ValidationError.util.ts is missing an entry for "${type} ${message}" (lang ${langCode}). Add it — see WORKING_AGREEMENT_SKILL.md §2.7.`);
+                const sFallback = langCode === 'en'
+                    ? 'Please check the information you entered.'
+                    : 'Por favor, verifica los datos ingresados.';
+                return next(new MyError(409, sFallback));
+            }
+
+            return next(new MyError(409, sTranslated));
         }
     } else {
         console.log(err);

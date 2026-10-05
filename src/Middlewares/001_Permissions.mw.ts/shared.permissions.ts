@@ -75,7 +75,7 @@ export const verifyAnyAuthenticatedUser = () => async (req: Request, res: Respon
         res.locals.sSchoolId = schoolUserSession.sSchoolId;
         res.locals.sType = schoolUserSession.sType || 'ADMINISTRATION';
         // P5 — account type, for parity with the school-only middlewares
-        res.locals.sAccountType = (mySchool.sAccountType || 'SCHOOL') as 'SCHOOL' | 'THERAPIST';
+        res.locals.sAccountType = (mySchool.sAccountType || 'SCHOOL') as 'SCHOOL' | 'THERAPIST' | 'YOU' | 'YOU_PLUS';
 
         // Refresh Token for 120 hours (5 days)
         await SessionQueries.updateTokenExpirationSchools(res.locals.sSessionId);

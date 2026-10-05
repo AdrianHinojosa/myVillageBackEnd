@@ -14,8 +14,27 @@ import stripe, {
     computeMonthlyTotal,
     hasChargeableTariff,
     mapStripeStatus,
-    fromStripeTimestamp
+    fromStripeTimestamp,
+    fromStripeAmount,
+    normalizeModality
 } from '../../Services/Stripe.service';
+import StudentQueries from '../023_Students/students.queries';
+import SchoolUserQueries from '../026_SchoolUsers/schoolUsers.queries';
+
+/**
+ * Punto 18 — You/You+ cobran sobre usuarios/pacientes REALES (base incluida + excedente). El motor
+ * de tarifas (`computeMonthlyTotal`) es puro/sin DB, así que el caller le adjunta los conteos activos
+ * antes de calcular. Solo aplica a You/You+ cobradas por Stripe: SCHOOL y cualquier cuenta en
+ * TRANSFER (los 2 colegios en vivo y los terapeutas migrados) NO se tocan y conservan su cobranza.
+ */
+async function attachRealCounts(oSchool: any): Promise<void> {
+    if (!oSchool || !oSchool.sSchoolId) return;
+    const sModality = normalizeModality(oSchool.sAccountType);
+    const bStripe = oSchool.sPaymentMethod !== 'TRANSFER';
+    if (!bStripe || (sModality !== 'YOU' && sModality !== 'YOU_PLUS')) return;
+    oSchool.iActiveUsers = await SchoolUserQueries.countActiveSchoolUsers(oSchool.sSchoolId);
+    oSchool.iActiveStudents = await StudentQueries.findCountOfActiveStudentsBySchool(oSchool.sSchoolId);
+}
 
 /**
  * Punto 3 — Cobranza automática (Stripe).
@@ -33,6 +52,32 @@ function assertStripe(res: Response, next: NextFunction): boolean {
         return false;
     }
     return true;
+}
+
+/**
+ * Has this school ever had a subscription? If so, the free trial is spent.
+ *
+ * The 30-day trial is a one-time concession (PO, 2026-08-07), not something a school can collect
+ * again by letting its subscription lapse and re-subscribing. Without this, a school cancelled for
+ * non-payment could add a card and get another free month — because a cancellation nulls
+ * `sStripeSubscriptionId`, and the create path only checks whether that column is empty.
+ *
+ * Asked of Stripe rather than tracked in a column: Stripe holds every subscription the customer ever
+ * had, including cancelled ones, so it cannot disagree with itself. `sStripeCustomerId` alone is not
+ * a usable signal — the customer is created lazily on the first SetupIntent, so a first-time school
+ * already has one before it ever subscribes.
+ */
+async function bTrialAlreadyUsed(sCustomerId: string): Promise<boolean> {
+    if (!sCustomerId) return false;
+    try {
+        const aPrior = await stripe.subscriptions.list({ customer: sCustomerId, status: 'all', limit: 1 });
+        return (aPrior.data || []).length > 0;
+    } catch (error: any) {
+        // Cannot confirm -> assume it was used. Erring towards charging is recoverable; erring
+        // towards a free month is revenue quietly walking out.
+        console.error(`bTrialAlreadyUsed failed for ${sCustomerId}:`, error?.message);
+        return true;
+    }
 }
 
 /** Guard: only the school's main user may manage cards or cancel. */
@@ -84,6 +129,14 @@ async function createPriceForSchool(oSchool: any, dMonthlyTotal: number): Promis
     return oPrice.id;
 }
 
+// Columna `date` (pg la entrega como Date a medianoche local) → 'YYYY-MM-DD', sin corrimiento de zona.
+function toYMDLocal(dValue: any): string | null {
+    if (!dValue) return null;
+    const o = new Date(dValue);
+    if (Number.isNaN(o.getTime())) return null;
+    return `${o.getFullYear()}-${String(o.getMonth() + 1).padStart(2, '0')}-${String(o.getDate()).padStart(2, '0')}`;
+}
+
 class Controllers {
     constructor() {};
 
@@ -100,6 +153,9 @@ class Controllers {
         const oSchool = await BillingQueries.findSchoolBilling(sSchoolId);
         if (!oSchool) return next(new MyError(404, ErrorMessages.Schools.notFound[sLang]));
 
+        // You/You+: el total refleja usuarios/pacientes reales (no-op para SCHOOL y TRANSFER).
+        await attachRealCounts(oSchool);
+
         return res.status(200).json({
             message: SuccessMessages.Billing.getSummary[sLang],
             results: {
@@ -109,6 +165,11 @@ class Controllers {
                 dAmountPerStudent: oSchool.dAmountPerStudent !== null ? Number(oSchool.dAmountPerStudent) : null,
                 dDiscountPct: oSchool.dDiscountPct !== null ? Number(oSchool.dDiscountPct) : null,
                 sBillingStatus: oSchool.sBillingStatus || 'NONE',
+                // Pago por transferencia (billing manual). En modo TRANSFER el frontend muestra
+                // la tarjeta manual (estado/monto/próximo pago) en vez de la UI de Stripe.
+                sPaymentMethod: oSchool.sPaymentMethod || 'TRANSFER',
+                dMonthlyAmount: oSchool.dMonthlyAmount !== null && oSchool.dMonthlyAmount !== undefined ? Number(oSchool.dMonthlyAmount) : null,
+                tNextPaymentDate: toYMDLocal(oSchool.tNextPaymentDate),
                 sCurrency: BILLING_CURRENCY,
                 // The OFFICIAL amount. The frontend previews the same figure with its own mirror of
                 // this formula, but this is the one that gets charged.
@@ -119,6 +180,12 @@ class Controllers {
                 // iUsersLimit — the column predates the billing feature.
                 iTeachersLimit: oSchool.iUsersLimit ?? null,
                 iStudentsLimit: oSchool.iStudentsLimit ?? null,
+                // Punto 18 — modalidad + conteos activos reales (You/You+), para el aviso de costo del
+                // front al dar de alta usuario/paciente. `attachRealCounts` los pobló arriba solo en
+                // You/You+ por Stripe; en el resto van null (el aviso no aplica).
+                sAccountType: oSchool.sAccountType || 'SCHOOL',
+                iActiveUsers: oSchool.iActiveUsers ?? null,
+                iActiveStudents: oSchool.iActiveStudents ?? null,
                 // Surfaced so nobody mistakes a sandbox for production while testing.
                 bTestMode: isStripeTestMode()
             },
@@ -168,6 +235,16 @@ class Controllers {
 
         const oSchool = await BillingQueries.findSchoolBilling(sSchoolId);
         if (!oSchool) return next(new MyError(404, ErrorMessages.Schools.notFound[sLang]));
+
+        // Pago por transferencia: se ignora Stripe. The guard belongs HERE, at the entry point of
+        // the card flow, and not only on the attach that follows it. Without it a TRANSFER school
+        // can type a real card into Stripe's iframe: Stripe creates a customer and a payment
+        // method, and only THEN does `attachPaymentMethod` refuse — so the user is told "no" after
+        // the card was already accepted, and the live account accumulates orphan customers and
+        // cards that belong to no subscription. Reported from production, 2026-08-28.
+        if (oSchool.sPaymentMethod === 'TRANSFER') {
+            return next(new MyError(409, ErrorMessages.Schools.stripeNotForTransfer[sLang]));
+        }
 
         const sCustomerId = await ensureStripeCustomer(oSchool);
         const oIntent = await stripe.setupIntents.create({
@@ -237,6 +314,14 @@ class Controllers {
         const oSchool = await BillingQueries.findSchoolBilling(sSchoolId);
         if (!oSchool) return next(new MyError(404, ErrorMessages.Schools.notFound[sLang]));
 
+        // Pago por transferencia: se ignora Stripe. Un colegio en transferencia no adjunta tarjetas.
+        if (oSchool.sPaymentMethod === 'TRANSFER') {
+            return next(new MyError(409, ErrorMessages.Schools.stripeNotForTransfer[sLang]));
+        }
+
+        // You/You+: la primera cuota se cobra sobre usuarios/pacientes reales (no-op para SCHOOL).
+        await attachRealCounts(oSchool);
+
         const sCustomerId = await ensureStripeCustomer(oSchool);
 
         // Use the id from the RESPONSE, not the request. Attaching can yield a different id than
@@ -261,12 +346,16 @@ class Controllers {
             const dTotal = computeMonthlyTotal(oSchool);
             const sPriceId = await createPriceForSchool(oSchool, dTotal);
 
+            // 30-day free trial — PO instruction 2026-08-07, NOT in the signed scope document — y una
+            // sola vez por colegio (PO, 2026-08-19), vía bTrialAlreadyUsed (consulta Stripe, sin
+            // columna). Se conserva este enfoque de Adrián; el bTrialConsumed de Point 18 se descartó.
+            const bUsed = await bTrialAlreadyUsed(sCustomerId);
+
             const oSub: any = await stripe.subscriptions.create({
                 customer: sCustomerId,
                 items: [{ price: sPriceId }],
                 default_payment_method: sAttachedId,
-                // 30-day free trial — PO instruction 2026-08-07. NOT in the signed scope document.
-                trial_period_days: TRIAL_PERIOD_DAYS,
+                ...(bUsed ? {} : { trial_period_days: TRIAL_PERIOD_DAYS }),
                 metadata: { sSchoolId }
             });
 
@@ -409,6 +498,180 @@ class Controllers {
             success: true
         });
     }
+
+    /**
+     * POST /billing/resubscribe — "Reactivar suscripción".
+     *
+     * Covers the two ways a school can end up wanting back in, because they need different actions:
+     *
+     *   1. CANCELLATION PENDING (`cancel_at_period_end`, subscription still alive). Nothing is
+     *      recreated — the pending cancellation is simply lifted. Cheapest and keeps the billing
+     *      period, the price and the payment history intact.
+     *   2. NO SUBSCRIPTION AT ALL (Stripe already cancelled it; our id was nulled by the
+     *      `subscription.deleted` webhook). A new one is created on the existing default card.
+     *
+     * Case 2 existed as a silent gap: a subscription is otherwise only created inside
+     * `attachPaymentMethod`, so a school whose card was still on file had NOTHING that could restart
+     * it — adding a *second* card was the only trigger, which nobody would guess.
+     *
+     * The trial is NOT granted again (PO, 2026-08-19) — see `bTrialAlreadyUsed`.
+     */
+    async resubscribe(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
+        const { sLang, sSchoolId } = res.locals;
+        if (!assertStripe(res, next)) return;
+        if (!await requireMainUser(res, next)) return;
+
+        const oSchool = await BillingQueries.findSchoolBilling(sSchoolId);
+        if (!oSchool) return next(new MyError(404, ErrorMessages.Schools.notFound[sLang]));
+        // The most expensive gap of the three: a school billed by bank transfer that still has a
+        // card on file would end up with a live Stripe subscription charging it automatically WHILE
+        // the superadmin keeps invoicing it manually. Double-charging a real customer.
+        if (oSchool.sPaymentMethod === 'TRANSFER') {
+            return next(new MyError(409, ErrorMessages.Schools.stripeNotForTransfer[sLang]));
+        }
+        if (!hasChargeableTariff(oSchool)) {
+            return next(new MyError(409, ErrorMessages.Billing.noTariff[sLang]));
+        }
+
+        // ---- case 1: lift a pending cancellation -------------------------------------------
+        if (oSchool.sStripeSubscriptionId) {
+            const oCurrent: any = await stripe.subscriptions.retrieve(oSchool.sStripeSubscriptionId);
+            if (oCurrent.status === 'canceled') {
+                // Stripe already finished the job; fall through to create a new one.
+                await BillingQueries.patchSchoolBilling(sSchoolId, { sStripeSubscriptionId: null });
+            } else if (oCurrent.cancel_at_period_end !== true) {
+                return next(new MyError(409, ErrorMessages.Billing.alreadySubscribed[sLang]));
+            } else {
+                const oResumed: any = await stripe.subscriptions.update(oSchool.sStripeSubscriptionId, {
+                    cancel_at_period_end: false
+                });
+                await BillingQueries.patchSchoolBilling(sSchoolId, {
+                    bCancelAtPeriodEnd: false,
+                    sBillingStatus: mapStripeStatus(oResumed.status, false),
+                    tCurrentPeriodEnd: fromStripeTimestamp(oResumed.current_period_end)
+                });
+                return res.status(200).json({
+                    message: SuccessMessages.Billing.resubscribe[sLang],
+                    results: { sSubscriptionId: String(oResumed.id), bRecreated: false, bTrialGranted: false },
+                    success: true
+                });
+            }
+        }
+
+        // ---- case 2: create a fresh subscription -------------------------------------------
+        if (!oSchool.sStripeCustomerId) {
+            return next(new MyError(409, ErrorMessages.Billing.noDefaultCard[sLang]));
+        }
+        const oCustomer: any = await stripe.customers.retrieve(oSchool.sStripeCustomerId);
+        const sDefaultPm: string = oCustomer?.invoice_settings?.default_payment_method || '';
+        if (!sDefaultPm) {
+            return next(new MyError(409, ErrorMessages.Billing.noDefaultCard[sLang]));
+        }
+
+        const dTotal = computeMonthlyTotal(oSchool);
+        const sPriceId = await createPriceForSchool(oSchool, dTotal);
+        // Second time around there is no trial: billing starts on this cycle.
+        const bUsed = await bTrialAlreadyUsed(oSchool.sStripeCustomerId);
+
+        const oSub: any = await stripe.subscriptions.create({
+            customer: oSchool.sStripeCustomerId,
+            items: [{ price: sPriceId }],
+            default_payment_method: sDefaultPm,
+            ...(bUsed ? {} : { trial_period_days: TRIAL_PERIOD_DAYS }),
+            metadata: { sSchoolId }
+        });
+
+        await BillingQueries.patchSchoolBilling(sSchoolId, {
+            sStripeSubscriptionId: oSub.id,
+            sStripePriceId: sPriceId,
+            sBillingStatus: mapStripeStatus(oSub.status, oSub.cancel_at_period_end),
+            tCurrentPeriodEnd: fromStripeTimestamp(oSub.current_period_end),
+            bCancelAtPeriodEnd: oSub.cancel_at_period_end === true,
+            iFailedAttempts: 0
+        });
+
+        return res.status(200).json({
+            message: SuccessMessages.Billing.resubscribe[sLang],
+            results: {
+                sSubscriptionId: String(oSub.id),
+                bRecreated: true,
+                bTrialGranted: !bUsed,
+                dMonthlyTotal: dTotal,
+                sCurrency: BILLING_CURRENCY
+            },
+            success: true
+        });
+    }
+
+    /**
+     * POST /billing/pay — "Reintentar pago". Charge the outstanding invoice now.
+     *
+     * This is how a SUSPENDED school gets back in, and it exists because nothing else does the job:
+     * by the time we suspend, Stripe's automatic retries are exhausted, and attaching a new card does
+     * NOT make Stripe charge anything. Without this endpoint a school could update its card and stay
+     * locked out forever — reported from a DEV test, 2026-08-19.
+     *
+     * Deliberately explicit rather than automatic on card-attach: the user presses a button that says
+     * what it will cost, so a charge is never a surprise side-effect of saving a card.
+     *
+     * The status is NOT force-written here. On success Stripe emits `invoice.payment_succeeded`, and
+     * that webhook is the single place that maps Stripe state onto `sBillingStatus` — two writers for
+     * one field is how they drift. `iFailedAttempts` IS reset, because that counter is ours alone.
+     */
+    async payOutstanding(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
+        const { sLang, sSchoolId } = res.locals;
+        if (!assertStripe(res, next)) return;
+        if (!await requireMainUser(res, next)) return;
+
+        const oSchool = await BillingQueries.findSchoolBilling(sSchoolId);
+        if (!oSchool) return next(new MyError(404, ErrorMessages.Schools.notFound[sLang]));
+        if (!oSchool.sStripeCustomerId) {
+            return next(new MyError(409, ErrorMessages.Billing.nothingToPay[sLang]));
+        }
+
+        // A card must be on file AND be the default — `invoices.pay()` charges the default one.
+        const oCustomer: any = await stripe.customers.retrieve(oSchool.sStripeCustomerId);
+        if (!oCustomer?.invoice_settings?.default_payment_method) {
+            return next(new MyError(409, ErrorMessages.Billing.noDefaultCard[sLang]));
+        }
+
+        // The unpaid invoice. `open` is what an invoice sits at once Stripe's retries give up.
+        const aOpen = await stripe.invoices.list({
+            customer: oSchool.sStripeCustomerId,
+            status: 'open',
+            limit: 1
+        });
+        const oInvoice: any = (aOpen.data || [])[0];
+        if (!oInvoice) {
+            return next(new MyError(409, ErrorMessages.Billing.nothingToPay[sLang]));
+        }
+
+        let oPaid: any;
+        try {
+            oPaid = await stripe.invoices.pay(oInvoice.id);
+        } catch (error: any) {
+            // A decline is an expected outcome, not a server fault. 409 on purpose and NOT 402 —
+            // the frontend treats 402 as "school suspended" and would bounce the user off the very
+            // page they are trying to pay from.
+            console.error(`billing/pay declined for school ${sSchoolId}:`, error?.message);
+            return next(new MyError(409, ErrorMessages.Billing.paymentRetryFailed[sLang]));
+        }
+
+        // Ours to clear: the dunning counter. Status is left to the webhook.
+        await BillingQueries.patchSchoolBilling(sSchoolId, { iFailedAttempts: 0 });
+
+        return res.status(200).json({
+            message: SuccessMessages.Billing.payOutstanding[sLang],
+            results: {
+                sInvoiceId: String(oPaid.id),
+                dAmountPaid: fromStripeAmount(oPaid.amount_paid),
+                sCurrency: String(oPaid.currency || BILLING_CURRENCY).toUpperCase(),
+                bPaid: oPaid.paid === true,
+                sStatus: String(oPaid.status)
+            },
+            success: true
+        });
+    }
 }
 
 export default new Controllers();
@@ -428,11 +691,16 @@ export { createPriceForSchool, ensureStripeCustomer };
  * the caller can surface it.
  */
 export async function syncSubscriptionTariff(oSchool: any): Promise<{ bSynced: boolean, sReason?: string }> {
+    // Pago por transferencia: se ignora Stripe por completo (cobro manual). Sin este early-return,
+    // cada edición de un colegio en transferencia intentaría tocar Stripe.
+    if (oSchool?.sPaymentMethod === 'TRANSFER') return { bSynced: false, sReason: 'transfer' };
     if (!isStripeConfigured()) return { bSynced: false, sReason: 'stripe-not-configured' };
     // Nothing to sync until the school actually has a subscription.
     if (!oSchool?.sStripeSubscriptionId) return { bSynced: false, sReason: 'no-subscription' };
 
     try {
+        // You/You+: la re-tarificación usa usuarios/pacientes reales (no-op para SCHOOL y TRANSFER).
+        await attachRealCounts(oSchool);
         const dTotal = computeMonthlyTotal(oSchool);
         if (dTotal <= 0) return { bSynced: false, sReason: 'no-chargeable-tariff' };
 

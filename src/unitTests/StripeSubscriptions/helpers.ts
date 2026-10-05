@@ -122,34 +122,112 @@ export interface IFixture {
     sAdminUserId: string | null;
 }
 
+/** Everything this suite creates is tagged with this, so residue is unmistakable. */
+export const FIXTURE_TAG = 'ZZTEST-STRIPE';
+
 /**
- * A school that has a MAIN user (Users.sCreatedBy IS NULL — the account created with the school),
- * plus another school user and a superadmin where available, since several rules differ by role.
+ * A school created by and for this suite, then destroyed.
+ *
+ * It used to pick the FIRST real school with a main user and mutate its billing columns, restoring
+ * them afterwards. That stopped being safe the moment a Stripe webhook endpoint went live: the
+ * deployed dev API receives real Stripe events and writes to this same `development` database, so a
+ * webhook for a school someone was testing by hand could land mid-run and overwrite the very column
+ * an assertion was about. That is exactly what happened — `sBillingStatus` flipped from TRIALING to
+ * ACTIVE between two reads, with no code in this process having written it.
+ *
+ * A dedicated school removes that class of collision: no human is clicking through it, and nothing
+ * else in the database references it.
+ *
+ * The rows are created directly rather than through the API because `POST /schools` sends an
+ * invitation email and requires a superadmin token — neither of which belongs in a fixture.
  */
 export async function pickFixture(): Promise<IFixture> {
-    const oSchool = await db.raw(`
-        select su."sSchoolId",
-               max(case when u."sCreatedBy" is null     then u."sUserId"::text end) as main_id,
-               max(case when u."sCreatedBy" is not null then u."sUserId"::text end) as other_id
-        from myvillageschema."SchoolUsers" su
-        join myvillageschema."Users" u   on u."sUserId"   = su."sSchoolUserId" and u."bActive"
-        join myvillageschema."Schools" s on s."sSchoolId" = su."sSchoolId" and s."bActive" and s."bBlocked" = false
-        group by su."sSchoolId"
-        having count(case when u."sCreatedBy" is null then 1 end) > 0
-        limit 1`);
-    if (!oSchool.rows.length) throw new Error('No school with a main user found in the development database.');
+    // Each file gets its own school. Cleanup is the runner's job, at the start AND the end of the
+    // run — doing it here would delete the previous file's school while its Stripe objects still
+    // pointed at it.
+    const sSuffix = Math.random().toString(36).slice(2, 10);
 
+    const oSchool = await db.raw(`
+        insert into myvillageschema."Schools"
+            ("sName", "sEmail", "sPhone", "iUsersLimit", "iStudentsLimit", "bBlocked", "bActive")
+        values (?, ?, '+520000000000', 10, 40, false, true)
+        returning "sSchoolId"`,
+        [`${FIXTURE_TAG} school ${sSuffix}`, `${FIXTURE_TAG.toLowerCase()}-${sSuffix}@example.invalid`]);
+    const sSchoolId: string = oSchool.rows[0].sSchoolId;
+
+    // The MAIN user is defined by sCreatedBy IS NULL — that is what the billing guards check.
+    const oMain = await db.raw(`
+        insert into myvillageschema."Users"
+            ("sName", "sLastName", "sEmail", "sType", "bPlatformAccess", "bVerified", "sCreatedBy", "bActive")
+        values (?, 'Main', ?, 'ADMINISTRATION', true, true, null, true)
+        returning "sUserId"`,
+        [`${FIXTURE_TAG}`, `${FIXTURE_TAG.toLowerCase()}-main-${sSuffix}@example.invalid`]);
+    const sMainUserId: string = oMain.rows[0].sUserId;
+
+    // A SECOND administrative user, so the "only the main user may mutate" 403 can be proven.
+    const oOther = await db.raw(`
+        insert into myvillageschema."Users"
+            ("sName", "sLastName", "sEmail", "sType", "bPlatformAccess", "bVerified", "sCreatedBy", "bActive")
+        values (?, 'Second', ?, 'ADMINISTRATION', true, true, ?, true)
+        returning "sUserId"`,
+        [`${FIXTURE_TAG}`, `${FIXTURE_TAG.toLowerCase()}-second-${sSuffix}@example.invalid`, sMainUserId]);
+    const sOtherUserId: string = oOther.rows[0].sUserId;
+
+    for (const sUserId of [sMainUserId, sOtherUserId]) {
+        await db.raw(`insert into myvillageschema."SchoolUsers" ("sSchoolUserId", "sSchoolId") values (?, ?)`,
+            [sUserId, sSchoolId]);
+    }
+
+    // The superadmin is only used to mint a token for PUT /schools, so an existing one is fine —
+    // nothing about it is mutated.
     const oAdmin = await db.raw(`
         select u."sUserId" from myvillageschema."Users" u
         join myvillageschema."Administrators" a on a."sAdministratorId" = u."sUserId"
         where u."bActive" limit 1`);
 
     return {
-        sSchoolId: oSchool.rows[0].sSchoolId,
-        sMainUserId: oSchool.rows[0].main_id,
-        sOtherUserId: oSchool.rows[0].other_id || null,
+        sSchoolId,
+        sMainUserId,
+        sOtherUserId,
         sAdminUserId: oAdmin.rows.length ? oAdmin.rows[0].sUserId : null
     };
+}
+
+/** Remove every fixture row this suite has ever created. Safe to call before and after a run. */
+export async function destroyFixtures(): Promise<number> {
+    const oSchools = await db.raw(
+        `select "sSchoolId" from myvillageschema."Schools" where "sName" like ?`, [`${FIXTURE_TAG}%`]);
+    const aSchoolIds = oSchools.rows.map((r: any) => r.sSchoolId);
+
+    const oUsers = await db.raw(
+        `select "sUserId" from myvillageschema."Users" where "sName" like ?`, [`${FIXTURE_TAG}%`]);
+    const aUserIds = oUsers.rows.map((r: any) => r.sUserId);
+
+    if (aUserIds.length) {
+        await db.raw(`delete from myvillageschema."Sessions" where "sUserId" = any(?)`, [aUserIds]).catch(() => {});
+    }
+    if (aSchoolIds.length) {
+        await db.raw(`delete from myvillageschema."Payments" where "sSchoolId" = any(?)`, [aSchoolIds]).catch(() => {});
+        await db.raw(`delete from myvillageschema."SchoolUsers" where "sSchoolId" = any(?)`, [aSchoolIds]).catch(() => {});
+    }
+    if (aUserIds.length) {
+        // Children before parents: the second user references the main one via sCreatedBy.
+        await db.raw(`update myvillageschema."Users" set "sCreatedBy" = null where "sUserId" = any(?)`, [aUserIds]).catch(() => {});
+        await db.raw(`delete from myvillageschema."Users" where "sUserId" = any(?)`, [aUserIds]).catch(() => {});
+    }
+    if (aSchoolIds.length) {
+        await db.raw(`delete from myvillageschema."Schools" where "sSchoolId" = any(?)`, [aSchoolIds]).catch(() => {});
+    }
+    return aSchoolIds.length;
+}
+
+/** Fixture rows still present. Must be zero once the runner has torn down. */
+export async function countFixtureResidue(): Promise<number> {
+    const oRow = await db.raw(
+        `select (select count(*) from myvillageschema."Schools" where "sName" like ?)
+              + (select count(*) from myvillageschema."Users"   where "sName" like ?) as n`,
+        [`${FIXTURE_TAG}%`, `${FIXTURE_TAG}%`]);
+    return Number(oRow.rows[0].n);
 }
 
 const aMintedSessions: string[] = [];

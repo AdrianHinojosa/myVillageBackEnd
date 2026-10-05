@@ -3,6 +3,34 @@ import { Page } from 'objection';
 import { UsersModel, IUsers } from '../004_Users/users.model';
 import { SchoolsModel, ISchools } from './schools.model';
 import { SchoolUsersModel, ISchoolUser  } from './001_SchoolUsers/schoolUsers.model';
+import { PaymentsModel } from '../030_Billing/billing.model';
+
+// --- Helpers de fecha para el ciclo de transferencia (todo en 'YYYY-MM-DD', sin tz) ---
+
+// Un valor de columna `date` (pg lo entrega como Date a medianoche local) → 'YYYY-MM-DD' local.
+function dateToYMDLocal(dValue): string {
+    if (!dValue) return '';
+    const o = new Date(dValue);
+    if (Number.isNaN(o.getTime())) return '';
+    return `${o.getFullYear()}-${String(o.getMonth() + 1).padStart(2, '0')}-${String(o.getDate()).padStart(2, '0')}`;
+}
+
+// Fecha de hoy (local del servidor) como 'YYYY-MM-DD'.
+function todayYMDLocal(): string {
+    return dateToYMDLocal(new Date());
+}
+
+// Suma 1 mes a un 'YYYY-MM-DD' con clamp a fin de mes (31 ene → 28/29 feb, no 3 mar).
+function addOneMonthYMD(sYMD): string {
+    const [iY, iM, iD] = sYMD.split('-').map(Number);
+    let iNextYear = iY;
+    let iNextMonth = iM + 1;
+    if (iNextMonth > 12) { iNextMonth = 1; iNextYear += 1; }
+    // día 0 del mes SIGUIENTE al destino = último día del mes destino
+    const iDaysInMonth = new Date(Date.UTC(iNextYear, iNextMonth, 0)).getUTCDate();
+    const iNextDay = Math.min(iD, iDaysInMonth);
+    return `${iNextYear}-${String(iNextMonth).padStart(2, '0')}-${String(iNextDay).padStart(2, '0')}`;
+}
 
 class Queries {
     constructor() {
@@ -14,7 +42,7 @@ class Queries {
     }
 
     // DONE: Insert school
-    static async insertSchool({sName, sPhone, sEmail, sAddress, sCityId, iUsersLimit, iStudentsLimit, sAccountType, sBillingMode, dFixedAmount, dAmountPerTeacher, dAmountPerStudent, dDiscountPct, sCreatedBy, sAdminName, sLastName, sSecondLastName}: any) {
+    static async insertSchool({sName, sPhone, sEmail, sAddress, sCityId, iUsersLimit, iStudentsLimit, sAccountType, sBillingMode, dFixedAmount, dAmountPerTeacher, dAmountPerStudent, dDiscountPct, sPaymentMethod, dMonthlyAmount, tNextPaymentDate, sCreatedBy, sAdminName, sLastName, sSecondLastName}: any) {
         return await SchoolsModel.transaction(async (trx) => {
 
             // Insert into School table
@@ -35,6 +63,10 @@ class Queries {
                 dAmountPerTeacher: dAmountPerTeacher ?? null,
                 dAmountPerStudent: dAmountPerStudent ?? null,
                 dDiscountPct: dDiscountPct ?? null,
+                // Pago por transferencia — default TRANSFER si no se especifica.
+                sPaymentMethod: sPaymentMethod || 'TRANSFER',
+                dMonthlyAmount: dMonthlyAmount ?? null,
+                tNextPaymentDate: tNextPaymentDate ?? null,
                 bBlocked: false,
                 sCreatedBy,
                 bActive: true
@@ -66,7 +98,7 @@ class Queries {
     }
 
     // Done: Update school
-    static async updateSchool(sSchoolId, {sName, sPhone, sCityId, iUsersLimit, iStudentsLimit, sAccountType, sBillingMode, dFixedAmount, dAmountPerTeacher, dAmountPerStudent, dDiscountPct, sLastUpdatedBy}) {
+    static async updateSchool(sSchoolId, {sName, sPhone, sCityId, iUsersLimit, iStudentsLimit, sAccountType, sBillingMode, dFixedAmount, dAmountPerTeacher, dAmountPerStudent, dDiscountPct, sPaymentMethod, dMonthlyAmount, tNextPaymentDate, sLastUpdatedBy}) {
 
         return await SchoolsModel.transaction(async (trx) => {
             // Only patch sAccountType when it was actually sent — omitting it must not reset the type
@@ -89,6 +121,10 @@ class Queries {
             if (dAmountPerTeacher !== undefined) oPatch.dAmountPerTeacher = dAmountPerTeacher;
             if (dAmountPerStudent !== undefined) oPatch.dAmountPerStudent = dAmountPerStudent;
             if (dDiscountPct !== undefined) oPatch.dDiscountPct = dDiscountPct;
+            // Pago por transferencia — patch solo lo enviado (no borrar config en edits parciales).
+            if (sPaymentMethod) oPatch.sPaymentMethod = sPaymentMethod;
+            if (dMonthlyAmount !== undefined) oPatch.dMonthlyAmount = dMonthlyAmount;
+            if (tNextPaymentDate !== undefined) oPatch.tNextPaymentDate = tNextPaymentDate;
 
             // Update school
             let updatedSchool =  await SchoolsModel.query(trx).patchAndFetchById(sSchoolId, oPatch).where('bActive', true);
@@ -122,7 +158,7 @@ class Queries {
      * @param sSearch (general search by name, email, phone, city)
      * @returns
      */
-    static async findAllSchools(iPageNumber, iItemsPerPage, sSearch, bBlocked) {
+    static async findAllSchools(iPageNumber, iItemsPerPage, sSearch, bBlocked, sAccountType?) {
         return await SchoolsModel.query().modify(function (queryBuilder : any) {
             queryBuilder.select('Schools.*')
             queryBuilder.select('City.sName AS sCityName', 'City.sCityId')
@@ -170,6 +206,18 @@ class Queries {
             }
             else if (bBlocked == false) {
                 queryBuilder.where('Schools.bBlocked', false)
+            }
+
+            // Punto 18 — filtro por modalidad. YOU incluye el legacy THERAPIST; SCHOOL incluye las
+            // cuentas sin modalidad (NULL, colegios previos a Punto 5).
+            if (sAccountType === 'YOU' || sAccountType === 'THERAPIST') {
+                queryBuilder.whereIn('Schools.sAccountType', ['YOU', 'THERAPIST'])
+            } else if (sAccountType === 'SCHOOL') {
+                queryBuilder.where(function () {
+                    this.where('Schools.sAccountType', 'SCHOOL').orWhereNull('Schools.sAccountType')
+                })
+            } else if (sAccountType === 'YOU_PLUS') {
+                queryBuilder.where('Schools.sAccountType', 'YOU_PLUS')
             }
         }).orderBy('Schools.updated_at', 'desc').page((iPageNumber - 1), iItemsPerPage)
     }
@@ -331,7 +379,11 @@ class Queries {
                 SELECT
                     COUNT(*)                                          ::integer AS "iTotalSchools",
                     COUNT(*) FILTER (WHERE "bBlocked" = false)       ::integer AS "iActiveSchools",
-                    COUNT(*) FILTER (WHERE "bBlocked" = true)        ::integer AS "iInactiveSchools"
+                    COUNT(*) FILTER (WHERE "bBlocked" = true)        ::integer AS "iInactiveSchools",
+                    -- Punto 18 — cuentas ACTIVAS por modalidad (YOU incluye legacy THERAPIST; SCHOOL incluye NULL)
+                    COUNT(*) FILTER (WHERE "bBlocked" = false AND ("sAccountType" = 'SCHOOL' OR "sAccountType" IS NULL)) ::integer AS "iSchoolsSchool",
+                    COUNT(*) FILTER (WHERE "bBlocked" = false AND "sAccountType" IN ('YOU', 'THERAPIST'))               ::integer AS "iSchoolsYou",
+                    COUNT(*) FILTER (WHERE "bBlocked" = false AND "sAccountType" = 'YOU_PLUS')                          ::integer AS "iSchoolsYouPlus"
                 FROM "Schools"
                 WHERE "bActive" = true
             `),
@@ -497,6 +549,10 @@ class Queries {
             iTotalSchools:    parseInt(schools?.iTotalSchools    ?? '0'),
             iActiveSchools:   parseInt(schools?.iActiveSchools   ?? '0'),
             iInactiveSchools: parseInt(schools?.iInactiveSchools ?? '0'),
+            // Punto 18 — cuentas activas por modalidad (tiles del dashboard)
+            iSchoolsSchool:   parseInt(schools?.iSchoolsSchool   ?? '0'),
+            iSchoolsYou:      parseInt(schools?.iSchoolsYou      ?? '0'),
+            iSchoolsYouPlus:  parseInt(schools?.iSchoolsYouPlus  ?? '0'),
             iTotalStudents:   parseInt(students?.iTotalStudents  ?? '0'),
             sStudentsTrend,
             iGoalProgress:    parseInt(goalProgress?.iGoalProgress ?? '0'),
@@ -511,6 +567,104 @@ class Queries {
         };
     }
 
+
+    // Punto 18 — Resumen de operación "en vivo" por modalidad (tab Operación del dashboard).
+    // Cuenta el estado ACTUAL (sin filtros de fecha): por cada modalidad (SCHOOL incluye NULL/legacy;
+    // YOU incluye THERAPIST; YOU_PLUS) devuelve cuentas, usuarios, estudiantes, metas activas y el
+    // progreso promedio real a nivel meta (SUM(progreso)/SUM(metas), no promedio de promedios).
+    // El front arma la fila TOTAL; aquí solo devolvemos las 3 modalidades siempre presentes.
+    static async findOperationSummary() {
+        const result = await db.raw(`
+            SELECT
+                CASE
+                    WHEN sc."sAccountType" = 'YOU_PLUS'            THEN 'YOU_PLUS'
+                    WHEN sc."sAccountType" IN ('YOU', 'THERAPIST') THEN 'YOU'
+                    ELSE 'SCHOOL'
+                END                                                                 AS "sModality",
+                COUNT(DISTINCT sc."sSchoolId")                            ::integer  AS "iAccounts",
+                COALESCE(SUM(u_cnt.cnt), 0)                              ::integer  AS "iUsers",
+                COALESCE(SUM(s_cnt.cnt), 0)                              ::integer  AS "iStudents",
+                COALESCE(SUM(g_agg.cnt), 0)                             ::integer  AS "iGoals",
+                COALESCE(ROUND((SUM(g_agg.sum_prog) / NULLIF(SUM(g_agg.cnt), 0))::numeric, 0), 0) ::integer AS "dProgress"
+            FROM "Schools" sc
+            LEFT JOIN (
+                SELECT su."sSchoolId", COUNT(su."sSchoolUserId") AS cnt
+                FROM "SchoolUsers" su
+                JOIN "Users" u ON u."sUserId" = su."sSchoolUserId" AND u."bActive" = true
+                GROUP BY su."sSchoolId"
+            ) AS u_cnt ON u_cnt."sSchoolId" = sc."sSchoolId"
+            LEFT JOIN (
+                SELECT "sSchoolId", COUNT("sStudentId") AS cnt
+                FROM "Students"
+                WHERE "bActive" = true
+                GROUP BY "sSchoolId"
+            ) AS s_cnt ON s_cnt."sSchoolId" = sc."sSchoolId"
+            LEFT JOIN (
+                SELECT s."sSchoolId",
+                       COUNT(g."sGoalId")          AS cnt,
+                       COALESCE(SUM(g."dProgress"), 0) AS sum_prog
+                FROM "Goals" g
+                JOIN "Students" s ON s."sStudentId" = g."sStudentId" AND s."bActive" = true
+                WHERE g."bActive" = true AND g."sStatus" = 'ACTIVE' AND g."sParentGoalId" IS NULL
+                GROUP BY s."sSchoolId"
+            ) AS g_agg ON g_agg."sSchoolId" = sc."sSchoolId"
+            WHERE sc."bActive" = true AND sc."bBlocked" = false
+            GROUP BY 1
+        `);
+
+        // Siempre devolver las 3 modalidades, aunque alguna tenga 0 cuentas (para que la tab se vea completa).
+        const aModalities = ['SCHOOL', 'YOU_PLUS', 'YOU'];
+        const oByModality = {};
+        for (const row of result.rows) {
+            oByModality[row.sModality] = {
+                sModality:  row.sModality,
+                iAccounts:  parseInt(row.iAccounts  ?? '0'),
+                iUsers:     parseInt(row.iUsers     ?? '0'),
+                iStudents:  parseInt(row.iStudents  ?? '0'),
+                iGoals:     parseInt(row.iGoals     ?? '0'),
+                dProgress:  parseInt(row.dProgress  ?? '0'),
+            };
+        }
+
+        return aModalities.map((sModality) => oByModality[sModality] || {
+            sModality,
+            iAccounts: 0,
+            iUsers: 0,
+            iStudents: 0,
+            iGoals: 0,
+            dProgress: 0,
+        });
+    }
+
+
+    // Registra un pago por transferencia: avanza el ciclo mensual +1 mes (desde el vencimiento
+    // anterior, o desde hoy si aún no hay uno) y deja el pago en el historial para auditoría.
+    static async registerTransferPayment(sSchoolId, sLastUpdatedBy) {
+        return await SchoolsModel.transaction(async (trx) => {
+            const oSchool = await SchoolsModel.query(trx).findById(sSchoolId);
+
+            // Ciclo fijo mes a mes: se avanza desde la fecha de vencimiento previa, NO desde hoy,
+            // para que venza siempre el mismo día aunque el pago llegue unos días tarde. Todo en
+            // 'YYYY-MM-DD' (sin tz) y con clamp a fin de mes.
+            const sBaseYMD = oSchool.tNextPaymentDate ? dateToYMDLocal(oSchool.tNextPaymentDate) : todayYMDLocal();
+            const sNextDate = addOneMonthYMD(sBaseYMD);
+
+            const oUpdated = await SchoolsModel.query(trx)
+                .patchAndFetchById(sSchoolId, { tNextPaymentDate: sNextDate, sLastUpdatedBy })
+                .where('bActive', true);
+
+            // Historial de pagos (auditoría). Sin ids de Stripe: es un pago manual.
+            await PaymentsModel.query(trx).insert({
+                sSchoolId,
+                dAmount: oSchool.dMonthlyAmount ?? 0,
+                sCurrency: 'MXN',
+                tPaidAt: new Date().toISOString(),
+                sStatus: 'succeeded',
+            });
+
+            return oUpdated;
+        });
+    }
 
     // Update School Image
     static async updateSchoolImage(sSchoolId: string, sImageKey: string) {

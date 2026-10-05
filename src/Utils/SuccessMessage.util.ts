@@ -142,6 +142,10 @@ export default {
             sp: 'Se eliminó la escuela exitosamente!',
             en: "The school was successfully deleted."
         },
+        registerTransferPayment: {
+            sp: 'Se registró el pago por transferencia y se actualizó la fecha de vencimiento.',
+            en: "The transfer payment was registered and the due date was updated."
+        },
         uploadSchoolLogo: {
             sp: 'Se actualizó el logo de la escuela exitosamente!',
             en: "The school logo was successfully updated!"
@@ -149,6 +153,10 @@ export default {
         getAnalytics: {
             sp: 'Se ha obtenido exitosamente la analítica de escuelas',
             en: "The school analytics were successfully found"
+        },
+        getOperationSummary: {
+            sp: 'Se ha obtenido exitosamente el resumen de operación',
+            en: "The operation summary was successfully found"
         }
     },
 
@@ -173,6 +181,10 @@ export default {
         deleteStudent: {
             sp: 'Se eliminó el estudiante exitosamente!',
             en: "The student was successfully deleted."
+        },
+        folioVerified: {
+            sp: 'Se encontró al alumno. Se cargarán su nombre y fecha de nacimiento.',
+            en: "The student was found. Their name and birth date will be loaded."
         },
         uploadStudentImage: {
             sp: 'Se actualizó la imagen del estudiante exitosamente!',
@@ -397,7 +409,15 @@ export default {
         cancelSubscription: {
             sp: 'Tu suscripción se cancelará al final del periodo vigente. Conservas el acceso hasta la fecha de corte.',
             en: "Your subscription will be cancelled at the end of the current period. You keep access until the cut-off date."
-        }
+        },
+        resubscribe: {
+            sp: 'Suscripción reactivada exitosamente!',
+            en: "The subscription was reactivated successfully."
+        },
+        payOutstanding: {
+            sp: 'Pago procesado exitosamente! El acceso se restablece en unos segundos.',
+            en: "The payment went through. Access is restored in a few seconds."
+        },
     },
 
     // ========  Support  ==================
@@ -405,6 +425,18 @@ export default {
         sendTicket: {
             sp: 'Tu reporte fue enviado. Te contactaremos pronto.',
             en: "Your report was sent. We will contact you soon."
+        }
+    },
+
+    // ========  Public (Punto 18 — registro You/You+)  ==================
+    Public: {
+        signup: {
+            sp: 'Tu cuenta fue creada. Revisa tu correo para establecer tu contraseña.',
+            en: "Your account was created. Check your email to set your password."
+        },
+        schoolLead: {
+            sp: '¡Gracias! Recibimos tu solicitud y te contactaremos pronto.',
+            en: "Thank you! We received your request and will contact you soon."
         }
     },
 

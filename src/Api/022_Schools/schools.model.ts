@@ -34,6 +34,10 @@ export interface ISchools {
     tCurrentPeriodEnd?: string;
     bCancelAtPeriodEnd?: boolean;
     iFailedAttempts?: number;
+    // Pago por transferencia (billing manual)
+    sPaymentMethod?: string;
+    dMonthlyAmount?: number;
+    tNextPaymentDate?: string;
     sCreatedBy?: string;
     sLastUpdatedBy?: string;
     sLastDeletedBy?: string;
@@ -64,6 +68,10 @@ export class SchoolsModel extends Model {
     public tCurrentPeriodEnd?: string;
     public bCancelAtPeriodEnd?: boolean;
     public iFailedAttempts?: number;
+    // Pago por transferencia (billing manual)
+    public sPaymentMethod?: string;
+    public dMonthlyAmount?: number;
+    public tNextPaymentDate?: string;
     public sCreatedBy?: string;
     public sLastUpdatedBy?: string;
     public sLastDeletedBy?: string;

@@ -797,3 +797,293 @@ averaging is happening. `npm run test:stripe` re-run: **183 assertions, still gr
 | `a2a59d8` | **7** | Lucy 17/ago: parent goals aggregate their subgoals + subgoal own title + report fix; migration `3038`; suite `SubGoalsRollup` (66 assertions) |
 | `88d9666` | — | Reply document for the 17/ago feedback + CORS findings + Stripe 401/403/404 diagnosis; three trackers updated |
 | `366a3b4` | **7** | Lucy 18/ago: sequential stages + goal mirrors the active stage + average over ALL records; migration `3039`; `recalc:progress`; suite grown to 109 assertions; frontend guide |
+| _(branch `feature/transfer-billing`)_ | **F1** | Pago por transferencia: migración `3040`, `sPaymentMethod`/`dMonthlyAmount`/`tNextPaymentDate` en Schools, endpoint `POST /schools/:id/billing/registerTransferPayment`, Stripe ignorado en modo TRANSFER, summary extendido |
+
+---
+
+## Feature 1 — Pago por transferencia (billing manual)
+
+**Decisiones del PO (2026-08-21):** un colegio puede cobrarse por **transferencia** en vez de
+Stripe. En modo TRANSFER se ignora Stripe por completo. Solo el **superadmin** configura el modo
+y registra pagos. Ciclo **mensual fijo**: registrar pago avanza el vencimiento **+1 mes desde el
+vencimiento anterior** (no desde hoy). Los **colegios existentes quedan en TRANSFER** por default.
+
+**Esquema — migración `3040_Schools_transferBilling.ts`** (alter `Schools`):
+- `sPaymentMethod` string NOT NULL default `'TRANSFER'` (`STRIPE | TRANSFER`) → migra a todos los existentes a transferencia.
+- `dMonthlyAmount` decimal(12,2) nullable — monto mensual capturado por el superadmin.
+- `tNextPaymentDate` date nullable — próxima fecha de vencimiento; avanza +1 mes por pago.
+
+**Endpoints / cambios:**
+- `POST /schools/:sSchoolId/billing/registerTransferPayment` (superadmin, `verifyAdminPermissions [General WRITE]`):
+  avanza `tNextPaymentDate += 1 mes` y registra un row en `Payments` (`sStatus='succeeded'`, sin ids de Stripe) para el historial. Rechaza 409 si el colegio no está en modo TRANSFER.
+- `POST /schools` y `PUT /schools/:id`: aceptan/guardan `sPaymentMethod`, `dMonthlyAmount`, `tNextPaymentDate` (en `BillingFields`, todos opcionales/anulables).
+- `GET /billing/summary`: ahora devuelve `sPaymentMethod`, `dMonthlyAmount`, `tNextPaymentDate` (además de lo de Stripe) para que el frontend muestre la tarjeta manual.
+
+**Stripe ignorado en TRANSFER:**
+- `syncSubscriptionTariff()` hace early-return `{bSynced:false, sReason:'transfer'}` si `sPaymentMethod==='TRANSFER'` (se llama en cada update de colegio → no debe tocar Stripe).
+- `attachPaymentMethod()` rechaza 409 (`Schools.stripeNotForTransfer`) si el colegio es TRANSFER.
+- No se auto-suspende por webhooks (transfer no tiene subscription). El estado PAGADO/PENDIENTE lo **deriva el frontend** de `tNextPaymentDate` vs hoy; no se usa `sBillingStatus` para transfer.
+
+**Validaciones (§2.7):** `Schools.sPaymentMethod` / `dMonthlyAmount` / `tNextPaymentDate` agregadas a `ValidationError.util.ts`. Mensajes `SuccessMessages.Schools.registerTransferPayment` + `ErrorMessages.Schools.notTransferMode`/`stripeNotForTransfer` (sp/en).
+
+**Deliberadamente NO hecho:** cobro automático/recordatorios por transferencia; historial de transfer con más metadata; enforcement de suspensión por falta de pago en transfer (queda informativo).
+
+**Fix post-auditoría (fechas):** `tNextPaymentDate` como string `YYYY-MM-DD` (no `Joi.date()`, que guardaba un día antes en tz negativas); avance de ciclo con clamp a fin de mes; `getSummary` devuelve `YYYY-MM-DD`.
+
+---
+
+## Feature 2 — Alumno compartido entre instituciones (folio)
+
+**Decisiones del PO (2026-08-21):** un alumno puede existir en varias instituciones compartiendo
+**solo** nombre + fecha de nacimiento; **todo lo demás (diagnóstico, grado, metas, registros) es
+por institución**. El **folio** es el id de base de datos de la identidad compartida. Meta futura:
+"My Village Parents" (un hijo, no un hijo por organización).
+
+**Esquema — migración `3041_Persons_and_Students_sPersonId.ts`:**
+- Nueva tabla `Persons` (identidad compartida): `sPersonId` (uuid PK = **folio**), `sName`, `sLastName`, `sSecondLastName`, `tBirthDate`, `bActive`, timestamps.
+- `Students.sPersonId` (uuid FK → Persons, nullable) + índice.
+- **Backfill:** cada alumno existente genera su Person reusando su `sStudentId` como `sPersonId` → todo alumno actual queda con folio; comportamiento previo sin cambios.
+
+**Modelo:** una `Persons` (compartida) → N `Students` (uno por institución). Metas/registros
+cuelgan de `Students.sStudentId` (por institución), así cada colegio ve lo suyo.
+
+**Endpoints:**
+- `POST /students/verifyByFolio` (SchoolAdmin, WRITE + denyFaculty): body `{ sFolio, sFullName, tBirthDate }`. Valida folio + nombre completo (normalizado: sin acentos/mayúsculas/espacios) + fecha; responde `{ person: { sPersonId, sName, sLastName, sSecondLastName, tBirthDate } }` o **404 genérico** (no revela si el folio existe).
+- `POST /students` extendido: acepta `sPersonId` opcional. Con folio → **re-verifica** identidad (defensa), evita duplicado en el mismo colegio (409 `alreadyLinked`), y crea el perfil copiando nombre+fecha **de la Person** (fuente de verdad). Sin folio → crea una Person nueva.
+- `GET /students/:id` ahora incluye `sPersonId` (el folio, para mostrarlo/compartirlo).
+
+**Privacidad:** el verify no filtra datos si no hay match exacto; un colegio nunca ve perfiles/metas de otras instituciones (siguen scoped por `sSchoolId`).
+
+**Deliberadamente NO hecho:** sincronización en vivo del nombre entre instituciones (se copia al ligar; editar el nombre en un colegio no propaga — suficiente para hoy, el futuro Parents agrupa por `sPersonId`); UI/consolidación cross-institución (es del futuro My Village Parents).
+
+**Validaciones:** `Students.sPersonId`/`sFolio`/`sFullName`/`tBirthDate` agregadas a `ValidationError.util.ts` (esta última era un gap pre-existente). Mensajes `folioVerified` / `folioNotFound` / `folioMismatch` / `alreadyLinked` (sp/en).
+
+| commit | Punto | Qué |
+|---|---|---|
+| _(branch `feature/transfer-billing`)_ | **F2** | Alumno compartido: migración `3041`, tabla `Persons` + `Students.sPersonId`, `POST /students/verifyByFolio`, alta por folio con re-verificación y dedupe |
+
+---
+
+## Hotfix — Guard de TRANSFER en el flujo de tarjetas (28/ago/2026)
+
+**Origen:** un cliente en producción (`Rene Prueba Stripe`) no podía registrar tarjeta. Al depurar
+salieron **dos** causas distintas; ésta es la segunda, y es la que puede costar dinero real.
+
+### Causa 1 — id de Stripe de modo prueba guardado (dato, no código)
+
+El colegio tenía `sStripeCustomerId = cus_V8ofsOjVCWP996`, creado cuando producción corría con
+llaves de **prueba**. Al pasar a llaves **live**, ese id dejó de existir: los dos modos de Stripe
+son espacios de objetos separados. `ensureStripeCustomer()` devuelve el id guardado **sin
+validarlo**, así que `setupIntents.create({ customer })` respondía `resource_missing` → 500.
+
+Verificado contra Stripe live: `No such customer: 'cus_V8ofsOjVCWP996'`.
+
+Se corrige **en datos**, no en código: limpiar `sStripeCustomerId` / `sStripeSubscriptionId` /
+`sStripePriceId` de los colegios tocados durante las pruebas. Pendiente de correr en producción.
+
+### Causa 2 — el guard de TRANSFER solo estaba en un endpoint
+
+`attachPaymentMethod` rechazaba a los colegios en modo transferencia (409), pero
+**`createSetupIntent` no**. Consecuencia: un colegio en TRANSFER podía capturar una tarjeta real,
+Stripe le creaba customer + payment method, y **recién después** el attach lo rechazaba. Falla
+tardía, mensaje confuso, y objetos huérfanos acumulándose en la cuenta live.
+
+Peor todavía: **`resubscribe` tampoco tenía guard**. Un colegio en TRANSFER con tarjeta guardada
+podía terminar con una suscripción de Stripe cobrándole automáticamente **mientras** el superadmin
+le sigue facturando por transferencia. Doble cobro a un cliente real.
+
+**Hecho:** guard `sPaymentMethod === 'TRANSFER'` → **409** `Schools.stripeNotForTransfer` en
+`createSetupIntent` y en `resubscribe`. Sin mensajes nuevos: la llave ya existía.
+
+**Deliberadamente NO se puso guard en:**
+
+| Endpoint | Por qué se deja pasar |
+|---|---|
+| `POST /billing/cancel` | Un colegio que se mueve de STRIPE a TRANSFER **tiene que poder** cancelar su suscripción. Bloquearlo lo deja atrapado con cobro automático encima de la factura manual. |
+| `DELETE /billing/payment-methods/:id` | Mismo motivo: es el camino de limpieza. |
+| `PUT /billing/payment-methods/:id/default` | Inofensivo, solo ordena tarjetas existentes. |
+| `POST /billing/pay` | Liquida una factura **real ya emitida**, y ya exige que exista una factura abierta. Si un colegio pasó a TRANSFER debiendo un ciclo de Stripe, esa deuda es legítima. |
+| `GET /billing/*` | Lecturas. |
+
+La regla: **el guard va en los dos caminos que CREAN cobro, no en los que lo deshacen.**
+
+### Lo que NO se tocó y sigue pendiente
+
+- `ensureStripeCustomer()` no se auto-repara: si el id guardado ya no existe en Stripe, sigue
+  reventando en vez de crear uno nuevo. Es un cambio defensivo razonable, pero no se hizo sin
+  decisión — cambia el comportamiento ante un customer borrado a mano.
+- Limpieza de los ids de prueba en la BD de producción.
+
+| commit | Punto | Qué |
+|---|---|---|
+| _(este commit)_ | **P3 hotfix** | Guard TRANSFER en `createSetupIntent` y `resubscribe` (409 `stripeNotForTransfer`) |
+
+---
+
+## Hotfix — IEP: caída del proceso y fechas vacías (03/sep/2026)
+
+**Origen:** al guardar un IEP, producción daba 500 y **development tumbaba el proceso** (PM2 lo
+reiniciaba). Eran dos fallas distintas que se veían como una.
+
+### Falla A — el error handler tumbaba la API (la grave)
+
+`ErrorHandler.mw.ts` dereferenciaba cuatro niveles a ciegas:
+
+```ts
+Messages[err.type][type][message][langCode]
+```
+
+Cada etiqueta de error de Joi es una **llave de búsqueda** en `ValidationError.util.ts`. Si falta la
+entrada, eso lanza `Cannot read properties of undefined (reading 'sp')` **desde dentro del propio
+manejador de errores** — Express no se recupera de eso, así que el proceso muere.
+
+El §2.7 del working agreement ya documentaba este trap (mordió en P10, P5 y P8). Seguía vivo.
+
+**Hecho:** acceso opcional + fallback. Si falta la entrada, se responde **409 genérico localizado**
+y se loguea en `console.error` con la llave exacta que falta, para que se arregle. Una traducción
+faltante es un descuido de desarrollo; nunca debe tirar la API.
+
+Se quitó también el `console.log(Messages[err.type][type])` de la línea 128, que vomitaba el
+catálogo completo del módulo en cada error de validación.
+
+### Falla B — 17 etiquetas sin entrada en el catálogo
+
+Escaneadas las **177** etiquetas de todos los `*.validations.ts` contra el catálogo: faltaban 17,
+cada una una caída potencial.
+
+| Módulo | Agregado |
+|---|---|
+| IEPs | `aTeamMembers`, `dtIepStartDate`, `dtIepReviewDate`, `sNotes` |
+| Goals | `sDirection`, `bHasSubGoals`, `iTargetOpportunities`, `iTargetPercentage` |
+| Students | `sGender`, `tStartDate`, `tEndDate`, `bDeleteImage` |
+| TrackingRecords | `sSubGoalId` |
+| StudentAssignments | grupo completo nuevo (`sStudentId`, `sSchoolUserId`, `sStudentAssignmentId`) |
+| Sessions | `Authorization` le faltaba el `en` (pre-existente) |
+
+`administratorModules.validations.ts` usaba la etiqueta `"Modules sAdministratorModuleId"` pero el
+grupo del catálogo se llama `AdministratorModules`. Se corrigió la **etiqueta**, en lugar de
+duplicar el mensaje en un grupo `Modules` inventado.
+
+### Falla C — `aTeamMembers` rechazaba un campo legítimo del frontend
+
+El objeto interno era estricto (`Joi.object({ sTeamMemberId, sName, sRole })`) y el frontend manda
+además `bCustom: true` para marcar las filas escritas a mano
+(`components/iep/sections/TeamMembers.vue:120`). Eso disparaba el error → etiqueta sin entrada →
+caída.
+
+**Hecho:** `bCustom` explícito + `.unknown(true)`. La columna es **jsonb**: se guarda tal cual y
+nunca se lee de forma estructural, así que una lista blanca de llaves no compra nada y cuesta 409s.
+Queda igual más estricta que sus hermanas `aObjectives` / `aModifications` / `aExternalServices`,
+que no validan sus items en absoluto.
+
+### Falla D — `''` en columnas `date`
+
+Un `<input type="date">` vacío da `''`, no `null`. `Validations.Date` **acepta `''` a propósito**
+(`.allow('')`), así que `''` es un valor de request válido que Postgres no puede guardar:
+`invalid input syntax for type date: ""`.
+
+**Hecho:** `nullifyEmptyDates()` en `ieps.queries.ts`, al lado del `stringifyJsonbFields` que ya
+vivía ahí, mapeando `'' → null` para `dtIepStartDate` y `dtIepReviewDate`. Una llave **ausente**
+sigue ausente, así que un PATCH nunca borra una fecha que el cliente no mandó.
+
+**Deliberadamente NO se tocó `Validations.Date`.** Ese validador compartido se usa sobre columnas
+`date` en Goals (`tStartDate`, `tTargetDate`), SubGoals (3 campos), TrackingRecords (`dtDate`) y
+Students (`tBirthDate`) — **todos con el mismo bug latente**. Cambiarlo arreglaría los cinco de un
+golpe, pero `.empty('')` borra la llave del payload y con eso "vaciar una fecha" dejaría de
+funcionar en silencio; y `.default(null)` haría que una llave ausente también borre. Son flujos
+vivos y muy usados: es una decisión de producto, no de hotfix. **Pendiente de decidir.**
+
+### Verificación
+
+- `npm run build` ✅ 153 archivos
+- Escaneo de etiquetas: **177 revisadas, 0 faltantes**
+- Catálogo cargado en runtime: 24 grupos, todas las entradas con `sp` + `en`
+- ErrorHandler, **6/6**: llave existente → mensaje real; grupo inexistente → 409 genérico sp;
+  campo inexistente → 409 genérico en; rama de `"allowed"` intacta; ninguna lanza
+- `aTeamMembers`, **5/5**: el payload exacto del curl que crasheaba ahora valida; sin `bCustom`
+  sigue validando; `null` permitido; `sTeamMemberId` numérico **sigue rechazado** (no se aflojaron
+  los tipos)
+- Fechas contra la BD de **development**, **4/4**: INSERT con `''` → NULL; PATCH con fecha real →
+  guarda; PATCH sin las llaves → **no** borra; PATCH con `''` → limpia. Residuo: 0
+
+| commit | Punto | Qué |
+|---|---|---|
+| _(este commit)_ | **Hotfix IEP** | Guarda en ErrorHandler, 17 entradas de catálogo, `aTeamMembers` con `bCustom`, `'' → null` en fechas del IEP |
+## Punto 18 — My Village for You / You+ (branch `feature/point18-for-you`, ramificada de `feature/transfer-and-shared-students`)
+
+Plan completo (front + back): `myVillage/docs/plan-punto18-myvillage-for-you.md`.
+
+🔒 **Restricción dura:** hay 2 colegios EN VIVO. Todo aditivo y por modalidad; SCHOOL byte-idéntico.
+Confirmar con Adrián la base real de prod + el `sAccountType` de los 2 vivos ANTES de migrar/deployar.
+
+### Fase 0 — Fundamentos (en progreso)
+- **Migración `3042_Schools_bTrialConsumed`**: `bTrialConsumed` bool default false (trial una sola vez). Aditiva.
+- **Enum modalidad** (`schools.validations.ts`): `sAccountType` acepta `SCHOOL | THERAPIST | YOU | YOU_PLUS`. `THERAPIST` se conserva y se trata como `YOU` (helper `normalizeModality`); **NO** se migran datos aún (se difiere hasta verificar los 2 vivos + deploy).
+- **Motor de tarifas** (`Stripe.service.ts`): `MODALITY_TIERS` (You $568.40 incl 1u/10p, +$51.04/paciente; You+ $742.40 incl 4u/10p, +$29.00/usuario, +$51.04/paciente; **montos CON IVA incluido** desde la decisión PO 2026-10-05 — equivalen a 490/640/44/25 sin IVA; incluidos CUENTAN al principal). `computeQuotaTotal(modalidad, oSchool)` sobre conteos REALES (`iActiveUsers`/`iActiveStudents`). Rama en `computeMonthlyTotal` **solo para cuentas Stripe** (`sPaymentMethod!=='TRANSFER'`) → los terapeutas actuales (TRANSFER) y colegios vivos NO cambian.
+- **Trial** `TRIAL_PERIOD_DAYS` 30→14 (todas las modalidades; solo suscripciones nuevas).
+- **Gating** (`schools.permissions.ts`): `denyForModality(aBlocked)` genérico; IEP bloqueado para `['YOU','YOU_PLUS']` (`ieps.routes.ts`); docs/records/usuarios siguen bloqueados solo para `YOU` (You+ SÍ tiene docs y usuarios). `denyTherapistAccess()` = `denyForModality(['YOU'])`. TS unions ensanchados.
+
+- **Conteos reales en cobranza** (`billing.controllers.ts`): helper `attachRealCounts(oSchool)` adjunta `iActiveUsers`/`iActiveStudents` (helpers `countActiveSchoolUsers` / `findCountOfActiveStudentsBySchool`) **solo** para You/You+ cobradas por Stripe (no-op para SCHOOL y para cualquier cuenta en TRANSFER). Se llama en `getSummary`, `attachPaymentMethod` (primera cuota) y `syncSubscriptionTariff` (re-tarificación del superadmin). El motor (`computeMonthlyTotal`) sigue puro/sin DB; el caller le adjunta los conteos.
+- **Trial una sola vez** (`attachPaymentMethod`): la suscripción se crea con `trial_period_days` **solo si** `bTrialConsumed !== true`; al otorgarlo se persiste `bTrialConsumed: true`. Reintentar suscripción (canceló y vuelve) ya no regala otra prueba. `bTrialConsumed` agregado al modelo `Schools`.
+- **Tests** (`unitTests/StripeSubscriptions/01_money.ts`): sección You/You+ (base, excedentes, descuento, `THERAPIST→YOU`, y la **salvaguarda** de que You en TRANSFER ignora la cuota). Trial esperado actualizado 30→14. Fórmula verificada 9/9 (los de integración requieren DB dev + Stripe sandbox).
+
+**Espejo del motor de tarifas en el front** ya existe (`app/utils/billing.ts`: `MODALITY_TIERS` + `computeQuotaTotal`, commit `e06c2c0`).
+
+**Pendiente Fase 0:** ninguno del backend (Fase 0 backend cerrada). Falta coordinar con Adrián base real de prod + `sAccountType` de los 2 vivos ANTES de migrar/deployar.
+
+### Fase 1 — Registro público You/You+ (en progreso)
+- **Módulo nuevo `031_Public`** (`public.controllers/routes/validations/rateLimit`):
+  - `POST /:sLang/public/signup` **SIN auth** (como login/recovery). Body: `sAccountType` (**YOU|YOU_PLUS**, SCHOOL rechazado), `sAdminName`, `sLastName`, `sSecondLastName?`, `sPhone`, `sEmail`. Responde `{ message, success }` 201.
+  - Reusa **exactamente** el alta de `schools.controllers.createSchool`: `insertSchool` (school+admin user+schoolUser en una transacción) → token de recuperación 72h → email `newSchool` con link `/set-password/:token`. El nombre de cuenta (`sName`) se deriva del nombre de la persona; `sCreatedBy: null` (autoservicio; columna nullable); `sPaymentMethod: 'STRIPE'` (You/You+ cobran con tarjeta; la cuota arranca al capturar tarjeta).
+  - **Anti-abuso:** rate-limit en memoria por IP (5/10min, best-effort mono-instancia; si se escala → Redis/WAF) + correo único (`getUserByEmail` → 409). Modalidad revalidada en el controlador (defensa, además del Joi).
+  - Mensajes nuevos: `SuccessMessages.Public.signup`, `ErrorMessages.Public.tooManyRequests`/`invalidModality`, `ValidationError.util Public.sAccountType` (sp/en).
+
+- **`getSummary` enriquecido** (`billing.controllers.ts`): la respuesta ahora incluye `sAccountType`, `iActiveUsers`, `iActiveStudents` (estos dos solo poblados en You/You+ por Stripe vía `attachRealCounts`; null en el resto). El front los usa para el **aviso de costo** al dar de alta usuario/paciente (calcula el excedente con el espejo `computeQuotaTotal`).
+
+- **Recálculo al cierre de ciclo** (`001_Webhooks/webhooks.controllers.ts`): nuevo caso `invoice.upcoming` → `handleInvoiceUpcoming` re-tarifica la suscripción con los conteos reales vía `syncSubscriptionTariff` (solo You/You+; `proration_behavior: 'none'`, no toca el periodo ya facturado). Decisión #2 (cobro sobre reales, sin prorrateo). ⚠️ **Config Stripe:** el endpoint de webhook debe tener habilitado el evento `invoice.upcoming` en el dashboard (Adrián).
+
+**Fase 1 COMPLETA** (back+front): registro público You/You+; aviso de costo al dar de alta (front, `CoreDialogsCostWarning` + `getSummary` enriquecido); recálculo al cierre de ciclo (back); desglose de cuota + monto al terminar la prueba en BillingPlanCard (front).
+
+### Fase 2 — Landing + captación Schools (en progreso)
+- **`POST /:sLang/public/schoolLead`** (módulo `031_Public`, SIN auth, mismo rate-limit): captación de colegios. **NO crea cuenta** — solo envía correo al equipo (`schoolLead.html`, plantilla nueva) a `SCHOOL_LEAD_EMAILS` (env, fallback `info@` + `lucypotes@`). Body: `sInstitution`, `sContactName`, `sEmail`, `sPhone`, `sCity?`, `sStudentsEstimate?`, `sMessage?`. Tipo de correo `schoolLead` agregado a `Mail.service`. Mensajes `SuccessMessages.Public.schoolLead` + `ValidationError.util Public.*` (sp/en).
+
+- **Landing** (`SOFEX/my-village/landing/`, estático, **fuera de git** — deploy manual por SOFEX): CTA "Solicitar Demo"→"Solicita tu prueba" (nav+hero) → `#modalidades`; sección de 3 modalidades (Schools/You/You+); Schools "Dale clic aquí"→cuestionario `#solicitud-colegio` que hace `POST /public/schoolLead`; You/You+ enlazan a `/signup/you[-plus]` de la app. **TODO SOFEX** en `js/main.js` (`MV_CONFIG`): fijar `apiBase` (base del API hasta antes de `/public`) y `appUrl` (dominio de la plataforma). **Textos = placeholders** hasta que el cliente los entregue.
+
+**Fase 2 COMPLETA** (back: `schoolLead`; landing: modalidades + cuestionario). Pendiente solo config/textos de SOFEX/cliente.
+
+### Fase 3 — Protección de datos de menores (solo YOU) (en progreso)
+- **`studentPrivacy.util.ts`** (nuevo): `isYouModality`, `maskMinorName` (primer nombre + iniciales, "Lucía P. A."), `applyMinorNameMasking(oStudent, sAccountType, bKeepRawParts)`.
+- **`students.controllers.ts`** aplica el enmascarado según `res.locals.sAccountType` (solo YOU/THERAPIST; no-op SCHOOL/YOU+):
+  - `getAllStudents` (lista): `sFullName` enmascarado + `sLastName`/`sSecondLastName` = **null** (suprimidos).
+  - `getOneStudent` (detalle): `sFullName` enmascarado pero **conserva** las partes crudas (`bKeepRawParts=true`) — el formulario de edición del propio terapeuta las necesita para precargar y no borrar el apellido al guardar.
+  - `getStudentReport`: `sFullName` enmascarado (el PDF de reporte lo usa).
+- Nota: IEP está bloqueado en YOU (Fase 0), así que su PDF no aplica. El concat de nombre en `studentAssignments` es de USUARIOS (terapeutas), no de menores → no se toca.
+- ⚠️ **Decisión pendiente PO:** `getOneStudent` conserva apellidos crudos para el form de edición (si no, el alta/edición del terapeuta perdería el apellido). Si se quiere supresión dura también en el detalle, hay que rediseñar el flujo de edición de nombre en YOU.
+
+**Frontend Fase 3** (dev): StudentDetail oculta los campos de apellido en YOU (`bMaskMinorName = authStore.bIsTherapist`); el nombre de archivo del PDF de reporte omite el apellido en YOU. El resto de superficies ya usa el `sFullName` enmascarado del backend.
+
+### Fase 4 — Panel admin por modalidad (COMPLETA)
+- **`findSchoolsAnalytics`** (schools.queries): conteos activos por modalidad `iSchoolsSchool`/`iSchoolsYou`/`iSchoolsYouPlus` (`COUNT(*) FILTER (...)`; YOU incluye THERAPIST; SCHOOL incluye NULL) → expuestos en `/schools/analytics`.
+- **`findAllSchools`** + `getAllSchools` + `GetSchoolsQuery`: filtro opcional `sAccountType` (SCHOOL incluye NULL; YOU incluye THERAPIST).
+- **Frontend** (dev): dashboard con fila "Cuentas por modalidad" (3 tiles, gated `MODALITY_YOU_ENABLED`); lista de colegios con columna Modalidad + filtro (gated). i18n es/en.
+
+**🎉 Punto 18 COMPLETO — Fases 0-4 implementadas (back + front).** Pendientes de coordinación/config: Adrián (base prod + sAccountType de los 2 vivos + evento `invoice.upcoming` en Stripe); SOFEX (`MV_CONFIG` del landing + textos del cliente); decisión PO sobre supresión dura de apellidos en el detalle YOU. Merge a main + migración `3042` solo tras QA de los 2 colegios vivos.
+**Fases siguientes:** 2 landing; 3 nombre de menor enmascarado (YOU); 4 panel admin por modalidad.
+
+### Resumen de operación por modalidad (feedback Lucy, oct-2026)
+Origen: feedback de Lucy sobre el panel admin ("quitar promedios", "picarle a cada modalidad",
+"accesos por modalidad en el sidebar", "ver si se usa la plataforma"). Decisión de producto: **resumen
+en vivo** (sin histórico, sin cron, sin filtros de fecha) en una tab nueva del dashboard + exportable.
+
+- **`findOperationSummary`** (schools.queries): resumen en vivo por modalidad. Una sola query agrupada
+  por modalidad normalizada (`SCHOOL` incluye NULL; `YOU` incluye `THERAPIST`; `YOU_PLUS`) que devuelve,
+  sobre cuentas **activas y no bloqueadas**: `iAccounts`, `iUsers` (SchoolUsers activos), `iStudents`
+  (Students activos), `iGoals` (metas `ACTIVE`, solo padres) y `dProgress` (promedio real a nivel meta:
+  `SUM(dProgress)/SUM(metas)`, no promedio de promedios). Siempre devuelve las 3 modalidades (0 si no hay).
+- **`GET /schools/operationSummary`** (controller `getOperationSummary`, ruta nueva ANTES de `/:sSchoolId`,
+  permiso `General READ`): responde `{ message, aSummary, success }`. Sin parámetros.
+- Mensajes: `SuccessMessages.Schools.getOperationSummary` + `ErrorMessages.Schools.operationSummaryError` (sp/en).
+- **Validado en local**: SQL directa + endpoint vía login superadmin (lucy.potes) → 200 con las 3 modalidades.
+- **Frontend** (dev): dashboard en tabs (General / Operación); se **quitaron los promedios** y los tiles
+  de modalidad migraron a la tab Operación como tabla clickeable (fila → lista filtrada `?sAccountType=`);
+  export PDF (captura) + Excel (CSV); sidebar superadmin con 3 accesos por modalidad.

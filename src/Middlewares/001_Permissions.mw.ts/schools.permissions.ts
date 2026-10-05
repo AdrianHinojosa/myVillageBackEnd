@@ -54,8 +54,24 @@ const refreshTokenSchools  = async (resLocals): Promise<void> => {
 }
 
 
+/**
+ * Options for the school-user gate.
+ */
+type SchoolGateOptions = {
+    /**
+     * Let the request through even when the school is SUSPENDED for non-payment.
+     *
+     * Set ONLY on the billing endpoints a delinquent school needs in order to pay. The suspension is
+     * meant to restrict *"el acceso a la plataforma"* — the students, goals and IEP modules — not the
+     * checkout. Blocking the checkout too made suspension a dead end: the 402 message says
+     * "regulariza el pago" while every endpoint that could take the payment answered 402.
+     * Reported from a DEV test, 2026-08-19.
+     */
+    bAllowWhenSuspended?: boolean;
+};
+
 // Verify is School User .
-export const verifySchoolUserPermissions = (sArrModules: Permission[]) => async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+export const verifySchoolUserPermissions = (sArrModules: Permission[], oOptions: SchoolGateOptions = {}) => async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { sLang } = res.locals;
     const { authorization } = req.headers;
     if (!authorization) return next(new MyError(401, ErrorMessages.Authentication.invalidToken[sLang]));
@@ -89,7 +105,10 @@ export const verifySchoolUserPermissions = (sArrModules: Permission[]) => async 
     // access returns by itself as soon as a charge succeeds and the webhook flips the status back.
     // Only SUSPENDED blocks — NONE (never billed), TRIALING, ACTIVE, PAST_DUE (still in retries)
     // and CANCELED (paid until the cut-off date) all keep working.
-    if (mySchool.sBillingStatus === 'SUSPENDED') {
+    //
+    // `bAllowWhenSuspended` exempts the endpoints a suspended school needs in order to pay its way
+    // out. See the note on SchoolGateOptions: without it the suspension could never be lifted.
+    if (mySchool.sBillingStatus === 'SUSPENDED' && !oOptions.bAllowWhenSuspended) {
         return next(new MyError(402, ErrorMessages.Schools.billingSuspended[sLang]));
     }
 
@@ -112,7 +131,7 @@ export const verifySchoolUserPermissions = (sArrModules: Permission[]) => async 
     res.locals.sSchoolId = schoolUserSession.sSchoolId;
     res.locals.sType = schoolUserSession.sType || 'ADMINISTRATION';
     // P5 — the school was already fetched above, so denyTherapistAccess() costs no extra query
-    res.locals.sAccountType = (mySchool.sAccountType || 'SCHOOL') as 'SCHOOL' | 'THERAPIST';
+    res.locals.sAccountType = (mySchool.sAccountType || 'SCHOOL') as 'SCHOOL' | 'THERAPIST' | 'YOU' | 'YOU_PLUS';
     res.locals.sBillingStatus = (mySchool.sBillingStatus || 'NONE') as typeof res.locals.sBillingStatus;
 
     // Refresh Token for 120 hours (5 days)
@@ -142,13 +161,23 @@ export const denyFacultyAccess = () => async (req: Request, res: Response, next:
  * Place AFTER a school auth middleware — it reads `res.locals.sAccountType`, which those set.
  * Reads only locals, so it adds no database query.
  */
-export const denyTherapistAccess = () => async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+// Normaliza modalidad (THERAPIST legacy == YOU). Punto 18.
+const normalizeModality = (s: string | null | undefined): string => (s === 'THERAPIST' ? 'YOU' : (s || 'SCHOOL'));
+
+/**
+ * Punto 18 — bloquea el acceso (403) para las modalidades indicadas. Reusa el mensaje
+ * `therapistNotAllowed`. Ej.: IEP bloqueado para ['YOU','YOU_PLUS']; docs/usuarios para ['YOU'].
+ */
+export const denyForModality = (aBlocked: string[]) => async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const { sLang, sAccountType } = res.locals;
-    if (sAccountType === 'THERAPIST') {
+    if (aBlocked.includes(normalizeModality(sAccountType))) {
         return next(new MyError(403, ErrorMessages.Schools.therapistNotAllowed[sLang]));
     }
     return next();
 };
+
+// Compat: bloquea a las cuentas tipo "You" (terapeuta único). Equivale a denyForModality(['YOU']).
+export const denyTherapistAccess = () => denyForModality(['YOU']);
 
 
 // Verify if School User has ANY of the specified permissions
@@ -211,7 +240,7 @@ export const verifySchoolUserHasAnyPermissions = (sArrModules: Permission[]) => 
     res.locals.sSchoolId = schoolUserSession.sSchoolId;
     res.locals.sType = schoolUserSession.sType || 'ADMINISTRATION';
     // P5 — the school was already fetched above, so denyTherapistAccess() costs no extra query
-    res.locals.sAccountType = (mySchool.sAccountType || 'SCHOOL') as 'SCHOOL' | 'THERAPIST';
+    res.locals.sAccountType = (mySchool.sAccountType || 'SCHOOL') as 'SCHOOL' | 'THERAPIST' | 'YOU' | 'YOU_PLUS';
     res.locals.sBillingStatus = (mySchool.sBillingStatus || 'NONE') as typeof res.locals.sBillingStatus;
 
     // Refresh Token for 120 hours (5 days)

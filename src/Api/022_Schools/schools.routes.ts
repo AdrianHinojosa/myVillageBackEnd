@@ -15,6 +15,11 @@ router.get('/analytics',
         aH(verifyAdminPermissions(  [  {sModuleName: 'General', sActionCode: 'READ' }  ])),
         aH(SchoolController.getSchoolsAnalytics));
 
+// Operation summary — resumen por modalidad en vivo (tab Operación del dashboard)
+router.get('/operationSummary',
+        aH(verifyAdminPermissions(  [  {sModuleName: 'General', sActionCode: 'READ' }  ])),
+        aH(SchoolController.getOperationSummary));
+
 // Create
 router.post('/',
             celebrate({ body: SchoolValidations.CreateSchoolBody }),
@@ -50,6 +55,13 @@ router.patch('/:sSchoolId',
         celebrate({  body: SchoolValidations.PatchSchoolBlockedBody, params: SchoolValidations.PatchSchoolBlockedParams }),
         aH(verifyAdminPermissions(  [  {sModuleName: 'General', sActionCode: 'WRITE' }  ])),
         aH(SchoolController.patchSchoolBlocked));
+
+
+// Registrar pago por transferencia (superadmin). Avanza el ciclo mensual +1 mes.
+router.post('/:sSchoolId/billing/registerTransferPayment',
+        celebrate({ params: SchoolValidations.GetSchoolParams }),
+        aH(verifyAdminPermissions(  [  {sModuleName: 'General', sActionCode: 'WRITE' }  ])),
+        aH(SchoolController.registerTransferPayment));
 
 
 // POST Insert school logo (Admin route)

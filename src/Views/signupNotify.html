@@ -1,0 +1,92 @@
+<!doctype html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Nuevo registro en My Village</title>
+    <style type="text/css">
+		p{ margin:10px 0; padding:0; }
+		table{ border-collapse:collapse; }
+		body,#bodyTable,#bodyCell{ height:100%; margin:0; padding:0; width:100%; }
+		.templateContainer{ max-width:600px !important; }
+		.dataLabel{ font-family:'Lexend',Tahoma,Verdana,Segoe,sans-serif; font-size:12px; color:#94A3B8; text-transform:uppercase; letter-spacing:0.5px; padding:0 0 2px 0; }
+		.dataValue{ font-family:'Lexend',Tahoma,Verdana,Segoe,sans-serif; font-size:15px; color:#17364C; padding:0 0 14px 0; }
+	@media only screen and (min-width:768px){
+		.templateContainer{ width:600px !important; }
+	}
+</style></head>
+    <body>
+        <center>
+            <table align="center" border="0" cellpadding="0" cellspacing="0" height="100%" width="100%" id="bodyTable" style="background-color:#F6F9FC;">
+                <tr>
+                    <td align="center" valign="top" id="bodyCell" style="padding:20px 10px;">
+                        <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" class="templateContainer" style="background-color:#FFFFFF; border-radius:12px; overflow:hidden;">
+                            <tr>
+                                <td valign="top">
+<!-- Logo -->
+<table border="0" cellpadding="0" cellspacing="0" width="100%" style="min-width:100%;">
+    <tbody><tr>
+        <td valign="top" style="padding:30px 9px 10px 9px; text-align:center;">
+            <img align="center" alt="My Village" src="{{sAssetsUrl}}/images/logos/logo-primary.svg" width="200" style="max-width:200px; display:inline !important; vertical-align:bottom;">
+        </td>
+    </tr></tbody>
+</table>
+<!-- Rainbow Divider -->
+<table border="0" cellpadding="0" cellspacing="0" width="100%" style="min-width:100%;">
+    <tbody><tr>
+        <td style="padding:0 18px;">
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="min-width:100%; table-layout:fixed;">
+                <tbody><tr>
+                    <td style="background-color:#F77760; height:4px; width:20%;"></td>
+                    <td style="background-color:#FFBB17; height:4px; width:20%;"></td>
+                    <td style="background-color:#71D491; height:4px; width:20%;"></td>
+                    <td style="background-color:#0AA6B2; height:4px; width:20%;"></td>
+                    <td style="background-color:#F892B5; height:4px; width:20%;"></td>
+                </tr></tbody>
+            </table>
+        </td>
+    </tr></tbody>
+</table>
+<!-- Title -->
+<table border="0" cellpadding="0" cellspacing="0" width="100%" style="min-width:100%;">
+    <tbody><tr>
+        <td valign="top" style="padding:24px 18px 0 18px;">
+            <h3 style="text-align:center; margin:0;"><span style="font-size:24px"><font face="Lexend, Tahoma, Verdana, Segoe, sans-serif" color="#17364C">Nuevo registro — {{sModalityLabel}}</font></span></h3>
+        </td>
+    </tr></tbody>
+</table>
+<!-- Data -->
+<table border="0" cellpadding="0" cellspacing="0" width="100%" style="min-width:100%;">
+    <tbody><tr>
+        <td valign="top" style="padding:24px 18px 18px 18px;">
+            <div class="dataLabel">Modalidad</div>
+            <div class="dataValue">{{sModalityLabel}}</div>
+
+            <div class="dataLabel">Nombre</div>
+            <div class="dataValue">{{sFullName}}</div>
+
+            <div class="dataLabel">Correo</div>
+            <div class="dataValue"><a href="mailto:{{sEmail}}" style="color:#0AA6B2; text-decoration:none;">{{sEmail}}</a></div>
+
+            <div class="dataLabel">Teléfono</div>
+            <div class="dataValue">{{sPhone}}</div>
+        </td>
+    </tr></tbody>
+</table>
+                                </td>
+                            </tr>
+                        </table>
+                        <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" class="templateContainer">
+                            <tr>
+                                <td valign="top" style="text-align:center; padding:16px 18px;">
+                                    <p style="font-family:'Lexend',Tahoma,Verdana,Segoe,sans-serif; font-size:12px; color:#94A3B8; margin:0;">Notificación automática de registro — My Village</p>
+                                    <p style="font-family:'Lexend',Tahoma,Verdana,Segoe,sans-serif; font-size:12px; color:#94A3B8; margin:6px 0 0 0;">&copy; My Village 2026</p>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
+        </center>
+    </body>
+</html>

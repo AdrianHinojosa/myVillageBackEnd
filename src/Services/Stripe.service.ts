@@ -16,10 +16,14 @@ import Stripe from 'stripe';
 
 export const BILLING_CURRENCY: string = 'MXN';
 
-// Trial length for a new subscription. Se conserva 30 (valor vigente de Development). El plan de
-// Punto 18 propone 14 días (decisión PO 2026-09-22) — PENDIENTE de confirmar con PO/Adrián antes de
-// cambiarlo, ya que afectaría también a las suscripciones Stripe de SCHOOL.
-export const TRIAL_PERIOD_DAYS: number = 30;
+// Trial length for a new subscription. 14 días — confirmado por PO el 2026-10-05, en línea con la
+// tabla de tarifas del cliente ("14 días gratis de prueba") y con lo que la pantalla de registro ya
+// promete. Aplica a TODAS las modalidades, incluidas las suscripciones Stripe de SCHOOL: es un solo
+// valor global, no un parámetro por modalidad.
+//
+// Solo afecta a suscripciones NUEVAS. Las que ya existen en Stripe conservan el periodo con el que
+// se crearon; Stripe no re-aplica la prueba de forma retroactiva.
+export const TRIAL_PERIOD_DAYS: number = 14;
 
 // The contract allows the initial attempt plus two retries.
 export const MAX_FAILED_ATTEMPTS: number = 3;

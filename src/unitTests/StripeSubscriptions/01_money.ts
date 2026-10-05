@@ -18,7 +18,7 @@ export default async function run(): Promise<void> {
 
     section('constants match the contract');
     check('currency is MXN', BILLING_CURRENCY, 'MXN');
-    check('trial is 30 days (PO decision)', TRIAL_PERIOD_DAYS, 30);
+    check('trial is 14 days (PO decision)', TRIAL_PERIOD_DAYS, 14);
     check('max attempts is 3 (initial + 2 retries)', MAX_FAILED_ATTEMPTS, 3);
 
     section('peso <-> centavo conversion');

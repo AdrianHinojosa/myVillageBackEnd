@@ -27,11 +27,21 @@ export const MAX_FAILED_ATTEMPTS: number = 3;
 /**
  * Punto 18 — tarifas por modalidad (cuota incluida + excedente por unidad). Los "incluidos"
  * CUENTAN al usuario principal (decisión PO 2026-09-22): You = 1 usuario (solo principal),
- * You+ = 4 usuarios (principal + 3). Precios en MXN, SIN IVA (el IVA se agrega/muestra aparte).
+ * You+ = 4 usuarios (principal + 3).
+ *
+ * ⚠️ MONTOS CON IVA YA INCLUIDO (decisión PO 2026-10-05). Lo que se guarda es lo que se cobra:
+ * Stripe recibe esta cifra tal cual y NO lleva tax rate — si se le agregara uno, cobraría 16%
+ * sobre un monto que ya lo trae. La cotización firmada lista los precios SIN IVA; el mapeo es:
+ *
+ *   You       base   $490.00 + IVA = $568.40     paciente extra  $44.00 + IVA = $51.04
+ *   You+      base   $640.00 + IVA = $742.40     usuario extra   $25.00 + IVA = $29.00
+ *
+ * Espejo EXACTO del frontend (`app/utils/billing.ts MODALITY_TIERS`): si cambia uno, cambia el
+ * otro, o el monto que la pantalla previsualiza deja de ser el que Stripe cobra.
  */
 export const MODALITY_TIERS: Record<string, { dBase: number; iIncludedUsers: number; iIncludedStudents: number; dPerUser: number; dPerStudent: number }> = {
-    YOU:      { dBase: 490, iIncludedUsers: 1, iIncludedStudents: 10, dPerUser: 0,  dPerStudent: 44 },
-    YOU_PLUS: { dBase: 640, iIncludedUsers: 4, iIncludedStudents: 10, dPerUser: 25, dPerStudent: 44 },
+    YOU:      { dBase: 568.40, iIncludedUsers: 1, iIncludedStudents: 10, dPerUser: 0,     dPerStudent: 51.04 },
+    YOU_PLUS: { dBase: 742.40, iIncludedUsers: 4, iIncludedStudents: 10, dPerUser: 29.00, dPerStudent: 51.04 },
 };
 
 /** THERAPIST (legacy P5) se trata como YOU. SCHOOL y demás pasan tal cual. */

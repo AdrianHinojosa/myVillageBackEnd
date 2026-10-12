@@ -185,6 +185,23 @@ export function CorrectPassword(error: string): typeof Joi {
 }
 
 /**
+ * Política única de contraseña, idéntica a la que valida y muestra el frontend
+ * (`PasswordRequirements.vue`): mínimo 8 caracteres, al menos una mayúscula, una minúscula, un
+ * número y un carácter especial (cualquiera NO alfanumérico). A diferencia de `CorrectPassword`
+ * —que restringía el set de caracteres y rechazaba contraseñas que el front marcaba como válidas
+ * (p. ej. con `-`, `,`, `/`, espacios o acentos)—, aquí se permite CUALQUIER carácter. Usar en
+ * alta/cambio de contraseña (set-password, cambiar contraseña). En login NO se valida complejidad.
+ */
+export function StrongPassword(error: string): typeof Joi {
+    return Joi.string().required().trim().min(8)
+        .regex(/[A-Z]/, 'uppercase')
+        .regex(/[a-z]/, 'lowercase')
+        .regex(/[0-9]/, 'number')
+        .regex(/[^A-Za-z0-9]/, 'special')
+        .error(new Error(error));
+}
+
+/**
  * Email validation. Joi's own `.email()` does the work — deliberately WITHOUT a hand-rolled regex.
  *
  * There used to be `.regex(/^([\w\.\-]+)@([\w\-]+)((\.(\w){2,3}){1,2})$/)` on top of `.email()`, and

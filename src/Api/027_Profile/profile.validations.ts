@@ -8,11 +8,9 @@ export const UpdateProfileBody = Validations.JoiObjectKeys({
 
 export const ChangePasswordBody = Validations.JoiObjectKeys({
     sCurrentPassword: Validations.RequiredString("Profile sCurrentPassword"),
-    sNewPassword: Joi.string().trim().required().min(8)
-        .regex(/[A-Z]/, 'uppercase')
-        .regex(/[a-z]/, 'lowercase')
-        .regex(/[0-9]/, 'number')
-        .regex(/[!@#$%^&*]/, 'special')
-        .error(new Error("Profile sNewPassword")),
+    // Misma política única que set-password (StrongPassword): 8+ con mayúscula, minúscula, número y
+    // un carácter especial (cualquiera no alfanumérico). Antes el especial era solo [!@#$%^&*], más
+    // restrictivo que el frontend.
+    sNewPassword: Validations.StrongPassword("Profile sNewPassword"),
     sConfirmPassword: Validations.RequiredString("Profile sConfirmPassword"),
 });

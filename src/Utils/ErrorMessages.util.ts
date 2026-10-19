@@ -182,6 +182,11 @@ export default {
             en: "Your school's subscription is suspended for non-payment. Settle the payment to restore access."
         },
 
+        billingNeedsCard: {
+            sp: "Para usar la plataforma necesitas registrar una tarjeta. Agrega un método de pago para activar tu cuenta.",
+            en: "To use the platform you need to add a card. Add a payment method to activate your account."
+        },
+
         notTransferMode: {
             sp: "Este colegio no está en modalidad de pago por transferencia.",
             en: "This school is not in bank-transfer payment mode."

@@ -730,3 +730,72 @@ export async function syncSubscriptionTariff(oSchool: any): Promise<{ bSynced: b
         return { bSynced: false, sReason: 'stripe-error' };
     }
 }
+
+/**
+ * Pausa el cobro de Stripe cuando se BLOQUEA un colegio desde el admin (decisión Lucy 2026-10-19):
+ * deja de facturar mientras el colegio no tiene acceso. No cancela ni recrea nada — al desbloquear
+ * se reanuda con `resumeSubscriptionCollection`. No-op en transferencia / sin Stripe / sin suscripción.
+ */
+export async function pauseSubscriptionCollection(oSchool: any): Promise<{ bPaused: boolean, sReason?: string }> {
+    if (oSchool?.sPaymentMethod === 'TRANSFER') return { bPaused: false, sReason: 'transfer' };
+    if (!isStripeConfigured()) return { bPaused: false, sReason: 'stripe-not-configured' };
+    if (!oSchool?.sStripeSubscriptionId) return { bPaused: false, sReason: 'no-subscription' };
+
+    try {
+        // behavior:'void' — no se generan facturas durante la pausa (no se cobra mientras bloqueado).
+        await stripe.subscriptions.update(oSchool.sStripeSubscriptionId, {
+            pause_collection: { behavior: 'void' }
+        });
+        return { bPaused: true };
+    } catch (error: any) {
+        console.error(`pauseSubscriptionCollection failed for school ${oSchool.sSchoolId}:`, error?.message);
+        return { bPaused: false, sReason: 'stripe-error' };
+    }
+}
+
+/**
+ * Reanuda el cobro al DESBLOQUEAR un colegio: quita `pause_collection` y el ciclo de Stripe continúa.
+ * Simétrica de `pauseSubscriptionCollection`. No-op en transferencia / sin Stripe / sin suscripción.
+ */
+export async function resumeSubscriptionCollection(oSchool: any): Promise<{ bResumed: boolean, sReason?: string }> {
+    if (oSchool?.sPaymentMethod === 'TRANSFER') return { bResumed: false, sReason: 'transfer' };
+    if (!isStripeConfigured()) return { bResumed: false, sReason: 'stripe-not-configured' };
+    if (!oSchool?.sStripeSubscriptionId) return { bResumed: false, sReason: 'no-subscription' };
+
+    try {
+        // Vaciar pause_collection reanuda la facturación (Stripe: '' lo deja en null).
+        await stripe.subscriptions.update(oSchool.sStripeSubscriptionId, {
+            pause_collection: '' as any
+        });
+        return { bResumed: true };
+    } catch (error: any) {
+        console.error(`resumeSubscriptionCollection failed for school ${oSchool.sSchoolId}:`, error?.message);
+        return { bResumed: false, sReason: 'stripe-error' };
+    }
+}
+
+/**
+ * Cancela la suscripción a FIN DE PERIODO cuando se BORRA un colegio (decisión Lucy 2026-10-19): no
+ * se cobra otro ciclo y NO hay reembolso del periodo en curso. Mismo efecto que `POST /billing/cancel`,
+ * pero disparado por el borrado del colegio. No-op en transferencia / sin Stripe / sin suscripción.
+ */
+export async function cancelSubscriptionForSchool(oSchool: any): Promise<{ bCanceled: boolean, sReason?: string }> {
+    if (oSchool?.sPaymentMethod === 'TRANSFER') return { bCanceled: false, sReason: 'transfer' };
+    if (!isStripeConfigured()) return { bCanceled: false, sReason: 'stripe-not-configured' };
+    if (!oSchool?.sStripeSubscriptionId) return { bCanceled: false, sReason: 'no-subscription' };
+
+    try {
+        const oSub: any = await stripe.subscriptions.update(oSchool.sStripeSubscriptionId, {
+            cancel_at_period_end: true
+        });
+        await BillingQueries.patchSchoolBilling(oSchool.sSchoolId, {
+            bCancelAtPeriodEnd: true,
+            sBillingStatus: 'CANCELED',
+            tCurrentPeriodEnd: fromStripeTimestamp(oSub.current_period_end)
+        });
+        return { bCanceled: true };
+    } catch (error: any) {
+        console.error(`cancelSubscriptionForSchool failed for school ${oSchool.sSchoolId}:`, error?.message);
+        return { bCanceled: false, sReason: 'stripe-error' };
+    }
+}

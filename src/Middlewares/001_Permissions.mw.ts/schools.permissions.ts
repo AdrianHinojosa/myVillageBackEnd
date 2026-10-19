@@ -9,6 +9,19 @@ import SchoolQueries from '../../Api/022_Schools/schools.queries';
 import {IAdministrators} from '../../Api/005_Administrators/administrators.model';
 
 import ErrorMessages from '../../Utils/ErrorMessages.util';
+import { normalizeModality } from '../../Services/Stripe.service';
+
+// Punto 18 — "a fuerza con tarjeta" (decisión Lucy 2026-10-19): una cuenta You/You+ cobrada por
+// Stripe debe tener una suscripción activa para usar la plataforma. Mientras no hay tarjeta
+// (sBillingStatus NONE) o la suscripción quedó cancelada (CANCELED), se bloquea el acceso — como una
+// suspendida — hasta que registren un método de pago. SCHOOL y transferencia quedan exentos; TRIALING,
+// ACTIVE y PAST_DUE siguen con acceso.
+const schoolNeedsCard = (oSchool: any): boolean => {
+    const sModality = normalizeModality(oSchool?.sAccountType);
+    const bQuotaStripe = (sModality === 'YOU' || sModality === 'YOU_PLUS') && oSchool?.sPaymentMethod !== 'TRANSFER';
+    if (!bQuotaStripe) return false;
+    return oSchool?.sBillingStatus === 'NONE' || oSchool?.sBillingStatus === 'CANCELED';
+};
 
 type Permission = {
     sModuleName: string;
@@ -110,6 +123,11 @@ export const verifySchoolUserPermissions = (sArrModules: Permission[], oOptions:
     // out. See the note on SchoolGateOptions: without it the suspension could never be lifted.
     if (mySchool.sBillingStatus === 'SUSPENDED' && !oOptions.bAllowWhenSuspended) {
         return next(new MyError(402, ErrorMessages.Schools.billingSuspended[sLang]));
+    }
+    // "A fuerza con tarjeta": You/You+ Stripe sin suscripción activa se bloquean como una suspendida,
+    // dejando pasar solo los endpoints de recuperación (bAllowWhenSuspended) para agregar la tarjeta.
+    if (!oOptions.bAllowWhenSuspended && schoolNeedsCard(mySchool)) {
+        return next(new MyError(402, ErrorMessages.Schools.billingNeedsCard[sLang]));
     }
 
     // If NOT super school user then verify permissions.
@@ -217,6 +235,10 @@ export const verifySchoolUserHasAnyPermissions = (sArrModules: Permission[]) => 
     // and CANCELED (paid until the cut-off date) all keep working.
     if (mySchool.sBillingStatus === 'SUSPENDED') {
         return next(new MyError(402, ErrorMessages.Schools.billingSuspended[sLang]));
+    }
+    // "A fuerza con tarjeta": You/You+ Stripe sin suscripción activa se bloquean hasta agregar tarjeta.
+    if (schoolNeedsCard(mySchool)) {
+        return next(new MyError(402, ErrorMessages.Schools.billingNeedsCard[sLang]));
     }
 
     // If NOT super school user then verify permissions.

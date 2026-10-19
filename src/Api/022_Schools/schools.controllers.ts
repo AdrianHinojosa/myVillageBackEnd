@@ -8,7 +8,7 @@ import ErrorMessages from '../../Utils/ErrorMessages.util';
 import Services from '../../Services/Index.services';
 import mailer from '../../Services/Mail.service';
 import StorageServices from '../../Services/Storage.services';
-import { syncSubscriptionTariff } from '../030_Billing/billing.controllers';
+import { syncSubscriptionTariff, pauseSubscriptionCollection, resumeSubscriptionCollection, cancelSubscriptionForSchool } from '../030_Billing/billing.controllers';
 
 class Controllers {
     constructor() {
@@ -211,6 +211,10 @@ class Controllers {
         // DELETE school
         const deletedSchool = await SchoolQueries.deleteSchool(sSchoolId, sLastDeletedBy)
 
+        // Stripe: al BORRAR se cancela la suscripción a fin de periodo, sin reembolso (decisión Lucy
+        // 2026-10-19). `mySchool` trae los campos de billing; el helper es no-op sin suscripción y no lanza.
+        await cancelSubscriptionForSchool(mySchool);
+
         return res.status(201).json({
             message: SuccessMessages.Schools.deleteSchool[sLang],
             success: true
@@ -230,6 +234,15 @@ class Controllers {
 
         // Block school
         const blockedSchool = await SchoolQueries.patchSchoolBlocked(sSchoolId, bBlocked)
+
+        // Stripe: al BLOQUEAR se pausa el cobro (no cobrar a quien no tiene acceso); al DESBLOQUEAR se
+        // reanuda (decisión Lucy 2026-10-19). Los helpers son no-op en transferencia/sin suscripción y
+        // nunca lanzan, así que un fallo de Stripe no tumba el bloqueo del colegio.
+        if (bBlocked === true) {
+            await pauseSubscriptionCollection(blockedSchool.school);
+        } else {
+            await resumeSubscriptionCollection(blockedSchool.school);
+        }
 
         return res.status(201).json({
             message: SuccessMessages.Schools.patchBlocked[sLang],

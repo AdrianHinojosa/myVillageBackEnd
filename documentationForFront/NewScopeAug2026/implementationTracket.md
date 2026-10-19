@@ -1087,3 +1087,28 @@ en vivo** (sin histórico, sin cron, sin filtros de fecha) en una tab nueva del 
 - **Frontend** (dev): dashboard en tabs (General / Operación); se **quitaron los promedios** y los tiles
   de modalidad migraron a la tab Operación como tabla clickeable (fila → lista filtrada `?sAccountType=`);
   export PDF (captura) + Excel (CSV); sidebar superadmin con 3 accesos por modalidad.
+
+### Arreglos de billing (feedback Lucy, 19-oct-2026) — rama `feature/billing-ux-oct2026`
+Cuatro puntos decididos por PO (Sam/Lucy) el 19-oct. Todo probado en local; el E2E real de Stripe
+(tarjeta 4242, pausa/cancelación, cobro al día 15) se valida en **dev** con las llaves test.
+
+1. **Descuento sin exigir límites (You/You+).** `UpdateSchoolBody` ahora hace `iUsersLimit`/`iStudentsLimit`
+   **opcionales** para `YOU|YOU_PLUS|THERAPIST` (siguen `RequiredPositiveInteger` para SCHOOL) vía `Joi.when`
+   sobre `sAccountType` — mismo label, no requiere entrada nueva en `ValidationError.util`. `updateSchool`
+   (queries) ya no mete los límites incondicionalmente: solo se parchan si vienen (`!= null`), así omitirlos
+   no los borra. Motivo: el front exigía un límite para poner un descuento en una cuenta You, y el límite no
+   afecta el cobro por cuota. Validado: PUT You con descuento y sin límites → 201; 20% → 568.40→454.72.
+2. **"A fuerza con tarjeta" (gate).** `schools.permissions.ts`: nuevo `schoolNeedsCard(oSchool)` (You/You+ con
+   `sPaymentMethod != TRANSFER` y `sBillingStatus` en `NONE|CANCELED`) devuelve **402 `billingNeedsCard`** en
+   ambos gates (`verifySchoolUserPermissions` respeta `bAllowWhenSuspended` para dejar pasar las rutas de
+   pago; `verifySchoolUserHasAnyPermissions` sin excepción). SCHOOL y transferencia exentos; TRIALING/ACTIVE/
+   PAST_DUE siguen con acceso. Nuevo mensaje `ErrorMessages.Schools.billingNeedsCard` (sp/en). Validado: You
+   NONE → `/students` 402, `/billing/summary` 200.
+3. **Banner de prueba.** El login (`authentication.controllers`) ahora expone en `oSchool` dos campos nuevos:
+   `sPaymentMethod` y `tCurrentPeriodEnd` (para que el front decida el gate y el banner "vence en X días").
+4. **Bloqueo/Borrado ↔ Stripe.** `billing.controllers` exporta 3 helpers (patrón `syncSubscriptionTariff`):
+   `pauseSubscriptionCollection` (block → `pause_collection: void`), `resumeSubscriptionCollection` (unblock →
+   limpia pause), `cancelSubscriptionForSchool` (delete → `cancel_at_period_end`, sin reembolso; marca
+   `CANCELED`). `schools.controllers`: `patchSchoolBlocked` pausa/reanuda y `deleteSchool` cancela. No-op en
+   transferencia/sin suscripción y nunca lanzan (un fallo de Stripe no tumba el bloqueo/borrado). Decisión PO:
+   pausar al bloquear (reanudar al desbloquear), cancelar a fin de periodo al borrar.

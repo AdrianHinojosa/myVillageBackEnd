@@ -106,13 +106,15 @@ class Queries {
                 sName,
                 sPhone,
                 sCityId,
-                iUsersLimit,
-                iStudentsLimit,
                 sLastUpdatedBy
             };
             if (sAccountType) {
                 oPatch.sAccountType = sAccountType;
             }
+            // Límites: solo se parchan cuando vienen. You/You+ ya no los manda (su cobro es por cuota,
+            // no por límite), así que omitirlos NO debe borrar lo existente (feedback Lucy 19/10).
+            if (iUsersLimit != null) oPatch.iUsersLimit = iUsersLimit;
+            if (iStudentsLimit != null) oPatch.iStudentsLimit = iStudentsLimit;
             // P3 — only patch tariff fields the caller actually sent, so a partial school edit
             // cannot silently wipe a configured tariff. Per the contract, a change here takes
             // effect from the NEXT billing cycle; the current period is never re-priced.

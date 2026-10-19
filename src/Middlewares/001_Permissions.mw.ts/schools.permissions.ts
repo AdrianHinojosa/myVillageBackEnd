@@ -179,8 +179,6 @@ export const denyFacultyAccess = () => async (req: Request, res: Response, next:
  * Place AFTER a school auth middleware — it reads `res.locals.sAccountType`, which those set.
  * Reads only locals, so it adds no database query.
  */
-// Normaliza modalidad (THERAPIST legacy == YOU). Punto 18.
-const normalizeModality = (s: string | null | undefined): string => (s === 'THERAPIST' ? 'YOU' : (s || 'SCHOOL'));
 
 /**
  * Punto 18 — bloquea el acceso (403) para las modalidades indicadas. Reusa el mensaje

@@ -1112,3 +1112,11 @@ Cuatro puntos decididos por PO (Sam/Lucy) el 19-oct. Todo probado en local; el E
    `CANCELED`). `schools.controllers`: `patchSchoolBlocked` pausa/reanuda y `deleteSchool` cancela. No-op en
    transferencia/sin suscripción y nunca lanzan (un fallo de Stripe no tumba el bloqueo/borrado). Decisión PO:
    pausar al bloquear (reanudar al desbloquear), cancelar a fin de periodo al borrar.
+
+### Ajuste gate "a fuerza con tarjeta" — CANCELED respeta el periodo pagado (Lucy 2026-10-23)
+`schoolNeedsCard` (schools.permissions): antes bloqueaba `CANCELED` de inmediato; ahora una cuenta
+**CANCELED conserva acceso hasta `tCurrentPeriodEnd`** y recién al vencer se bloquea. `NONE` sigue
+bloqueando de inmediato; `TRIALING/ACTIVE/PAST_DUE` con acceso; `SUSPENDED` en su gate. Caso real:
+René canceló el 20 pero pagó hasta el 15 del mes siguiente → debe entrar hasta el 15 y después quedar
+en la pantalla de "agrega tarjeta". Probado por API: CANCELED+futuro→201, CANCELED+vencido→402,
+NONE→402, ACTIVE→201. El front (`bNeedsCard`) espeja la misma lógica usando `tCurrentPeriodEnd` del login.

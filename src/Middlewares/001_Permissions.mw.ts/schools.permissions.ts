@@ -20,7 +20,19 @@ const schoolNeedsCard = (oSchool: any): boolean => {
     const sModality = normalizeModality(oSchool?.sAccountType);
     const bQuotaStripe = (sModality === 'YOU' || sModality === 'YOU_PLUS') && oSchool?.sPaymentMethod !== 'TRANSFER';
     if (!bQuotaStripe) return false;
-    return oSchool?.sBillingStatus === 'NONE' || oSchool?.sBillingStatus === 'CANCELED';
+    const sStatus = oSchool?.sBillingStatus;
+    // Sin tarjeta (NONE): se bloquea de inmediato — "a fuerza con tarjeta".
+    if (sStatus === 'NONE') return true;
+    // Cancelada: conserva acceso hasta que TERMINE el periodo ya pagado (tCurrentPeriodEnd); recién al
+    // vencer se bloquea. Decisión Lucy 2026-10-23: canceló el 20 pero pagó hasta el 15 del mes siguiente,
+    // debe entrar hasta el 15 y después quedar como al inicio (pantalla de "agrega tarjeta").
+    if (sStatus === 'CANCELED') {
+        const tEnd = oSchool?.tCurrentPeriodEnd;
+        if (!tEnd) return true;
+        return new Date(tEnd).getTime() <= Date.now();
+    }
+    // TRIALING, ACTIVE y PAST_DUE siguen con acceso. SUSPENDED se bloquea en su propio gate.
+    return false;
 };
 
 type Permission = {

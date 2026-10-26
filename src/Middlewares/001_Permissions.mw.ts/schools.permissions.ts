@@ -17,6 +17,11 @@ import { normalizeModality } from '../../Services/Stripe.service';
 // suspendida — hasta que registren un método de pago. SCHOOL y transferencia quedan exentos; TRIALING,
 // ACTIVE y PAST_DUE siguen con acceso.
 const schoolNeedsCard = (oSchool: any): boolean => {
+    // Override manual del superadmin (Lucy/Sam 2026-10-26): "Omitir bloqueo por cobranza". Cuando
+    // está prendido, la cuenta NO se bloquea por el gate "a fuerza con tarjeta" aunque no tenga
+    // suscripción activa. NO toca el cobro (Stripe sigue intentando) ni la suspensión por cobro
+    // fallido real (SUSPENDED se bloquea en su propio gate).
+    if (oSchool?.bSkipBillingBlock) return false;
     const sModality = normalizeModality(oSchool?.sAccountType);
     const bQuotaStripe = (sModality === 'YOU' || sModality === 'YOU_PLUS') && oSchool?.sPaymentMethod !== 'TRANSFER';
     if (!bQuotaStripe) return false;

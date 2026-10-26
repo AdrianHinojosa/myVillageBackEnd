@@ -145,6 +145,8 @@ class Controllers {
             sPaymentMethod,
             dMonthlyAmount,
             tNextPaymentDate,
+            // Override manual: omitir bloqueo por cobranza
+            bSkipBillingBlock,
         } = req.body;
 
         // Validate that the school Exists
@@ -154,7 +156,7 @@ class Controllers {
         const sLastUpdatedBy = res.locals.sUserId;
 
         // Update school
-        const updatedSchool = await SchoolQueries.updateSchool(sSchoolId, { sName, sPhone, sCityId: null, iUsersLimit, iStudentsLimit, sAccountType, sBillingMode, dFixedAmount, dAmountPerTeacher, dAmountPerStudent, dDiscountPct, sPaymentMethod, dMonthlyAmount, tNextPaymentDate, sLastUpdatedBy })
+        const updatedSchool = await SchoolQueries.updateSchool(sSchoolId, { sName, sPhone, sCityId: null, iUsersLimit, iStudentsLimit, sAccountType, sBillingMode, dFixedAmount, dAmountPerTeacher, dAmountPerStudent, dDiscountPct, sPaymentMethod, dMonthlyAmount, tNextPaymentDate, bSkipBillingBlock, sLastUpdatedBy })
 
         // P3 — a tariff or limit change must reach Stripe, or the next renewal would still charge
         // the old amount. Applied with no proration, so the period already invoiced is untouched

@@ -834,3 +834,11 @@ reporte omite el apellido.
 - **402 `billingNeedsCard`**: cuentas You/You+ Stripe sin suscripción activa reciben 402 en rutas protegidas
   (las de `/billing/*` siguen abiertas para poder capturar tarjeta). El front ya lo maneja reusando la pantalla
   de "suspendido" con copy de "agrega tarjeta".
+
+- **Override "Omitir bloqueo por cobranza" (2026-10-26)**: `Schools` tiene columna nueva `bSkipBillingBlock`
+  (boolean, default false). El superadmin la setea por **PUT `/schools/:id`** (campo opcional `bSkipBillingBlock`).
+  **Login (`results.oSchool`)** ahora incluye `bSkipBillingBlock`. El front debe: (a) leerlo en el login y, cuando
+  sea `true`, **NO** mostrar el gate "agrega tarjeta" (`bNeedsCard` regresa false) — empata con `schoolNeedsCard`
+  del backend; (b) exponer el toggle en el editor SuperAdmin (solo You/You+ con Stripe). Ya aplicado en el front (dev).
+  Solo salta el gate "a fuerza con tarjeta"; NO afecta cobro ni suspensión por cobro fallido. Toma efecto al
+  siguiente login (el flag viaja en el payload de login).

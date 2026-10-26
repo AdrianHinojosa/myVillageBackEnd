@@ -1120,3 +1120,18 @@ bloqueando de inmediato; `TRIALING/ACTIVE/PAST_DUE` con acceso; `SUSPENDED` en s
 René canceló el 20 pero pagó hasta el 15 del mes siguiente → debe entrar hasta el 15 y después quedar
 en la pantalla de "agrega tarjeta". Probado por API: CANCELED+futuro→201, CANCELED+vencido→402,
 NONE→402, ACTIVE→201. El front (`bNeedsCard`) espeja la misma lógica usando `tCurrentPeriodEnd` del login.
+
+### Override manual "Omitir bloqueo por cobranza" (Lucy/Sam 2026-10-26)
+Escape hatch por colegio que prende/apaga el superadmin para NO bloquear una cuenta por el gate
+"a fuerza con tarjeta" mientras el cliente regulariza su tarjeta (caso Kommati). **Alcance acotado
+(decisión 2026-10-26): SOLO salta `schoolNeedsCard`.** NO afecta el cobro (Stripe sigue intentando) ni
+la suspensión por cobro fallido real (SUSPENDED sigue bloqueando en su propio gate).
+- Migración `3043_Schools_skipBillingBlock.ts`: columna `bSkipBillingBlock` boolean notNullable
+  default false (todos los existentes conservan el comportamiento actual). **Nota de numeración:**
+  Development va en 3041; `3042_Schools_bTrialConsumed` es de `feature/point18-for-you` (aún no
+  mergeado a Development) — por eso esta usa 3043 para no colisionar al mergear Punto 18.
+- `schools.permissions.ts` → `schoolNeedsCard`: `if (oSchool?.bSkipBillingBlock) return false;` al inicio.
+- Login (`authentication.controllers`): `oSchool` ahora incluye `bSkipBillingBlock` (boolean).
+- `UpdateSchoolBody`/`BillingFields` + `ValidationError.util` (Schools.bSkipBillingBlock): el superadmin
+  lo setea por PUT `/schools/:id`. `updateSchool` query lo aplica al patch solo si viene (!= null/undefined).
+- Validado contra DB local: columna creada (boolean, default false). tsc sin errores nuevos.

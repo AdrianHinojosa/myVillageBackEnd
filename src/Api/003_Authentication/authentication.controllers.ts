@@ -100,7 +100,10 @@ class Controllers {
                     // tarjeta" (You/You+ Stripe sin suscripción activa). TRANSFER queda exento.
                     sPaymentMethod: school.sPaymentMethod || 'STRIPE',
                     // Banner de prueba: fin del periodo/prueba vigente (TRIALING) para el conteo.
-                    tCurrentPeriodEnd: school.tCurrentPeriodEnd || null
+                    tCurrentPeriodEnd: school.tCurrentPeriodEnd || null,
+                    // Override manual del superadmin: cuando true, el front NO muestra el gate "agrega
+                    // tarjeta" (debe empatar con schoolNeedsCard del backend). No afecta el cobro.
+                    bSkipBillingBlock: !!school.bSkipBillingBlock
                 };
             } else {
                 return next(new MyError(401, ErrorMessages.Authentication.login.invalidCredentials[sLang]));

@@ -261,6 +261,10 @@ export default {
                 sp: "Por favor, ingresa una fecha de vencimiento válida.",
                 en: "Please, enter a valid due date."
             },
+            bSkipBillingBlock: {
+                sp: "Valor inválido para omitir el bloqueo por cobranza.",
+                en: "Invalid value for skip billing block."
+            },
 
             // P5 — Modo terapeuta
             sAccountType: {

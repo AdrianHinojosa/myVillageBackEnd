@@ -98,7 +98,7 @@ class Queries {
     }
 
     // Done: Update school
-    static async updateSchool(sSchoolId, {sName, sPhone, sCityId, iUsersLimit, iStudentsLimit, sAccountType, sBillingMode, dFixedAmount, dAmountPerTeacher, dAmountPerStudent, dDiscountPct, sPaymentMethod, dMonthlyAmount, tNextPaymentDate, sLastUpdatedBy}) {
+    static async updateSchool(sSchoolId, {sName, sPhone, sCityId, iUsersLimit, iStudentsLimit, sAccountType, sBillingMode, dFixedAmount, dAmountPerTeacher, dAmountPerStudent, dDiscountPct, sPaymentMethod, dMonthlyAmount, tNextPaymentDate, bSkipBillingBlock, sLastUpdatedBy}) {
 
         return await SchoolsModel.transaction(async (trx) => {
             // Only patch sAccountType when it was actually sent — omitting it must not reset the type
@@ -127,6 +127,7 @@ class Queries {
             if (sPaymentMethod) oPatch.sPaymentMethod = sPaymentMethod;
             if (dMonthlyAmount !== undefined) oPatch.dMonthlyAmount = dMonthlyAmount;
             if (tNextPaymentDate !== undefined) oPatch.tNextPaymentDate = tNextPaymentDate;
+            if (bSkipBillingBlock !== undefined && bSkipBillingBlock !== null) oPatch.bSkipBillingBlock = bSkipBillingBlock;
 
             // Update school
             let updatedSchool =  await SchoolsModel.query(trx).patchAndFetchById(sSchoolId, oPatch).where('bActive', true);

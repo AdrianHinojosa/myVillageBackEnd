@@ -44,6 +44,11 @@ export const BillingFields = {
     // almacena tal cual en la columna `date`, sin corrimiento de zona.
     tNextPaymentDate: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).allow(null).allow('')
         .error(new Error("Schools tNextPaymentDate")),
+
+    // Override manual del superadmin: "Omitir bloqueo por cobranza". Salta el gate "a fuerza con
+    // tarjeta". No toca el cobro ni la suspensión por cobro fallido. Opcional en edits parciales.
+    bSkipBillingBlock: Joi.boolean().allow(null)
+        .error(new Error("Schools bSkipBillingBlock")),
 };
 
 export const CreateSchoolBody = Validations.JoiObjectKeys({

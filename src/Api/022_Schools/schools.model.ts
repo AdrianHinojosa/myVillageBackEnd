@@ -38,6 +38,8 @@ export interface ISchools {
     sPaymentMethod?: string;
     dMonthlyAmount?: number;
     tNextPaymentDate?: string;
+    // Override manual del superadmin: salta el gate "a fuerza con tarjeta" (no afecta el cobro).
+    bSkipBillingBlock?: boolean;
     sCreatedBy?: string;
     sLastUpdatedBy?: string;
     sLastDeletedBy?: string;
@@ -72,6 +74,8 @@ export class SchoolsModel extends Model {
     public sPaymentMethod?: string;
     public dMonthlyAmount?: number;
     public tNextPaymentDate?: string;
+    // Override manual del superadmin: salta el gate "a fuerza con tarjeta" (no afecta el cobro).
+    public bSkipBillingBlock?: boolean;
     public sCreatedBy?: string;
     public sLastUpdatedBy?: string;
     public sLastDeletedBy?: string;

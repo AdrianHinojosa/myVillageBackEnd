@@ -822,3 +822,23 @@ reporte omite el apellido.
 ## Resolved / already applied
 
 *(entries move here once the frontend confirms the change is in)*
+
+## Arreglos de billing (19-oct-2026) — rama back `feature/billing-ux-oct2026`
+- **`PUT /schools/:sSchoolId`**: `iUsersLimit`/`iStudentsLimit` ahora son **opcionales** cuando `sAccountType`
+  es `YOU`/`YOU_PLUS`/`THERAPIST` (siguen obligatorios para `SCHOOL`). El front **ya** dejó de mandarlos y de
+  pedirlos para esas modalidades (solo muestra el % de descuento). Para SCHOOL no cambia nada.
+- **Login (`POST /auth/login`)**: `results.oSchool` incluye 2 campos nuevos: `sPaymentMethod`
+  (`STRIPE|TRANSFER`) y `tCurrentPeriodEnd` (ISO o null). El front los lee para: (a) decidir el gate "a fuerza
+  con tarjeta" (You/You+ Stripe sin suscripción activa → pantalla "agrega tarjeta"); (b) el banner "tu prueba
+  vence en X días". Ya aplicado en el front (dev).
+- **402 `billingNeedsCard`**: cuentas You/You+ Stripe sin suscripción activa reciben 402 en rutas protegidas
+  (las de `/billing/*` siguen abiertas para poder capturar tarjeta). El front ya lo maneja reusando la pantalla
+  de "suspendido" con copy de "agrega tarjeta".
+
+- **Override "Omitir bloqueo por cobranza" (2026-10-26)**: `Schools` tiene columna nueva `bSkipBillingBlock`
+  (boolean, default false). El superadmin la setea por **PUT `/schools/:id`** (campo opcional `bSkipBillingBlock`).
+  **Login (`results.oSchool`)** ahora incluye `bSkipBillingBlock`. El front debe: (a) leerlo en el login y, cuando
+  sea `true`, **NO** mostrar el gate "agrega tarjeta" (`bNeedsCard` regresa false) — empata con `schoolNeedsCard`
+  del backend; (b) exponer el toggle en el editor SuperAdmin (solo You/You+ con Stripe). Ya aplicado en el front (dev).
+  Solo salta el gate "a fuerza con tarjeta"; NO afecta cobro ni suspensión por cobro fallido. Toma efecto al
+  siguiente login (el flag viaja en el payload de login).

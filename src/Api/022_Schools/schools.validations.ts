@@ -44,6 +44,11 @@ export const BillingFields = {
     // almacena tal cual en la columna `date`, sin corrimiento de zona.
     tNextPaymentDate: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).allow(null).allow('')
         .error(new Error("Schools tNextPaymentDate")),
+
+    // Override manual del superadmin: "Omitir bloqueo por cobranza". Salta el gate "a fuerza con
+    // tarjeta". No toca el cobro ni la suspensión por cobro fallido. Opcional en edits parciales.
+    bSkipBillingBlock: Joi.boolean().allow(null)
+        .error(new Error("Schools bSkipBillingBlock")),
 };
 
 export const CreateSchoolBody = Validations.JoiObjectKeys({
@@ -77,11 +82,27 @@ export const UpdateSchoolParams = Validations.JoiObjectKeys({
     sSchoolId: Validations.RequiredUUID("Schools sSchoolId"),
 });
 
+// Los límites de usuarios/pacientes son obligatorios SOLO para colegios (SCHOOL): su cobro VARIABLE
+// se calcula sobre esos límites. En You/You+ (y el legacy THERAPIST) el cobro es por cuota sobre los
+// REALES (base + excedente), así que el límite NO afecta el precio y no debe exigirse — si se pidiera,
+// bloquearía poner un descuento a una cuenta You sin tener que inventar un límite (feedback Lucy 19/10).
+const UsersLimitByModality = Joi.when('sAccountType', {
+    is: Joi.valid('YOU', 'YOU_PLUS', 'THERAPIST'),
+    then: Joi.number().integer().min(0).allow(null).optional(),
+    otherwise: Joi.number().integer().min(0).max(1000000).required(),
+}).error(new Error("Schools iUsersLimit"));
+
+const StudentsLimitByModality = Joi.when('sAccountType', {
+    is: Joi.valid('YOU', 'YOU_PLUS', 'THERAPIST'),
+    then: Joi.number().integer().min(0).allow(null).optional(),
+    otherwise: Joi.number().integer().min(0).max(1000000).required(),
+}).error(new Error("Schools iStudentsLimit"));
+
 export const UpdateSchoolBody = Validations.JoiObjectKeys({
     sName: Validations.RequiredString("Schools sName"),
     sPhone: Validations.String("Schools sPhone"),
-    iUsersLimit: Validations.RequiredPositiveInteger("Schools iUsersLimit"),
-    iStudentsLimit: Validations.RequiredPositiveInteger("Schools iStudentsLimit"),
+    iUsersLimit: UsersLimitByModality,
+    iStudentsLimit: StudentsLimitByModality,
     sAccountType: AccountType,
     ...BillingFields,
 });

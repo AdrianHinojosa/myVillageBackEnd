@@ -9,6 +9,36 @@ import SchoolQueries from '../../Api/022_Schools/schools.queries';
 import {IAdministrators} from '../../Api/005_Administrators/administrators.model';
 
 import ErrorMessages from '../../Utils/ErrorMessages.util';
+import { normalizeModality } from '../../Services/Stripe.service';
+
+// Punto 18 — "a fuerza con tarjeta" (decisión Lucy 2026-10-19): una cuenta You/You+ cobrada por
+// Stripe debe tener una suscripción activa para usar la plataforma. Mientras no hay tarjeta
+// (sBillingStatus NONE) o la suscripción quedó cancelada (CANCELED), se bloquea el acceso — como una
+// suspendida — hasta que registren un método de pago. SCHOOL y transferencia quedan exentos; TRIALING,
+// ACTIVE y PAST_DUE siguen con acceso.
+const schoolNeedsCard = (oSchool: any): boolean => {
+    // Override manual del superadmin (Lucy/Sam 2026-10-26): "Omitir bloqueo por cobranza". Cuando
+    // está prendido, la cuenta NO se bloquea por el gate "a fuerza con tarjeta" aunque no tenga
+    // suscripción activa. NO toca el cobro (Stripe sigue intentando) ni la suspensión por cobro
+    // fallido real (SUSPENDED se bloquea en su propio gate).
+    if (oSchool?.bSkipBillingBlock) return false;
+    const sModality = normalizeModality(oSchool?.sAccountType);
+    const bQuotaStripe = (sModality === 'YOU' || sModality === 'YOU_PLUS') && oSchool?.sPaymentMethod !== 'TRANSFER';
+    if (!bQuotaStripe) return false;
+    const sStatus = oSchool?.sBillingStatus;
+    // Sin tarjeta (NONE): se bloquea de inmediato — "a fuerza con tarjeta".
+    if (sStatus === 'NONE') return true;
+    // Cancelada: conserva acceso hasta que TERMINE el periodo ya pagado (tCurrentPeriodEnd); recién al
+    // vencer se bloquea. Decisión Lucy 2026-10-23: canceló el 20 pero pagó hasta el 15 del mes siguiente,
+    // debe entrar hasta el 15 y después quedar como al inicio (pantalla de "agrega tarjeta").
+    if (sStatus === 'CANCELED') {
+        const tEnd = oSchool?.tCurrentPeriodEnd;
+        if (!tEnd) return true;
+        return new Date(tEnd).getTime() <= Date.now();
+    }
+    // TRIALING, ACTIVE y PAST_DUE siguen con acceso. SUSPENDED se bloquea en su propio gate.
+    return false;
+};
 
 type Permission = {
     sModuleName: string;
@@ -111,6 +141,11 @@ export const verifySchoolUserPermissions = (sArrModules: Permission[], oOptions:
     if (mySchool.sBillingStatus === 'SUSPENDED' && !oOptions.bAllowWhenSuspended) {
         return next(new MyError(402, ErrorMessages.Schools.billingSuspended[sLang]));
     }
+    // "A fuerza con tarjeta": You/You+ Stripe sin suscripción activa se bloquean como una suspendida,
+    // dejando pasar solo los endpoints de recuperación (bAllowWhenSuspended) para agregar la tarjeta.
+    if (!oOptions.bAllowWhenSuspended && schoolNeedsCard(mySchool)) {
+        return next(new MyError(402, ErrorMessages.Schools.billingNeedsCard[sLang]));
+    }
 
     // If NOT super school user then verify permissions.
     if (schoolUserSession.sCreatedBy !== null) {
@@ -161,8 +196,6 @@ export const denyFacultyAccess = () => async (req: Request, res: Response, next:
  * Place AFTER a school auth middleware — it reads `res.locals.sAccountType`, which those set.
  * Reads only locals, so it adds no database query.
  */
-// Normaliza modalidad (THERAPIST legacy == YOU). Punto 18.
-const normalizeModality = (s: string | null | undefined): string => (s === 'THERAPIST' ? 'YOU' : (s || 'SCHOOL'));
 
 /**
  * Punto 18 — bloquea el acceso (403) para las modalidades indicadas. Reusa el mensaje
@@ -217,6 +250,10 @@ export const verifySchoolUserHasAnyPermissions = (sArrModules: Permission[]) => 
     // and CANCELED (paid until the cut-off date) all keep working.
     if (mySchool.sBillingStatus === 'SUSPENDED') {
         return next(new MyError(402, ErrorMessages.Schools.billingSuspended[sLang]));
+    }
+    // "A fuerza con tarjeta": You/You+ Stripe sin suscripción activa se bloquean hasta agregar tarjeta.
+    if (schoolNeedsCard(mySchool)) {
+        return next(new MyError(402, ErrorMessages.Schools.billingNeedsCard[sLang]));
     }
 
     // If NOT super school user then verify permissions.

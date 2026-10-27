@@ -1087,3 +1087,51 @@ en vivo** (sin histórico, sin cron, sin filtros de fecha) en una tab nueva del 
 - **Frontend** (dev): dashboard en tabs (General / Operación); se **quitaron los promedios** y los tiles
   de modalidad migraron a la tab Operación como tabla clickeable (fila → lista filtrada `?sAccountType=`);
   export PDF (captura) + Excel (CSV); sidebar superadmin con 3 accesos por modalidad.
+
+### Arreglos de billing (feedback Lucy, 19-oct-2026) — rama `feature/billing-ux-oct2026`
+Cuatro puntos decididos por PO (Sam/Lucy) el 19-oct. Todo probado en local; el E2E real de Stripe
+(tarjeta 4242, pausa/cancelación, cobro al día 15) se valida en **dev** con las llaves test.
+
+1. **Descuento sin exigir límites (You/You+).** `UpdateSchoolBody` ahora hace `iUsersLimit`/`iStudentsLimit`
+   **opcionales** para `YOU|YOU_PLUS|THERAPIST` (siguen `RequiredPositiveInteger` para SCHOOL) vía `Joi.when`
+   sobre `sAccountType` — mismo label, no requiere entrada nueva en `ValidationError.util`. `updateSchool`
+   (queries) ya no mete los límites incondicionalmente: solo se parchan si vienen (`!= null`), así omitirlos
+   no los borra. Motivo: el front exigía un límite para poner un descuento en una cuenta You, y el límite no
+   afecta el cobro por cuota. Validado: PUT You con descuento y sin límites → 201; 20% → 568.40→454.72.
+2. **"A fuerza con tarjeta" (gate).** `schools.permissions.ts`: nuevo `schoolNeedsCard(oSchool)` (You/You+ con
+   `sPaymentMethod != TRANSFER` y `sBillingStatus` en `NONE|CANCELED`) devuelve **402 `billingNeedsCard`** en
+   ambos gates (`verifySchoolUserPermissions` respeta `bAllowWhenSuspended` para dejar pasar las rutas de
+   pago; `verifySchoolUserHasAnyPermissions` sin excepción). SCHOOL y transferencia exentos; TRIALING/ACTIVE/
+   PAST_DUE siguen con acceso. Nuevo mensaje `ErrorMessages.Schools.billingNeedsCard` (sp/en). Validado: You
+   NONE → `/students` 402, `/billing/summary` 200.
+3. **Banner de prueba.** El login (`authentication.controllers`) ahora expone en `oSchool` dos campos nuevos:
+   `sPaymentMethod` y `tCurrentPeriodEnd` (para que el front decida el gate y el banner "vence en X días").
+4. **Bloqueo/Borrado ↔ Stripe.** `billing.controllers` exporta 3 helpers (patrón `syncSubscriptionTariff`):
+   `pauseSubscriptionCollection` (block → `pause_collection: void`), `resumeSubscriptionCollection` (unblock →
+   limpia pause), `cancelSubscriptionForSchool` (delete → `cancel_at_period_end`, sin reembolso; marca
+   `CANCELED`). `schools.controllers`: `patchSchoolBlocked` pausa/reanuda y `deleteSchool` cancela. No-op en
+   transferencia/sin suscripción y nunca lanzan (un fallo de Stripe no tumba el bloqueo/borrado). Decisión PO:
+   pausar al bloquear (reanudar al desbloquear), cancelar a fin de periodo al borrar.
+
+### Ajuste gate "a fuerza con tarjeta" — CANCELED respeta el periodo pagado (Lucy 2026-10-23)
+`schoolNeedsCard` (schools.permissions): antes bloqueaba `CANCELED` de inmediato; ahora una cuenta
+**CANCELED conserva acceso hasta `tCurrentPeriodEnd`** y recién al vencer se bloquea. `NONE` sigue
+bloqueando de inmediato; `TRIALING/ACTIVE/PAST_DUE` con acceso; `SUSPENDED` en su gate. Caso real:
+René canceló el 20 pero pagó hasta el 15 del mes siguiente → debe entrar hasta el 15 y después quedar
+en la pantalla de "agrega tarjeta". Probado por API: CANCELED+futuro→201, CANCELED+vencido→402,
+NONE→402, ACTIVE→201. El front (`bNeedsCard`) espeja la misma lógica usando `tCurrentPeriodEnd` del login.
+
+### Override manual "Omitir bloqueo por cobranza" (Lucy/Sam 2026-10-26)
+Escape hatch por colegio que prende/apaga el superadmin para NO bloquear una cuenta por el gate
+"a fuerza con tarjeta" mientras el cliente regulariza su tarjeta (caso Kommati). **Alcance acotado
+(decisión 2026-10-26): SOLO salta `schoolNeedsCard`.** NO afecta el cobro (Stripe sigue intentando) ni
+la suspensión por cobro fallido real (SUSPENDED sigue bloqueando en su propio gate).
+- Migración `3043_Schools_skipBillingBlock.ts`: columna `bSkipBillingBlock` boolean notNullable
+  default false (todos los existentes conservan el comportamiento actual). **Nota de numeración:**
+  Development va en 3041; `3042_Schools_bTrialConsumed` es de `feature/point18-for-you` (aún no
+  mergeado a Development) — por eso esta usa 3043 para no colisionar al mergear Punto 18.
+- `schools.permissions.ts` → `schoolNeedsCard`: `if (oSchool?.bSkipBillingBlock) return false;` al inicio.
+- Login (`authentication.controllers`): `oSchool` ahora incluye `bSkipBillingBlock` (boolean).
+- `UpdateSchoolBody`/`BillingFields` + `ValidationError.util` (Schools.bSkipBillingBlock): el superadmin
+  lo setea por PUT `/schools/:id`. `updateSchool` query lo aplica al patch solo si viene (!= null/undefined).
+- Validado contra DB local: columna creada (boolean, default false). tsc sin errores nuevos.

@@ -98,7 +98,7 @@ class Queries {
     }
 
     // Done: Update school
-    static async updateSchool(sSchoolId, {sName, sPhone, sCityId, iUsersLimit, iStudentsLimit, sAccountType, sBillingMode, dFixedAmount, dAmountPerTeacher, dAmountPerStudent, dDiscountPct, sPaymentMethod, dMonthlyAmount, tNextPaymentDate, sLastUpdatedBy}) {
+    static async updateSchool(sSchoolId, {sName, sPhone, sCityId, iUsersLimit, iStudentsLimit, sAccountType, sBillingMode, dFixedAmount, dAmountPerTeacher, dAmountPerStudent, dDiscountPct, sPaymentMethod, dMonthlyAmount, tNextPaymentDate, bSkipBillingBlock, sLastUpdatedBy}) {
 
         return await SchoolsModel.transaction(async (trx) => {
             // Only patch sAccountType when it was actually sent — omitting it must not reset the type
@@ -106,13 +106,15 @@ class Queries {
                 sName,
                 sPhone,
                 sCityId,
-                iUsersLimit,
-                iStudentsLimit,
                 sLastUpdatedBy
             };
             if (sAccountType) {
                 oPatch.sAccountType = sAccountType;
             }
+            // Límites: solo se parchan cuando vienen. You/You+ ya no los manda (su cobro es por cuota,
+            // no por límite), así que omitirlos NO debe borrar lo existente (feedback Lucy 19/10).
+            if (iUsersLimit != null) oPatch.iUsersLimit = iUsersLimit;
+            if (iStudentsLimit != null) oPatch.iStudentsLimit = iStudentsLimit;
             // P3 — only patch tariff fields the caller actually sent, so a partial school edit
             // cannot silently wipe a configured tariff. Per the contract, a change here takes
             // effect from the NEXT billing cycle; the current period is never re-priced.
@@ -125,6 +127,7 @@ class Queries {
             if (sPaymentMethod) oPatch.sPaymentMethod = sPaymentMethod;
             if (dMonthlyAmount !== undefined) oPatch.dMonthlyAmount = dMonthlyAmount;
             if (tNextPaymentDate !== undefined) oPatch.tNextPaymentDate = tNextPaymentDate;
+            if (bSkipBillingBlock !== undefined && bSkipBillingBlock !== null) oPatch.bSkipBillingBlock = bSkipBillingBlock;
 
             // Update school
             let updatedSchool =  await SchoolsModel.query(trx).patchAndFetchById(sSchoolId, oPatch).where('bActive', true);

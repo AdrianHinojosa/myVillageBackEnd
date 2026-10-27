@@ -95,7 +95,15 @@ class Controllers {
                     // P5 — the frontend reads this to switch into therapist mode
                     sAccountType: school.sAccountType || 'SCHOOL',
                     // P3 — the frontend blocks every user of the school when this is SUSPENDED
-                    sBillingStatus: school.sBillingStatus || 'NONE'
+                    sBillingStatus: school.sBillingStatus || 'NONE',
+                    // Punto 18 — "a fuerza con tarjeta": el front decide si mostrar el gate "agrega
+                    // tarjeta" (You/You+ Stripe sin suscripción activa). TRANSFER queda exento.
+                    sPaymentMethod: school.sPaymentMethod || 'STRIPE',
+                    // Banner de prueba: fin del periodo/prueba vigente (TRIALING) para el conteo.
+                    tCurrentPeriodEnd: school.tCurrentPeriodEnd || null,
+                    // Override manual del superadmin: cuando true, el front NO muestra el gate "agrega
+                    // tarjeta" (debe empatar con schoolNeedsCard del backend). No afecta el cobro.
+                    bSkipBillingBlock: !!school.bSkipBillingBlock
                 };
             } else {
                 return next(new MyError(401, ErrorMessages.Authentication.login.invalidCredentials[sLang]));

@@ -842,3 +842,9 @@ reporte omite el apellido.
   del backend; (b) exponer el toggle en el editor SuperAdmin (solo You/You+ con Stripe). Ya aplicado en el front (dev).
   Solo salta el gate "a fuerza con tarjeta"; NO afecta cobro ni suspensión por cobro fallido. Toma efecto al
   siguiente login (el flag viaja en el payload de login).
+
+- **Resumen de progreso por meta/submeta (2026-10, Lucy)**: `Goals` tiene columna nueva `sProgressSummary`
+  (text, nullable) — viene en el GET de la meta/submeta. Para guardarla, nuevo endpoint
+  **PATCH `/goals/:sGoalId/progressSummary`** body `{ sProgressSummary }` (string, máx 5000, permite ''/null).
+  El front muestra el campo debajo de "últimos registros" (meta o submeta) con guardado inline, y lo
+  pinta en el PDF del reporte (una caja por submeta/meta). Aplica a metas y submetas por igual.

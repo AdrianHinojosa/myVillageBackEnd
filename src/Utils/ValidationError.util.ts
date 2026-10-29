@@ -460,6 +460,10 @@ export default {
                 sp: "Por favor, ingresa notas de cierre correctas.",
                 en: "Please, enter valid completion notes."
             },
+            sProgressSummary: {
+                sp: "Por favor, ingresa un resumen de progreso válido (máx. 5000 caracteres).",
+                en: "Please, enter a valid progress summary (max 5000 characters)."
+            },
             iBaselineValue: {
                 sp: "Por favor, ingresa un valor de línea base correcto.",
                 en: "Please, enter a valid baseline value."

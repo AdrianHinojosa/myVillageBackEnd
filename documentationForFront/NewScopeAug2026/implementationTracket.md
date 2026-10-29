@@ -1135,3 +1135,13 @@ la suspensión por cobro fallido real (SUSPENDED sigue bloqueando en su propio g
 - `UpdateSchoolBody`/`BillingFields` + `ValidationError.util` (Schools.bSkipBillingBlock): el superadmin
   lo setea por PUT `/schools/:id`. `updateSchool` query lo aplica al patch solo si viene (!= null/undefined).
 - Validado contra DB local: columna creada (boolean, default false). tsc sin errores nuevos.
+
+### Resumen cualitativo de progreso por meta/submeta (feedback Lucy 2026-10)
+Campo de texto libre que el terapeuta escribe para explicar en palabras cómo avanzó, para no depender
+de 50 registros. Como una submeta ES una fila en Goals, UN campo cubre metas y submetas.
+- Migración `3044_Goals_sProgressSummary`: columna `text` nullable en Goals (aditiva).
+- Endpoint dedicado **PATCH `/goals/:sGoalId/progressSummary`** (permiso General WRITE, misma verificación
+  de escuela + FACULTY-assignment que completeGoal). Body `{ sProgressSummary }` (string, allow null/'',
+  máx 5000). Devuelve la meta actualizada. `UpdateProgressSummaryBody/Params` en validations;
+  `updateProgressSummary` en controller + query; mensajes Success + ValidationError.
+- Validado local: migración corrió, columna creada, 404 para meta inexistente, 409 (no 500) con body inválido.

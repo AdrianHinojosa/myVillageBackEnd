@@ -226,6 +226,10 @@ export default {
             sp: 'Se completó la meta exitosamente!',
             en: "The goal was completed successfully."
         },
+        updateProgressSummary: {
+            sp: 'Se guardó el resumen de progreso exitosamente!',
+            en: "The progress summary was saved successfully."
+        },
         deleteGoal: {
             sp: 'Se eliminó la meta exitosamente!',
             en: "The goal was successfully deleted."

@@ -599,9 +599,36 @@ class Queries {
             percentages.push(pct);
         }
 
-        // Average the percentages and cap at 100
+        // Promedio crudo por registro: alimenta `dAverageValue` (lo que se muestra como "PROMEDIO").
         const avgPct = percentages.reduce((a, b) => a + b, 0) / percentages.length;
-        const dProgress = Math.min(Math.round(avgPct * 100) / 100, 100);
+
+        // `dProgress` = AVANCE HACIA EL OBJETIVO (0-100), para que la barra se LLENE al alcanzar la
+        // meta. En TAREAS/FRECUENCIA/DURACION y en las direcciones DECREASE, `avgPct` ya es avance
+        // hacia el objetivo. Pero EXACTITUD, ESCALA y OPORTUNIDAD en INCREASE guardaban el valor CRUDO
+        // (exactitud %, % del máximo de escala, % logrado), así que la barra no se llenaba aunque el
+        // promedio ya superara la meta (submeta con meta 30% y promedio 35% salía a 35%). Aquí se
+        // escala al objetivo propio de la meta/submeta. Feedback Lucy 2026-10-29.
+        let progressPct = avgPct;
+        const sProgDirection = goal.sDirection || 'INCREASE';
+        if (sProgDirection === 'INCREASE') {
+            if (goal.sMeasurementType === 'EXACTITUD') {
+                const target = goal.iTargetValue || 0; // objetivo en %
+                if (target > 0) progressPct = (avgPct / target) * 100;
+            } else if (goal.sMeasurementType === 'ESCALA') {
+                const scaleMax = goal.iScaleMax || 5;
+                const target = goal.iTargetValue || 0;
+                const targetPct = scaleMax > 0 ? (target / scaleMax) * 100 : 0; // objetivo como % del máximo
+                if (targetPct > 0) progressPct = (avgPct / targetPct) * 100;
+            } else if (goal.sMeasurementType === 'OPORTUNIDAD') {
+                const tVal = goal.iTargetValue || 0;
+                const tOpp = goal.iTargetOpportunities || 0;
+                // Formato nuevo: objetivo = tVal/tOpp. Formato viejo (tOpp null): tVal ya es un %.
+                const targetPct = tOpp > 0 ? (tVal / tOpp) * 100 : tVal;
+                if (targetPct > 0) progressPct = (avgPct / targetPct) * 100;
+            }
+        }
+
+        const dProgress = Math.min(Math.round(progressPct * 100) / 100, 100);
 
         // Update goal
         await GoalsModel.query(trx).patch({

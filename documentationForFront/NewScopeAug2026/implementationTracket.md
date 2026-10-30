@@ -1145,3 +1145,15 @@ de 50 registros. Como una submeta ES una fila en Goals, UN campo cubre metas y s
   máx 5000). Devuelve la meta actualizada. `UpdateProgressSummaryBody/Params` en validations;
   `updateProgressSummary` en controller + query; mensajes Success + ValidationError.
 - Validado local: migración corrió, columna creada, 404 para meta inexistente, 409 (no 500) con body inválido.
+
+### Fix progreso: dProgress = avance HACIA EL OBJETIVO en EXACTITUD/ESCALA/OPORTUNIDAD (Lucy 2026-10-29)
+`recalculateGoalProgress` (trackingRecords.queries) guardaba dProgress CRUDO para EXACTITUD (exactitud %),
+ESCALA (% del máximo) y OPORTUNIDAD-increase (% logrado) → la barra no se llenaba aunque el promedio
+superara la meta (submeta con meta 30% y promedio 35% salía a 35%). TAREAS/FRECUENCIA/DURACION y las
+direcciones DECREASE ya dividían entre el objetivo. Fix: se mantiene `avgPct` para `dAverageValue` (el
+"PROMEDIO" crudo que se muestra) y se calcula `dProgress` aparte = (avgPct / objetivo) * 100, capeado a
+100, para esas 3 mediciones en INCREASE (ESCALA usa iTargetValue/iScaleMax; OPORTUNIDAD nuevo usa
+iTargetValue/iTargetOpportunities, viejo usa iTargetValue como %). Validado por HTTP: 35% vs meta 30%
+→ dProgress 100, dAverageValue 35; 20% vs 30% → 66.67 / 20. **IMPORTANTE al desplegar: correr el script
+de backfill (`src/scripts/recalculateProgress.ts`) para recomputar el dProgress de las metas existentes;
+si no, solo se actualizan al agregar/editar un registro.**

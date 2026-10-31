@@ -1189,3 +1189,10 @@ Implementación (sin migración: `sBillingMode` es string libre; sin endpoints n
   tarjeta → quedaría bloqueada. Antes del deploy: prenderle "Omitir bloqueo por cobranza" o pasarla a
   transferencia. El resto de colegios en prod está en TRANSFER (no les afecta).
 - Pendiente fuera de esta rama: botón "Eliminar cuenta" en el admin (el backend ya cancela Stripe al borrar).
+- **Ajustes del review (2026-10-31)**: (1) el 402 del gate ahora lleva `sCode: 'BILLING_NEEDS_CARD'`
+  (`needsCardError` en schools.permissions + `SendAsJson` agrega `sCode` cuando existe). ⚠️ No se cambió
+  `name`: `ErrorHandler.mw` solo deja pasar `name === 'CustomError'` y cualquier otro nombre sale como 500.
+  Verificado pasando el error por ErrHandler → SendAsJson: 402 + sCode; los demás 402 no cambian.
+  (2) `GET /billing/summary` devuelve `bNeedsCard` = `schoolNeedsCard(oSchool)` (veredicto del servidor) para
+  que el front corrija su estado local sin re-login. Motivo: una sesión vieja o un cambio de tarifa a mitad de
+  sesión hacía que el front tomara el 402 como suspensión y rebotara entre /admin/billing y /admin/suspended.

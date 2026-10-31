@@ -44,6 +44,17 @@ export const schoolNeedsCard = (oSchool: any): boolean => {
     return false;
 };
 
+// 402 del gate "a fuerza con tarjeta". Lleva `sCode` (SendAsJson lo agrega a la respuesta) para que
+// el front lo distinga de un 402 por suspensión: sin esto, una sesión cuyo estado local no sabe que
+// necesita tarjeta (sesión vieja, o el superadmin cambió la tarifa a medio día) se marcaba como
+// SUSPENDIDA y rebotaba entre /admin/billing y /admin/suspended.
+// ⚠️ NO cambiar `name`: ErrorHandler.mw solo deja pasar `name === 'CustomError'`; otro nombre → 500.
+const needsCardError = (sLang: string): MyError => {
+    const oError: any = new MyError(402, ErrorMessages.Schools.billingNeedsCard[sLang]);
+    oError.sCode = 'BILLING_NEEDS_CARD';
+    return oError;
+};
+
 type Permission = {
     sModuleName: string;
     sActionCode: 'WRITE' | 'READ' | 'ADMIN' | 'FORBIDDEN';
@@ -148,7 +159,7 @@ export const verifySchoolUserPermissions = (sArrModules: Permission[], oOptions:
     // "A fuerza con tarjeta": You/You+ Stripe sin suscripción activa se bloquean como una suspendida,
     // dejando pasar solo los endpoints de recuperación (bAllowWhenSuspended) para agregar la tarjeta.
     if (!oOptions.bAllowWhenSuspended && schoolNeedsCard(mySchool)) {
-        return next(new MyError(402, ErrorMessages.Schools.billingNeedsCard[sLang]));
+        return next(needsCardError(sLang));
     }
 
     // If NOT super school user then verify permissions.
@@ -257,7 +268,7 @@ export const verifySchoolUserHasAnyPermissions = (sArrModules: Permission[]) => 
     }
     // "A fuerza con tarjeta": You/You+ Stripe sin suscripción activa se bloquean hasta agregar tarjeta.
     if (schoolNeedsCard(mySchool)) {
-        return next(new MyError(402, ErrorMessages.Schools.billingNeedsCard[sLang]));
+        return next(needsCardError(sLang));
     }
 
     // If NOT super school user then verify permissions.

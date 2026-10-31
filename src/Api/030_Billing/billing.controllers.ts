@@ -20,6 +20,7 @@ import stripe, {
 } from '../../Services/Stripe.service';
 import StudentQueries from '../023_Students/students.queries';
 import SchoolUserQueries from '../026_SchoolUsers/schoolUsers.queries';
+import { schoolNeedsCard } from '../../Middlewares/001_Permissions.mw.ts/schools.permissions';
 
 /**
  * Punto 18 — You/You+ cobran sobre usuarios/pacientes REALES (base incluida + excedente). El motor
@@ -186,6 +187,9 @@ class Controllers {
                 sAccountType: oSchool.sAccountType || 'SCHOOL',
                 iActiveUsers: oSchool.iActiveUsers ?? null,
                 iActiveStudents: oSchool.iActiveStudents ?? null,
+                // Gate "a fuerza con tarjeta" calculado por el servidor (misma función que bloquea las
+                // rutas). El front lo usa para corregir su estado local sin re-login.
+                bNeedsCard: schoolNeedsCard(oSchool),
                 // Surfaced so nobody mistakes a sandbox for production while testing.
                 bTestMode: isStripeTestMode()
             },

@@ -861,3 +861,11 @@ reporte omite el apellido.
 - **402 `billingNeedsCard`** ahora también llega a colegios SCHOOL por Stripe sin suscripción activa.
 - Toggle "Omitir bloqueo por cobranza" en el editor SuperAdmin: ahora visible para **cualquier** cuenta con
   Stripe (no solo You/You+), porque el gate ya aplica a Schools.
+- **402 del gate "falta tarjeta" con `sCode: 'BILLING_NEEDS_CARD'`** (además de `code/status/name/message`).
+  El interceptor de axios, si lo ve, guarda `oUser.bServerNeedsCard = true` y manda al gate; ya no marca la
+  cuenta como SUSPENDIDA. Un 402 sin `sCode` sigue siendo suspensión, igual que antes.
+- **`GET /billing/summary` → `bNeedsCard`** (boolean, calculado por el servidor). La página de Facturación lo
+  guarda en `oUser.bServerNeedsCard`; el getter `bNeedsCard` usa ese veredicto cuando existe. Pasar a
+  TRIALING/ACTIVE/PAST_DUE lo limpia.
+- Facturación ofrece "Reactivar" también con estado NONE si ya hay tarjeta guardada y monto > 0 (tarjeta
+  capturada con tarifa 0 y tarifa puesta después) → `POST /billing/resubscribe` crea la suscripción.

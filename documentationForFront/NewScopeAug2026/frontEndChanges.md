@@ -848,3 +848,16 @@ reporte omite el apellido.
   **PATCH `/goals/:sGoalId/progressSummary`** body `{ sProgressSummary }` (string, máx 5000, permite ''/null).
   El front muestra el campo debajo de "últimos registros" (meta o submeta) con guardado inline, y lo
   pinta en el PDF del reporte (una caja por submeta/meta). Aplica a metas y submetas por igual.
+
+## Planes A/B/C de Schools por Stripe (2026-10-31) — rama `feature/schools-planes-stripe`
+- **`sBillingMode` acepta un tercer valor `PLANS`** (POST/PUT `/schools`). Con `PLANS` el monto lo calcula el
+  backend con los LÍMITES (`iUsersLimit`, `iStudentsLimit`) y el `dDiscountPct`; `dFixedAmount`,
+  `dAmountPerTeacher` y `dAmountPerStudent` se ignoran (el front los manda `null`). El front espeja la
+  fórmula en `app/utils/billing.ts` (`SCHOOL_PLANS`, `getSchoolPlan`, `computeSchoolPlanTotal`) para la vista
+  previa; el monto oficial sigue siendo `GET /billing/summary → dMonthlyTotal`.
+- **Login (`results.oSchool`)** incluye `bHasChargeableTariff` (boolean). El getter `bNeedsCard` del front ahora
+  también aplica a `SCHOOL` con `sPaymentMethod === 'STRIPE'` y `bHasChargeableTariff === true` (empata con
+  `schoolNeedsCard`). Si falta el campo (sesión vieja) no se muestra el gate; el backend responde 402 igual.
+- **402 `billingNeedsCard`** ahora también llega a colegios SCHOOL por Stripe sin suscripción activa.
+- Toggle "Omitir bloqueo por cobranza" en el editor SuperAdmin: ahora visible para **cualquier** cuenta con
+  Stripe (no solo You/You+), porque el gate ya aplica a Schools.

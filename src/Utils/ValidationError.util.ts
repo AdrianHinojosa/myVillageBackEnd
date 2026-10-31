@@ -228,8 +228,8 @@ export default {
             },
             // P3 — Cobranza
             sBillingMode: {
-                sp: "Por favor, selecciona una modalidad de cobro válida (fija o variable).",
-                en: "Please, select a valid billing mode (fixed or variable)."
+                sp: "Por favor, selecciona una modalidad de cobro válida (fija, variable o planes).",
+                en: "Please, select a valid billing mode (fixed, variable or plans)."
             },
             dFixedAmount: {
                 sp: "Por favor, ingresa un monto mensual válido.",

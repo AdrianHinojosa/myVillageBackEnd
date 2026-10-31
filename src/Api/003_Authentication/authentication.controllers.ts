@@ -13,6 +13,7 @@ import { SchoolUsersModel } from '../022_Schools/001_SchoolUsers/schoolUsers.mod
 import SchoolQueries from '../022_Schools/schools.queries';
 import SchoolUserQueries from '../022_Schools/001_SchoolUsers/schoolUsers.queries';
 import { SchoolPermissionsModel } from '../022_Schools/001_SchoolUsers/schoolPermissions.model';
+import { hasChargeableTariff } from '../../Services/Stripe.service';
 
 import ErrorMessages from '../../Utils/ErrorMessages.util'
 import SuccessMessages from '../../Utils/SuccessMessage.util'
@@ -103,7 +104,10 @@ class Controllers {
                     tCurrentPeriodEnd: school.tCurrentPeriodEnd || null,
                     // Override manual del superadmin: cuando true, el front NO muestra el gate "agrega
                     // tarjeta" (debe empatar con schoolNeedsCard del backend). No afecta el cobro.
-                    bSkipBillingBlock: !!school.bSkipBillingBlock
+                    bSkipBillingBlock: !!school.bSkipBillingBlock,
+                    // Schools por Stripe: el gate "agrega tarjeta" solo aplica si hay tarifa > 0 (debe
+                    // empatar con schoolNeedsCard del backend). En You/You+ siempre es true (cuota base).
+                    bHasChargeableTariff: hasChargeableTariff(school)
                 };
             } else {
                 return next(new MyError(401, ErrorMessages.Authentication.login.invalidCredentials[sLang]));

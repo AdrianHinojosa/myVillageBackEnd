@@ -9,14 +9,17 @@ import SchoolQueries from '../../Api/022_Schools/schools.queries';
 import {IAdministrators} from '../../Api/005_Administrators/administrators.model';
 
 import ErrorMessages from '../../Utils/ErrorMessages.util';
-import { normalizeModality } from '../../Services/Stripe.service';
+import { normalizeModality, hasChargeableTariff } from '../../Services/Stripe.service';
 
 // Punto 18 — "a fuerza con tarjeta" (decisión Lucy 2026-10-19): una cuenta You/You+ cobrada por
 // Stripe debe tener una suscripción activa para usar la plataforma. Mientras no hay tarjeta
 // (sBillingStatus NONE) o la suscripción quedó cancelada (CANCELED), se bloquea el acceso — como una
-// suspendida — hasta que registren un método de pago. SCHOOL y transferencia quedan exentos; TRIALING,
-// ACTIVE y PAST_DUE siguen con acceso.
-const schoolNeedsCard = (oSchool: any): boolean => {
+// suspendida — hasta que registren un método de pago. Transferencia queda exenta; TRIALING, ACTIVE y
+// PAST_DUE siguen con acceso.
+// Schools (decisión PO 2026-10-31): misma regla para un colegio cobrado por Stripe (FIXED, VARIABLE o
+// PLANS), solo si tiene una tarifa > 0 — sin monto no se crea suscripción, y bloquearlo lo dejaría
+// encerrado para siempre. Exportado para las pruebas.
+export const schoolNeedsCard = (oSchool: any): boolean => {
     // Override manual del superadmin (Lucy/Sam 2026-10-26): "Omitir bloqueo por cobranza". Cuando
     // está prendido, la cuenta NO se bloquea por el gate "a fuerza con tarjeta" aunque no tenga
     // suscripción activa. NO toca el cobro (Stripe sigue intentando) ni la suspensión por cobro
@@ -24,7 +27,8 @@ const schoolNeedsCard = (oSchool: any): boolean => {
     if (oSchool?.bSkipBillingBlock) return false;
     const sModality = normalizeModality(oSchool?.sAccountType);
     const bQuotaStripe = (sModality === 'YOU' || sModality === 'YOU_PLUS') && oSchool?.sPaymentMethod !== 'TRANSFER';
-    if (!bQuotaStripe) return false;
+    const bSchoolStripe = sModality === 'SCHOOL' && oSchool?.sPaymentMethod === 'STRIPE' && hasChargeableTariff(oSchool);
+    if (!bQuotaStripe && !bSchoolStripe) return false;
     const sStatus = oSchool?.sBillingStatus;
     // Sin tarjeta (NONE): se bloquea de inmediato — "a fuerza con tarjeta".
     if (sStatus === 'NONE') return true;

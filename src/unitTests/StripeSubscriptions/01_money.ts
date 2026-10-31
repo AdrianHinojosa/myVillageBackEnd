@@ -9,9 +9,11 @@
 import { section, check, setFile } from './helpers';
 import {
     toStripeAmount, fromStripeAmount, applyDiscount, computeMonthlyTotal, computeQuotaTotal,
+    computeSchoolPlanTotal, getSchoolPlan, SCHOOL_PLAN_EXTRA_USER,
     hasChargeableTariff, mapStripeStatus, fromStripeTimestamp,
     BILLING_CURRENCY, TRIAL_PERIOD_DAYS, MAX_FAILED_ATTEMPTS
 } from '../../Services/Stripe.service';
+import { schoolNeedsCard } from '../../Middlewares/001_Permissions.mw.ts/schools.permissions';
 
 export default async function run(): Promise<void> {
     setFile('01_money');
@@ -67,6 +69,46 @@ export default async function run(): Promise<void> {
     check('THERAPIST normaliza a You', computeMonthlyTotal({ sAccountType: 'THERAPIST', sPaymentMethod: 'STRIPE', iActiveUsers: 1, iActiveStudents: 15 }), 823.60);
     // SALVAGUARDA: una cuenta You en TRANSFER NO usa la cuota — conserva su tarifa manual (colegios/terapeutas en vivo).
     check('You en TRANSFER ignora la cuota', computeMonthlyTotal({ sAccountType: 'YOU', sPaymentMethod: 'TRANSFER', sBillingMode: 'FIXED', dFixedAmount: 300, iActiveStudents: 99 }), 300);
+
+    section('Schools PLANS — planes A/B/C sobre LÍMITES, todos los alumnos al precio de su plan');
+    // Montos CON IVA: A 250/70 -> 290/81.20 ; B 375/60 -> 435/69.60 ; C 500/50 -> 580/58 ; usuario 25 -> 29.
+    check('el plan lo decide el límite de alumnos: 0 -> A', getSchoolPlan(0).sPlan, 'A');
+    check('25 -> A', getSchoolPlan(25).sPlan, 'A');
+    check('26 -> B', getSchoolPlan(26).sPlan, 'B');
+    check('50 -> B', getSchoolPlan(50).sPlan, 'B');
+    check('51 -> C', getSchoolPlan(51).sPlan, 'C');
+    check('usuario extra es 25 + IVA', SCHOOL_PLAN_EXTRA_USER, 29);
+    check('sin límites: solo la base de A', computeSchoolPlanTotal({}), 290);
+    check('A: 8 usuarios (dentro de 10), 20 alumnos', computeSchoolPlanTotal({ iUsersLimit: 8, iStudentsLimit: 20 }), 1914);
+    check('A tope: 10 usuarios, 25 alumnos', computeSchoolPlanTotal({ iUsersLimit: 10, iStudentsLimit: 25 }), 2320);
+    check('B: 26 alumnos cuesta menos que 25 en A (aceptado)', computeSchoolPlanTotal({ iUsersLimit: 10, iStudentsLimit: 26 }), 2244.6);
+    check('B: 18 usuarios (3 extra), 40 alumnos', computeSchoolPlanTotal({ iUsersLimit: 18, iStudentsLimit: 40 }), 3306);
+    check('C: 22 usuarios (2 extra), 60 alumnos', computeSchoolPlanTotal({ iUsersLimit: 22, iStudentsLimit: 60 }), 4118);
+    check('C: 51 alumnos', computeSchoolPlanTotal({ iUsersLimit: 20, iStudentsLimit: 51 }), 3538);
+    check('B con 20% de descuento', computeSchoolPlanTotal({ iUsersLimit: 18, iStudentsLimit: 40, dDiscountPct: 20 }), 2644.8);
+    // computeMonthlyTotal enruta PLANS y usa LÍMITES: los conteos reales se ignoran.
+    const oPlans = { sAccountType: 'SCHOOL', sPaymentMethod: 'STRIPE', sBillingMode: 'PLANS', iUsersLimit: 18, iStudentsLimit: 40 };
+    check('computeMonthlyTotal enruta PLANS', computeMonthlyTotal(oPlans), 3306);
+    check('PLANS ignora los conteos reales', computeMonthlyTotal({ ...oPlans, iActiveUsers: 2, iActiveStudents: 3, iUsers: 2, iStudents: 3 }), 3306);
+    check('PLANS ignora montos de FIXED/VARIABLE guardados', computeMonthlyTotal({ ...oPlans, dFixedAmount: 1, dAmountPerTeacher: 1, dAmountPerStudent: 1 }), 3306);
+    check('a centavos para Stripe sin basura de flotante', toStripeAmount(computeSchoolPlanTotal({ iUsersLimit: 10, iStudentsLimit: 26 })), 224460);
+    check('PLANS siempre es cobrable (base > 0)', hasChargeableTariff(oPlans), true);
+
+    section('gate "a fuerza con tarjeta" — You/You+ y Schools por Stripe');
+    const tFuture = new Date(Date.now() + 86400000).toISOString();
+    const tPast = new Date(Date.now() - 86400000).toISOString();
+    const oSchoolCard = { sAccountType: 'SCHOOL', sPaymentMethod: 'STRIPE', sBillingMode: 'PLANS', iUsersLimit: 10, iStudentsLimit: 20 };
+    check('Schools Stripe sin tarjeta (NONE) se bloquea', schoolNeedsCard({ ...oSchoolCard, sBillingStatus: 'NONE' }), true);
+    check('Schools en TRANSFER nunca', schoolNeedsCard({ ...oSchoolCard, sPaymentMethod: 'TRANSFER', sBillingStatus: 'NONE' }), false);
+    check('Schools Stripe sin tarifa (0) no se bloquea', schoolNeedsCard({ sAccountType: 'SCHOOL', sPaymentMethod: 'STRIPE', sBillingMode: 'FIXED', sBillingStatus: 'NONE' }), false);
+    check('Schools Stripe VARIABLE con tarifa también', schoolNeedsCard({ sAccountType: 'SCHOOL', sPaymentMethod: 'STRIPE', sBillingMode: 'VARIABLE', dAmountPerTeacher: 10, dAmountPerStudent: 5, iUsersLimit: 5, iStudentsLimit: 10, sBillingStatus: 'NONE' }), true);
+    check('Schools con "Omitir bloqueo" no se bloquea', schoolNeedsCard({ ...oSchoolCard, sBillingStatus: 'NONE', bSkipBillingBlock: true }), false);
+    check('Schools en prueba (TRIALING) entra', schoolNeedsCard({ ...oSchoolCard, sBillingStatus: 'TRIALING' }), false);
+    check('Schools cancelado con periodo vigente entra', schoolNeedsCard({ ...oSchoolCard, sBillingStatus: 'CANCELED', tCurrentPeriodEnd: tFuture }), false);
+    check('Schools cancelado y vencido se bloquea', schoolNeedsCard({ ...oSchoolCard, sBillingStatus: 'CANCELED', tCurrentPeriodEnd: tPast }), true);
+    check('sin método de pago explícito (null) no se bloquea', schoolNeedsCard({ ...oSchoolCard, sPaymentMethod: null, sBillingStatus: 'NONE' }), false);
+    check('You Stripe sin tarjeta sigue igual (se bloquea)', schoolNeedsCard({ sAccountType: 'YOU', sPaymentMethod: 'STRIPE', sBillingStatus: 'NONE' }), true);
+    check('You+ en TRANSFER sigue igual (no)', schoolNeedsCard({ sAccountType: 'YOU_PLUS', sPaymentMethod: 'TRANSFER', sBillingStatus: 'NONE' }), false);
 
     section('chargeability');
     check('a real tariff is chargeable', hasChargeableTariff({ sBillingMode: 'FIXED', dFixedAmount: 100 }), true);

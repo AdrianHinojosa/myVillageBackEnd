@@ -9,14 +9,17 @@ import SchoolQueries from '../../Api/022_Schools/schools.queries';
 import {IAdministrators} from '../../Api/005_Administrators/administrators.model';
 
 import ErrorMessages from '../../Utils/ErrorMessages.util';
-import { normalizeModality } from '../../Services/Stripe.service';
+import { normalizeModality, hasChargeableTariff } from '../../Services/Stripe.service';
 
 // Punto 18 — "a fuerza con tarjeta" (decisión Lucy 2026-10-19): una cuenta You/You+ cobrada por
 // Stripe debe tener una suscripción activa para usar la plataforma. Mientras no hay tarjeta
 // (sBillingStatus NONE) o la suscripción quedó cancelada (CANCELED), se bloquea el acceso — como una
-// suspendida — hasta que registren un método de pago. SCHOOL y transferencia quedan exentos; TRIALING,
-// ACTIVE y PAST_DUE siguen con acceso.
-const schoolNeedsCard = (oSchool: any): boolean => {
+// suspendida — hasta que registren un método de pago. Transferencia queda exenta; TRIALING, ACTIVE y
+// PAST_DUE siguen con acceso.
+// Schools (decisión PO 2026-10-31): misma regla para un colegio cobrado por Stripe (FIXED, VARIABLE o
+// PLANS), solo si tiene una tarifa > 0 — sin monto no se crea suscripción, y bloquearlo lo dejaría
+// encerrado para siempre. Exportado para las pruebas.
+export const schoolNeedsCard = (oSchool: any): boolean => {
     // Override manual del superadmin (Lucy/Sam 2026-10-26): "Omitir bloqueo por cobranza". Cuando
     // está prendido, la cuenta NO se bloquea por el gate "a fuerza con tarjeta" aunque no tenga
     // suscripción activa. NO toca el cobro (Stripe sigue intentando) ni la suspensión por cobro
@@ -24,7 +27,8 @@ const schoolNeedsCard = (oSchool: any): boolean => {
     if (oSchool?.bSkipBillingBlock) return false;
     const sModality = normalizeModality(oSchool?.sAccountType);
     const bQuotaStripe = (sModality === 'YOU' || sModality === 'YOU_PLUS') && oSchool?.sPaymentMethod !== 'TRANSFER';
-    if (!bQuotaStripe) return false;
+    const bSchoolStripe = sModality === 'SCHOOL' && oSchool?.sPaymentMethod === 'STRIPE' && hasChargeableTariff(oSchool);
+    if (!bQuotaStripe && !bSchoolStripe) return false;
     const sStatus = oSchool?.sBillingStatus;
     // Sin tarjeta (NONE): se bloquea de inmediato — "a fuerza con tarjeta".
     if (sStatus === 'NONE') return true;
@@ -38,6 +42,17 @@ const schoolNeedsCard = (oSchool: any): boolean => {
     }
     // TRIALING, ACTIVE y PAST_DUE siguen con acceso. SUSPENDED se bloquea en su propio gate.
     return false;
+};
+
+// 402 del gate "a fuerza con tarjeta". Lleva `sCode` (SendAsJson lo agrega a la respuesta) para que
+// el front lo distinga de un 402 por suspensión: sin esto, una sesión cuyo estado local no sabe que
+// necesita tarjeta (sesión vieja, o el superadmin cambió la tarifa a medio día) se marcaba como
+// SUSPENDIDA y rebotaba entre /admin/billing y /admin/suspended.
+// ⚠️ NO cambiar `name`: ErrorHandler.mw solo deja pasar `name === 'CustomError'`; otro nombre → 500.
+const needsCardError = (sLang: string): MyError => {
+    const oError: any = new MyError(402, ErrorMessages.Schools.billingNeedsCard[sLang]);
+    oError.sCode = 'BILLING_NEEDS_CARD';
+    return oError;
 };
 
 type Permission = {
@@ -144,7 +159,7 @@ export const verifySchoolUserPermissions = (sArrModules: Permission[], oOptions:
     // "A fuerza con tarjeta": You/You+ Stripe sin suscripción activa se bloquean como una suspendida,
     // dejando pasar solo los endpoints de recuperación (bAllowWhenSuspended) para agregar la tarjeta.
     if (!oOptions.bAllowWhenSuspended && schoolNeedsCard(mySchool)) {
-        return next(new MyError(402, ErrorMessages.Schools.billingNeedsCard[sLang]));
+        return next(needsCardError(sLang));
     }
 
     // If NOT super school user then verify permissions.
@@ -253,7 +268,7 @@ export const verifySchoolUserHasAnyPermissions = (sArrModules: Permission[]) => 
     }
     // "A fuerza con tarjeta": You/You+ Stripe sin suscripción activa se bloquean hasta agregar tarjeta.
     if (schoolNeedsCard(mySchool)) {
-        return next(new MyError(402, ErrorMessages.Schools.billingNeedsCard[sLang]));
+        return next(needsCardError(sLang));
     }
 
     // If NOT super school user then verify permissions.

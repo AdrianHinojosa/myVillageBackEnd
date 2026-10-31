@@ -23,7 +23,8 @@ export const AccountType = Joi.string().valid('SCHOOL', 'THERAPIST', 'YOU', 'YOU
  * `dDiscountPct` had it from the start; the three amounts did not. Inconsistency of my own making.
  */
 export const BillingFields = {
-    sBillingMode: Joi.string().valid('FIXED', 'VARIABLE').allow(null).allow('')
+    // PLANS = planes A/B/C de Schools por Stripe (ver SCHOOL_PLANS en Stripe.service).
+    sBillingMode: Joi.string().valid('FIXED', 'VARIABLE', 'PLANS').allow(null).allow('')
         .error(new Error("Schools sBillingMode")),
     dFixedAmount: Validations.PositiveMonetaryValue("Schools dFixedAmount").allow(null),
     dAmountPerTeacher: Validations.PositiveMonetaryValue("Schools dAmountPerTeacher").allow(null),

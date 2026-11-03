@@ -68,6 +68,12 @@ router.patch('/:sGoalId/complete',
     celebrate({ params: GoalValidations.CompleteGoalParams, body: GoalValidations.CompleteGoalBody }),
     aH(GoalController.completeGoal));
 
+// Guardar resumen cualitativo de progreso (texto libre) de una meta/submeta — feedback Lucy
+router.patch('/:sGoalId/progressSummary',
+    aH(verifySchoolUserPermissions([{sModuleName: 'General', sActionCode: 'WRITE'}])),
+    celebrate({ params: GoalValidations.UpdateProgressSummaryParams, body: GoalValidations.UpdateProgressSummaryBody }),
+    aH(GoalController.updateProgressSummary));
+
 // Delete Goal
 router.delete('/:sGoalId',
     aH(verifySchoolUserPermissions([{sModuleName: 'General', sActionCode: 'WRITE'}])),

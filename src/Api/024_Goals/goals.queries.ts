@@ -208,6 +208,14 @@ class Queries {
         return await GoalsModel.query().patchAndFetchById(sGoalId, patchData).where('bActive', true);
     }
 
+    // Guardar el resumen cualitativo de progreso (texto libre) de una meta/submeta. Feedback Lucy.
+    static async updateProgressSummary(sGoalId, sProgressSummary, sLastUpdatedBy) {
+        return await GoalsModel.query().patchAndFetchById(sGoalId, {
+            sProgressSummary: sProgressSummary || null,
+            sLastUpdatedBy
+        }).where('bActive', true);
+    }
+
     // Soft delete a goal
     static async deleteGoal(sGoalId, sLastDeletedBy) {
         return await GoalsModel.query().patchAndFetchById(sGoalId, {

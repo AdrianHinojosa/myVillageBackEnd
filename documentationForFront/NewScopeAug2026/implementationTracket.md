@@ -1135,3 +1135,64 @@ la suspensión por cobro fallido real (SUSPENDED sigue bloqueando en su propio g
 - `UpdateSchoolBody`/`BillingFields` + `ValidationError.util` (Schools.bSkipBillingBlock): el superadmin
   lo setea por PUT `/schools/:id`. `updateSchool` query lo aplica al patch solo si viene (!= null/undefined).
 - Validado contra DB local: columna creada (boolean, default false). tsc sin errores nuevos.
+
+### Resumen cualitativo de progreso por meta/submeta (feedback Lucy 2026-10)
+Campo de texto libre que el terapeuta escribe para explicar en palabras cómo avanzó, para no depender
+de 50 registros. Como una submeta ES una fila en Goals, UN campo cubre metas y submetas.
+- Migración `3044_Goals_sProgressSummary`: columna `text` nullable en Goals (aditiva).
+- Endpoint dedicado **PATCH `/goals/:sGoalId/progressSummary`** (permiso General WRITE, misma verificación
+  de escuela + FACULTY-assignment que completeGoal). Body `{ sProgressSummary }` (string, allow null/'',
+  máx 5000). Devuelve la meta actualizada. `UpdateProgressSummaryBody/Params` en validations;
+  `updateProgressSummary` en controller + query; mensajes Success + ValidationError.
+- Validado local: migración corrió, columna creada, 404 para meta inexistente, 409 (no 500) con body inválido.
+
+### Fix progreso: dProgress = avance HACIA EL OBJETIVO en EXACTITUD/ESCALA/OPORTUNIDAD (Lucy 2026-10-29)
+`recalculateGoalProgress` (trackingRecords.queries) guardaba dProgress CRUDO para EXACTITUD (exactitud %),
+ESCALA (% del máximo) y OPORTUNIDAD-increase (% logrado) → la barra no se llenaba aunque el promedio
+superara la meta (submeta con meta 30% y promedio 35% salía a 35%). TAREAS/FRECUENCIA/DURACION y las
+direcciones DECREASE ya dividían entre el objetivo. Fix: se mantiene `avgPct` para `dAverageValue` (el
+"PROMEDIO" crudo que se muestra) y se calcula `dProgress` aparte = (avgPct / objetivo) * 100, capeado a
+100, para esas 3 mediciones en INCREASE (ESCALA usa iTargetValue/iScaleMax; OPORTUNIDAD nuevo usa
+iTargetValue/iTargetOpportunities, viejo usa iTargetValue como %). Validado por HTTP: 35% vs meta 30%
+→ dProgress 100, dAverageValue 35; 20% vs 30% → 66.67 / 20. **IMPORTANTE al desplegar: correr el script
+de backfill (`src/scripts/recalculateProgress.ts`) para recomputar el dProgress de las metas existentes;
+si no, solo se actualizan al agregar/editar un registro.**
+
+### Planes A/B/C de Schools por Stripe + gate "a fuerza con tarjeta" para Schools (PO 2026-10-31) — rama `feature/schools-planes-stripe`
+Tabla del cliente (MV for School): Plan A 1–25 alumnos base $250 (10 usuarios) + $70/alumno; Plan B 26–50
+base $375 (15 usuarios) + $60/alumno; Plan C 51+ base $500 (20 usuarios) + $50/alumno; usuario extra $25.
+Precios + IVA. Decisiones PO (2026-10-31):
+- **Se cobra lo configurado en el panel**: LÍMITES (`iUsersLimit`, `iStudentsLimit`), no conteos reales
+  (misma regla anti-manipulación que VARIABLE). El límite sigue siendo el tope de altas.
+- **El plan lo decide solo el límite de alumnos** (0–25 A, 26–50 B, 51+ C). Nadie lo escoge.
+- **"Tal cual la tabla"**: TODOS los alumnos al precio de su plan (no escalonado). Se aceptó el salto:
+  25 alumnos (A) = $2,320 con IVA vs 26 (B) = $2,244.60; 50 (B) vs 51 (C) igual.
+- Usuario extra = cada usuario del límite por arriba de los incluidos del plan, $29 con IVA.
+- **Montos con IVA incluido** (como You/You+): A 290.00/81.20, B 435.00/69.60, C 580.00/58.00, extra 29.00.
+- Aplica el `dDiscountPct` existente. **Solo Schools**: You/You+ no cambian (siguen por uso real).
+
+Implementación (sin migración: `sBillingMode` es string libre; sin endpoints nuevos):
+- `Stripe.service.ts`: `SCHOOL_PLANS`, `SCHOOL_PLAN_EXTRA_USER`, `getSchoolPlan(iStudents)`,
+  `computeSchoolPlanTotal(oSchool)`; `computeMonthlyTotal` enruta `sBillingMode === 'PLANS'` (después de la
+  rama You/You+ por Stripe). Todo lo demás (attach → suscripción con trial, `syncSubscriptionTariff` al
+  editar límites, pausa/cancelación) ya funciona sobre `computeMonthlyTotal` sin cambios.
+- `schools.validations.ts` (`BillingFields.sBillingMode`): acepta `PLANS`. Mensaje de `ValidationError`
+  actualizado ("fija, variable o planes").
+- **Gate "a fuerza con tarjeta" extendido a Schools** (`schoolNeedsCard`, ahora exportado): también bloquea
+  un colegio `SCHOOL` con `sPaymentMethod === 'STRIPE'` (FIXED, VARIABLE o PLANS) **solo si tiene tarifa > 0**
+  (`hasChargeableTariff`) — sin monto no se crea suscripción y bloquearlo lo dejaría encerrado. Mismas reglas:
+  NONE bloquea, CANCELED bloquea al vencer el periodo, TRIALING/ACTIVE/PAST_DUE entran, TRANSFER nunca,
+  `bSkipBillingBlock` lo salta. Se exige `'STRIPE'` explícito (null no bloquea).
+- Login `results.oSchool.bHasChargeableTariff` (boolean) para que el front empate el gate en Schools.
+- Pruebas (`01_money.ts`): secciones "Schools PLANS" y "gate a fuerza con tarjeta" (75/75 PASS).
+- **⚠️ Al desplegar**: en prod "Demo My Village" es SCHOOL + STRIPE + VARIABLE con tarifa ($100) y sin
+  tarjeta → quedaría bloqueada. Antes del deploy: prenderle "Omitir bloqueo por cobranza" o pasarla a
+  transferencia. El resto de colegios en prod está en TRANSFER (no les afecta).
+- Pendiente fuera de esta rama: botón "Eliminar cuenta" en el admin (el backend ya cancela Stripe al borrar).
+- **Ajustes del review (2026-10-31)**: (1) el 402 del gate ahora lleva `sCode: 'BILLING_NEEDS_CARD'`
+  (`needsCardError` en schools.permissions + `SendAsJson` agrega `sCode` cuando existe). ⚠️ No se cambió
+  `name`: `ErrorHandler.mw` solo deja pasar `name === 'CustomError'` y cualquier otro nombre sale como 500.
+  Verificado pasando el error por ErrHandler → SendAsJson: 402 + sCode; los demás 402 no cambian.
+  (2) `GET /billing/summary` devuelve `bNeedsCard` = `schoolNeedsCard(oSchool)` (veredicto del servidor) para
+  que el front corrija su estado local sin re-login. Motivo: una sesión vieja o un cambio de tarifa a mitad de
+  sesión hacía que el front tomara el 402 como suspensión y rebotara entre /admin/billing y /admin/suspended.

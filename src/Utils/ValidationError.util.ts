@@ -228,8 +228,8 @@ export default {
             },
             // P3 — Cobranza
             sBillingMode: {
-                sp: "Por favor, selecciona una modalidad de cobro válida (fija o variable).",
-                en: "Please, select a valid billing mode (fixed or variable)."
+                sp: "Por favor, selecciona una modalidad de cobro válida (fija, variable o planes).",
+                en: "Please, select a valid billing mode (fixed, variable or plans)."
             },
             dFixedAmount: {
                 sp: "Por favor, ingresa un monto mensual válido.",
@@ -459,6 +459,10 @@ export default {
             sCompletionNotes: {
                 sp: "Por favor, ingresa notas de cierre correctas.",
                 en: "Please, enter valid completion notes."
+            },
+            sProgressSummary: {
+                sp: "Por favor, ingresa un resumen de progreso válido (máx. 5000 caracteres).",
+                en: "Please, enter a valid progress summary (max 5000 characters)."
             },
             iBaselineValue: {
                 sp: "Por favor, ingresa un valor de línea base correcto.",

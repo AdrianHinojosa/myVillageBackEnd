@@ -48,6 +48,48 @@ export const MODALITY_TIERS: Record<string, { dBase: number; iIncludedUsers: num
     YOU_PLUS: { dBase: 742.40, iIncludedUsers: 4, iIncludedStudents: 10, dPerUser: 29.00, dPerStudent: 51.04 },
 };
 
+/**
+ * Planes A/B/C de Schools por Stripe (sBillingMode 'PLANS') — tabla del cliente, decisiones PO
+ * 2026-10-31:
+ *   - Se cobra lo que el superadmin configura: los LÍMITES (`iUsersLimit`, `iStudentsLimit`), no el
+ *     conteo real — misma regla anti-manipulación que VARIABLE.
+ *   - El plan lo decide solo el límite de alumnos (nadie lo escoge).
+ *   - "Tal cual la tabla": TODOS los alumnos al precio de su plan (no escalonado). Consecuencia
+ *     aceptada: 26 alumnos (B) sale más barato que 25 (A), y 51 (C) que 50 (B).
+ *   - Usuarios: la base del plan incluye N usuarios; cada usuario del límite por arriba de N, $25 + IVA.
+ *
+ * MONTOS CON IVA YA INCLUIDO, igual que MODALITY_TIERS (la tabla del cliente es "+ IVA"):
+ *
+ *   Plan A  1–25 alumnos   base $250 + IVA = $290.00 (10 usuarios)   alumno $70 + IVA = $81.20
+ *   Plan B  26–50 alumnos  base $375 + IVA = $435.00 (15 usuarios)   alumno $60 + IVA = $69.60
+ *   Plan C  51+ alumnos    base $500 + IVA = $580.00 (20 usuarios)   alumno $50 + IVA = $58.00
+ *   Usuario extra (todos los planes)                                   $25 + IVA = $29.00
+ *
+ * Espejo EXACTO del frontend (`app/utils/billing.ts SCHOOL_PLANS`).
+ */
+export const SCHOOL_PLANS: Array<{ sPlan: 'A' | 'B' | 'C'; iMaxStudents: number | null; dBase: number; iIncludedUsers: number; dPerStudent: number }> = [
+    { sPlan: 'A', iMaxStudents: 25,   dBase: 290.00, iIncludedUsers: 10, dPerStudent: 81.20 },
+    { sPlan: 'B', iMaxStudents: 50,   dBase: 435.00, iIncludedUsers: 15, dPerStudent: 69.60 },
+    { sPlan: 'C', iMaxStudents: null, dBase: 580.00, iIncludedUsers: 20, dPerStudent: 58.00 },
+];
+export const SCHOOL_PLAN_EXTRA_USER: number = 29.00;
+
+/** Plan que le toca a un límite de alumnos. 0 alumnos cae en A (solo la base). */
+export function getSchoolPlan(iStudents: number | null | undefined) {
+    const iCount = Math.max(0, Number(iStudents) || 0);
+    return SCHOOL_PLANS.find(oPlan => oPlan.iMaxStudents === null || iCount <= oPlan.iMaxStudents);
+}
+
+/** Total mensual (con descuento) de un colegio en PLANS, sobre sus LÍMITES configurados. */
+export function computeSchoolPlanTotal(oSchool: any): number {
+    const iUsers = Math.max(0, Number(oSchool?.iUsersLimit) || 0);
+    const iStudents = Math.max(0, Number(oSchool?.iStudentsLimit) || 0);
+    const oPlan = getSchoolPlan(iStudents);
+    const dExtraUsers = Math.max(0, iUsers - oPlan.iIncludedUsers) * SCHOOL_PLAN_EXTRA_USER;
+    const dSubtotal = oPlan.dBase + dExtraUsers + iStudents * oPlan.dPerStudent;
+    return applyDiscount(dSubtotal, oSchool?.dDiscountPct);
+}
+
 /** THERAPIST (legacy P5) se trata como YOU. SCHOOL y demás pasan tal cual. */
 export function normalizeModality(sAccountType: string | null | undefined): string {
     if (sAccountType === 'THERAPIST') return 'YOU';
@@ -124,6 +166,7 @@ export function applyDiscount(dSubtotal: number, dDiscountPct: number | null | u
  * registered users. The contract is explicit about why: "El cálculo se realizará siempre con base
  * en el límite configurado, no en el número de usuarios efectivamente registrados durante el
  * periodo, con el fin de evitar manipulaciones del cálculo previo a la fecha de cobro."
+ * PLANS (planes A/B/C) also prices off the limits — see `SCHOOL_PLANS`.
  *
  * Mirrors the frontend's `computeMonthlyTotal()`.
  */
@@ -138,6 +181,10 @@ export function computeMonthlyTotal(oSchool: any): number {
     const bStripe = oSchool.sPaymentMethod !== 'TRANSFER';
     if (bStripe && (sModality === 'YOU' || sModality === 'YOU_PLUS')) {
         return computeQuotaTotal(sModality, oSchool);
+    }
+
+    if (oSchool.sBillingMode === 'PLANS') {
+        return computeSchoolPlanTotal(oSchool);
     }
 
     let dSubtotal = 0;

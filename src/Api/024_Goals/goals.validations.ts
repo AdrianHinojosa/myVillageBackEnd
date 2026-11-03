@@ -76,6 +76,15 @@ export const CompleteGoalBody = Validations.JoiObjectKeys({
     sCompletionNotes: Validations.String("Goals sCompletionNotes"),
 });
 
+// Resumen cualitativo de progreso por meta/submeta (texto libre). Feedback Lucy 2026-10.
+export const UpdateProgressSummaryParams = Validations.JoiObjectKeys({
+    sGoalId: Validations.RequiredUUID("Goals sGoalId"),
+});
+
+export const UpdateProgressSummaryBody = Validations.JoiObjectKeys({
+    sProgressSummary: Joi.string().allow(null).allow('').max(5000).error(new Error("Goals sProgressSummary")),
+});
+
 export const DeleteGoalParams = Validations.JoiObjectKeys({
     sGoalId: Validations.RequiredUUID("Goals sGoalId"),
 });

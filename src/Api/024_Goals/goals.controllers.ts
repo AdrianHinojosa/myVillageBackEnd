@@ -206,6 +206,39 @@ class Controllers {
         });
     }
 
+    // Guardar el resumen cualitativo de progreso (texto libre) de una meta o submeta. Feedback Lucy.
+    async updateProgressSummary(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
+        const {sLang, sSchoolId, sUserId} = res.locals;
+        const {sGoalId} = req.params;
+        const {sProgressSummary} = req.body;
+
+        // Verify goal exists
+        const myGoal = await GoalQueries.verifyGoalExists(sGoalId);
+        if (!myGoal) {
+            return next(new MyError(404, ErrorMessages.Goals.notFound[sLang]));
+        }
+
+        // Verify that the goal's student belongs to school
+        const myStudent = await StudentQueries.verifyStudentExistsBySchool(sSchoolId, myGoal.sStudentId);
+        if (!myStudent) {
+            return next(new MyError(404, ErrorMessages.Goals.notFound[sLang]));
+        }
+
+        // FACULTY can only edit goals for assigned students
+        if (res.locals.sType === 'FACULTY') {
+            const bAllowed = await StudentAssignmentQueries.isStudentAssignedToUser(myGoal.sStudentId, sUserId);
+            if (!bAllowed) return next(new MyError(403, ErrorMessages.Authentication.accessDenied[sLang]));
+        }
+
+        const updatedGoal = await GoalQueries.updateProgressSummary(sGoalId, sProgressSummary, sUserId);
+
+        return res.status(201).json({
+            message: SuccessMessages.Goals.updateProgressSummary[sLang],
+            goal: updatedGoal,
+            success: true
+        });
+    }
+
     // Delete a goal (soft delete)
     async deleteGoal(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
         const {sLang, sSchoolId, sUserId} = res.locals;

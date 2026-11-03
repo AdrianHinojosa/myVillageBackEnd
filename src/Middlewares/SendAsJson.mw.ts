@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 
 interface ICustomError extends Error {
     statusCode: number;
+    sCode?: string; // código máquina opcional (p.ej. 'BILLING_NEEDS_CARD') para que el front distinga errores
 };
 
 export interface IMyError {
@@ -31,7 +32,8 @@ export default () => (err: ICustomError, req: Request, res: Response, next: Next
             code: err.statusCode,
             status: false,
             name: err.name,
-            message: err.message
+            message: err.message,
+            ...(err.sCode ? { sCode: err.sCode } : {})
         })
     } else {
         return res.status(500).json({

@@ -12,7 +12,6 @@ exports.seed = async  function (knex) {
                 sName: 'Lucy',
                 sLastName: 'Potes',
                 sEmail: 'lucy.potes@myvillage.com.mx',
-                // Pass is: MyVillage0!
                 sPassword: '$2a$10$BsRejg/EVSfKZwBOAStfSemOz1SUdAwdNbHZ4bvFCpT1uPOZ6tDea',
                 sPhoneNumber: '+521234567890',
                 bPlatformAccess: true,

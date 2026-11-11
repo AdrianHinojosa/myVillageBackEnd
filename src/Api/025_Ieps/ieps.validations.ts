@@ -45,3 +45,19 @@ export const UpsertIepBody = Validations.JoiObjectKeys({
 export const GetIepQuery = Validations.JoiObjectKeys({
     sStudentId: Validations.RequiredUUID("IEPs sStudentId"),
 });
+
+// Firmas del IEP. La imagen viaja como dataURL PNG (base64) capturada en el navegador; `iSlot`
+// (0-7) identifica el espacio de firma. Se guardan con su propio endpoint para que NO disparen la
+// invalidación del contenido.
+export const SetSignatureBody = Validations.JoiObjectKeys({
+    sStudentId: Validations.RequiredUUID("IEPs sStudentId"),
+    iSlot: Joi.number().integer().min(0).max(7).required().error(new Error("IEPs iSlot")),
+    sRole: Validations.String("IEPs sRole"),
+    sSignerName: Validations.String("IEPs sSignerName"),
+    sSignature: Joi.string().required().error(new Error("IEPs sSignature")),
+});
+
+export const DeleteSignatureBody = Validations.JoiObjectKeys({
+    sStudentId: Validations.RequiredUUID("IEPs sStudentId"),
+    iSlot: Joi.number().integer().min(0).max(7).required().error(new Error("IEPs iSlot")),
+});

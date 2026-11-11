@@ -1196,3 +1196,49 @@ Implementación (sin migración: `sBillingMode` es string libre; sin endpoints n
   (2) `GET /billing/summary` devuelve `bNeedsCard` = `schoolNeedsCard(oSchool)` (veredicto del servidor) para
   que el front corrija su estado local sin re-login. Motivo: una sesión vieja o un cambio de tarifa a mitad de
   sesión hacía que el front tomara el 402 como suspensión y rebotara entre /admin/billing y /admin/suspended.
+
+---
+
+## IEP — Firmas (rediseño PDF, nov 2026) · rama `feature/iep-signatures`
+
+Captura de firmas del IEP (hasta 8 espacios: padre/tutor, dirección, maestros, especialistas, etc.).
+Lucy lo pidió como parte del rediseño de los PDFs. Regla de negocio (definida por el PO): **las firmas se
+invalidan y se deben recapturar cuando cambia el CONTENIDO del IEP** (no cuando cambian las metas).
+
+**Decisión de modelado:** las firmas viven en una columna `aSignatures` (jsonb) **en la misma tabla `IEPs`**,
+igual que `aTeamMembers`. No se hizo tabla hija ni S3. Razones: la firma es parte del documento IEP (1:1,
+pocas y chicas), y así la invalidación es atómica sobre la misma fila (se limpia la columna en el mismo
+upsert de contenido). Cada elemento: `{ iSlot (0-7), sRole, sSignerName, sSignature (dataURL PNG base64),
+tSignedAt }`.
+- ⚠️ **Diverge de la convención S3** (`Storage.services` / `sImageKey`) a propósito: la imagen va como
+  base64 en el jsonb. Es chica (PNG recortado), se borra con la invalidación y no requiere una ida a S3 para
+  renderizar el PDF. Si se prefiere S3 después, el cambio es localizado (swap `sSignature`→`sSignatureKey`
+  en los mismos objetos + subir con `Storage.UploadFile` a `${sSchoolId}/iepSignatures/${sIepId}`).
+
+**Migración:** `3045_IEPs_aSignatures.ts` (alter-table, `jsonb('aSignatures').defaultTo('[]')`). Aditiva,
+nullable/defaulted — no toca nada existente.
+
+**Endpoints nuevos** (dentro de `ieps.routes.ts`, mismos candados que el IEP: `General` WRITE/READ +
+`denyForModality(['YOU','YOU_PLUS'])` + chequeo FACULTY por alumno):
+- `POST /iep/signatures` `{ sStudentId, iSlot(0-7), sRole, sSignerName, sSignature }` → guarda/actualiza la
+  firma de ese espacio. **No invalida** el contenido. Devuelve `201 { oData: { aSignatures }, success }`.
+- `DELETE /iep/signatures` `{ sStudentId, iSlot }` → borra la firma de ese espacio. Devuelve el arreglo.
+
+**Invalidación:** `IepQueries.upsertIep` ahora descarta cualquier `aSignatures` que venga en el payload de
+contenido y, al actualizar un IEP existente, fuerza `aSignatures = []` (cambio de contenido ⇒ recapturar).
+Al crear un IEP nuevo queda en su default `[]`.
+
+**GET /iep:** `oData` ya incluye `aSignatures` (sale gratis del spread de columnas existente).
+
+**Mensajes:** `SuccessMessages.IEPs.setSignature` / `deleteSignature` (sp/en);
+`ValidationError.util.IEPs.{ iSlot, sRole, sSignerName, sSignature }` (sp/en). `ErrorMessages.IEPs.notFound`
+ya existía (se usa si no hay IEP del alumno).
+
+**Probado local (HTTP, token real de colegio):** login → crea IEP → guarda 2 firmas → GET relee de Postgres →
+guardar contenido limpia las firmas (invalidación) → borra firma → `iSlot` inválido devuelve 409 localizado
+(no 500). Migración NO corrida por `migrate:latest` por drift pre-existente de la DB local (falta el archivo
+`3042_Schools_bTrialConsumed.ts` que el historial local tiene registrado); la columna se aplicó con ALTER
+directo para probar. En el entorno de Adrián (sin ese drift) `migrate:latest` corre 3045 normal.
+
+**Pendiente:** merge a `Development` (coordinar con Adrián); front ya consume estos endpoints (ver
+frontEndChanges.md).

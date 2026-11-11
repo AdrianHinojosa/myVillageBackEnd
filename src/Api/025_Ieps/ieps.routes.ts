@@ -25,4 +25,20 @@ router.get('/',
     aH(IepController.getIep)
 );
 
+// POST /iep/signatures — Guardar una firma del IEP (no invalida el contenido).
+router.post('/signatures',
+    celebrate({ body: IepValidations.SetSignatureBody }),
+    aH(verifySchoolUserPermissions([{ sModuleName: 'General', sActionCode: 'WRITE' }])),
+    aH(denyForModality(['YOU', 'YOU_PLUS']) as any),
+    aH(IepController.setSignature)
+);
+
+// DELETE /iep/signatures — Borrar una firma del IEP.
+router.delete('/signatures',
+    celebrate({ body: IepValidations.DeleteSignatureBody }),
+    aH(verifySchoolUserPermissions([{ sModuleName: 'General', sActionCode: 'WRITE' }])),
+    aH(denyForModality(['YOU', 'YOU_PLUS']) as any),
+    aH(IepController.deleteSignature)
+);
+
 export default router;

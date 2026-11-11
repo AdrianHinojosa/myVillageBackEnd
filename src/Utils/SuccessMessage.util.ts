@@ -293,6 +293,14 @@ export default {
         getIep: {
             sp: 'Se ha encontrado la información del IEP.',
             en: "The IEP was successfully found."
+        },
+        setSignature: {
+            sp: 'Firma guardada exitosamente.',
+            en: "The signature was saved successfully."
+        },
+        deleteSignature: {
+            sp: 'Firma eliminada exitosamente.',
+            en: "The signature was removed successfully."
         }
     },
 

@@ -625,6 +625,22 @@ export default {
                 sp: "Por favor, ingresa un identificador de estudiante correcto.",
                 en: "Please, enter a valid student id."
             },
+            iSlot: {
+                sp: "Por favor, selecciona un espacio de firma válido.",
+                en: "Please, select a valid signature slot."
+            },
+            sRole: {
+                sp: "Por favor, ingresa el rol del firmante correctamente.",
+                en: "Please, enter the signer role correctly."
+            },
+            sSignerName: {
+                sp: "Por favor, ingresa el nombre del firmante correctamente.",
+                en: "Please, enter the signer name correctly."
+            },
+            sSignature: {
+                sp: "Por favor, proporciona una firma válida.",
+                en: "Please, provide a valid signature."
+            },
             sStatus: {
                 sp: "Por favor, ingresa un estado correcto (DRAFT, ACTIVE, ARCHIVED).",
                 en: "Please, enter a valid status (DRAFT, ACTIVE, ARCHIVED)."

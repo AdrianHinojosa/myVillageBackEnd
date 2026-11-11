@@ -83,6 +83,64 @@ class Controllers {
             success: true
         });
     }
+
+    // POST /iep/signatures — Guardar/actualizar una firma del IEP (NO invalida el contenido).
+    async setSignature(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
+        const {sLang, sSchoolId, sUserId} = res.locals;
+        const { sStudentId, iSlot, sRole, sSignerName, sSignature } = req.body;
+
+        // Verify student belongs to school
+        const myStudent = await StudentQueries.verifyStudentExistsBySchool(sSchoolId, sStudentId);
+        if (!myStudent) {
+            return next(new MyError(404, ErrorMessages.Students.notFound[sLang]));
+        }
+
+        // FACULTY can only sign IEPs for assigned students
+        if (res.locals.sType === 'FACULTY') {
+            const bAllowed = await StudentAssignmentQueries.isStudentAssignedToUser(sStudentId, sUserId);
+            if (!bAllowed) return next(new MyError(403, ErrorMessages.Authentication.accessDenied[sLang]));
+        }
+
+        const aSignatures = await IepQueries.setSignature(sStudentId, { iSlot, sRole, sSignerName, sSignature }, sUserId);
+        if (aSignatures === null) {
+            return next(new MyError(404, ErrorMessages.IEPs.notFound[sLang]));
+        }
+
+        return res.status(201).json({
+            message: SuccessMessages.IEPs.setSignature[sLang],
+            oData: { aSignatures },
+            success: true
+        });
+    }
+
+    // DELETE /iep/signatures — Borrar una firma del IEP.
+    async deleteSignature(req: Request, res: Response, next: NextFunction): Promise<Response | any> {
+        const {sLang, sSchoolId, sUserId} = res.locals;
+        const { sStudentId, iSlot } = req.body;
+
+        // Verify student belongs to school
+        const myStudent = await StudentQueries.verifyStudentExistsBySchool(sSchoolId, sStudentId);
+        if (!myStudent) {
+            return next(new MyError(404, ErrorMessages.Students.notFound[sLang]));
+        }
+
+        // FACULTY can only manage IEPs for assigned students
+        if (res.locals.sType === 'FACULTY') {
+            const bAllowed = await StudentAssignmentQueries.isStudentAssignedToUser(sStudentId, sUserId);
+            if (!bAllowed) return next(new MyError(403, ErrorMessages.Authentication.accessDenied[sLang]));
+        }
+
+        const aSignatures = await IepQueries.deleteSignature(sStudentId, iSlot, sUserId);
+        if (aSignatures === null) {
+            return next(new MyError(404, ErrorMessages.IEPs.notFound[sLang]));
+        }
+
+        return res.status(201).json({
+            message: SuccessMessages.IEPs.deleteSignature[sLang],
+            oData: { aSignatures },
+            success: true
+        });
+    }
 }
 
 export default new Controllers();

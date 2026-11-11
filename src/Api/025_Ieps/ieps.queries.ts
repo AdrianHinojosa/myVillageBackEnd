@@ -45,17 +45,22 @@ class Queries {
     // Upsert IEP (create or update)
     static async upsertIep(sStudentId, oData, sUserId) {
         const existingIep = await Queries.findIepByStudent(sStudentId);
-        const oSafeData = nullifyEmptyDates(stringifyJsonbFields(oData));
+        // Las firmas NO se guardan por esta vía: se capturan con su propio endpoint
+        // (`setSignature`). Además, cualquier cambio de contenido del IEP las invalida —deben
+        // recapturarse—, así que se descartan del payload de contenido y se limpian al actualizar.
+        const { aSignatures, ...oContent } = oData || {};
+        const oSafeData = nullifyEmptyDates(stringifyJsonbFields(oContent));
 
         if (existingIep) {
-            // Update existing IEP
+            // Update existing IEP — se limpian las firmas (invalidación por cambio de contenido).
             return await IepsModel.query().patchAndFetchById(existingIep.sIepId, {
                 ...oSafeData,
+                aSignatures: JSON.stringify([]),
                 sStudentId,
                 sLastUpdatedBy: sUserId
             }).where('bActive', true);
         } else {
-            // Create new IEP
+            // Create new IEP (aSignatures queda en su default '[]')
             return await IepsModel.query().insert({
                 ...oSafeData,
                 sStudentId,
@@ -64,6 +69,49 @@ class Queries {
                 bActive: true
             }).returning('*');
         }
+    }
+
+    // Lee el arreglo de firmas actual del IEP (jsonb ya parseado por pg → arreglo JS).
+    static readSignatures(oIep): any[] {
+        const aRaw = oIep && (oIep as any).aSignatures;
+        return Array.isArray(aRaw) ? aRaw : [];
+    }
+
+    // Guarda/actualiza la firma de un espacio (iSlot 0-7) del IEP activo del alumno, SIN tocar el
+    // contenido (no invalida). Devuelve el arreglo de firmas actualizado, o null si no hay IEP.
+    static async setSignature(sStudentId, oSignature, sUserId) {
+        const existingIep = await Queries.findIepByStudent(sStudentId);
+        if (!existingIep) return null;
+
+        const oEntry = {
+            iSlot: oSignature.iSlot,
+            sRole: oSignature.sRole || '',
+            sSignerName: oSignature.sSignerName || '',
+            sSignature: oSignature.sSignature,
+            tSignedAt: new Date().toISOString(),
+        };
+        const aNext = Queries.readSignatures(existingIep).filter((s) => s.iSlot !== oSignature.iSlot);
+        aNext.push(oEntry);
+        aNext.sort((a, b) => (a.iSlot || 0) - (b.iSlot || 0));
+
+        const updated = await IepsModel.query().patchAndFetchById(existingIep.sIepId, {
+            aSignatures: JSON.stringify(aNext),
+            sLastUpdatedBy: sUserId,
+        }).where('bActive', true);
+        return Queries.readSignatures(updated);
+    }
+
+    // Borra la firma de un espacio. Devuelve el arreglo actualizado, o null si no hay IEP.
+    static async deleteSignature(sStudentId, iSlot, sUserId) {
+        const existingIep = await Queries.findIepByStudent(sStudentId);
+        if (!existingIep) return null;
+
+        const aNext = Queries.readSignatures(existingIep).filter((s) => s.iSlot !== iSlot);
+        const updated = await IepsModel.query().patchAndFetchById(existingIep.sIepId, {
+            aSignatures: JSON.stringify(aNext),
+            sLastUpdatedBy: sUserId,
+        }).where('bActive', true);
+        return Queries.readSignatures(updated);
     }
 }
 

@@ -869,3 +869,21 @@ reporte omite el apellido.
   TRIALING/ACTIVE/PAST_DUE lo limpia.
 - Facturación ofrece "Reactivar" también con estado NONE si ya hay tarjeta guardada y monto > 0 (tarjeta
   capturada con tarifa 0 y tarifa puesta después) → `POST /billing/resubscribe` crea la suscripción.
+
+---
+
+## IEP — Firmas (nov 2026)
+
+- **Las firmas NO viajan en `POST /iep`** (el guardado de contenido). Van por endpoints aparte. Si el front
+  manda `aSignatures` dentro del body de `POST /iep`, el backend lo **descarta** (y además limpia las firmas:
+  guardar contenido = invalidación). El front debe **quitar `aSignatures` del payload de contenido**.
+- **`GET /iep` → `oData.aSignatures`**: arreglo (puede venir vacío `[]`) de `{ iSlot (0-7), sRole,
+  sSignerName, sSignature (dataURL PNG), tSignedAt }`. Es la fuente de verdad para pintar las firmas y para
+  el PDF (no usar un estado local tipo `window.__iepSignatures`).
+- **`POST /iep/signatures`** `{ sStudentId, iSlot (0-7), sRole, sSignerName, sSignature (dataURL) }` → guarda/
+  actualiza la firma de ese espacio y devuelve `oData.aSignatures` actualizado. Requiere que el IEP ya exista
+  (si no, 404 `IEPs.notFound`): capturar firma **después** de guardar el IEP al menos una vez.
+- **`DELETE /iep/signatures`** `{ sStudentId, iSlot }` (body) → borra esa firma, devuelve `oData.aSignatures`.
+- **Invalidación:** tras un `POST /iep` de contenido exitoso, las firmas quedan en `[]`. El front debe
+  reflejarlo (limpiar su copia local de firmas y avisar "se deben recapturar").
+- Candados iguales al IEP: módulo `General` WRITE para guardar/borrar firma, y therapist (YOU/YOU+) no entra.

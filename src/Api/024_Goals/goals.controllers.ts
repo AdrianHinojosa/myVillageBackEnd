@@ -7,6 +7,7 @@ import MyError from '../../Middlewares/Error.mw';
 import GoalQueries from './goals.queries';
 import StudentQueries from '../023_Students/students.queries';
 import StudentAssignmentQueries from '../028_StudentAssignments/studentAssignments.queries';
+import IepQueries from '../025_Ieps/ieps.queries';
 
 // Messages
 import SuccessMessages from '../../Utils/SuccessMessage.util';
@@ -164,6 +165,9 @@ class Controllers {
             bHasSubGoals,
             sLastUpdatedBy: sUserId
         }, aTasks);
+
+        // Si la meta está vinculada a un IEP con firmas, editar su definición las reinicia.
+        await IepQueries.invalidateSignaturesByGoal(sGoalId, 'GOAL_EDIT');
 
         return res.status(201).json({
             message: SuccessMessages.Goals.updateGoal[sLang],

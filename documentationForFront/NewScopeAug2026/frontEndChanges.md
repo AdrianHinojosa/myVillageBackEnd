@@ -887,3 +887,19 @@ reporte omite el apellido.
 - **Invalidación:** tras un `POST /iep` de contenido exitoso, las firmas quedan en `[]`. El front debe
   reflejarlo (limpiar su copia local de firmas y avisar "se deben recapturar").
 - Candados iguales al IEP: módulo `General` WRITE para guardar/borrar firma, y therapist (YOU/YOU+) no entra.
+
+---
+
+## IEP — Firmas: reinicio por meta + historial (nov 2026)
+
+- **La regla de invalidación cambió:** antes "las metas no invalidan"; ahora las firmas se reinician
+  también cuando cambia una meta VINCULADA al IEP (editar su definición, o su avance por nuevos
+  registros). El front no necesita hacer nada para disparar esto (lo hace el backend); pero como una
+  edición de meta o un registro ocurren FUERA de la pantalla de IEP, al volver a abrir el IEP las
+  firmas pueden venir vacías. Refrescar `aSignatures` desde `GET /iep` al entrar.
+- **`GET /iep` → `oData.aSignatureHistory`**: arreglo (puede venir `[]`) de
+  `{ tResetAt, sReason('CONTENT_EDIT'|'GOAL_EDIT'|'GOAL_PROGRESS'), aSigners:[{ iSlot, sRole,
+  sSignerName, tSignedAt }] }`. Es el log de reinicios (quién había firmado y por qué se reinició).
+  NO trae la imagen de la firma. Mostrarlo como historial, más reciente al último.
+- Tras un `POST /iep` de contenido, el front puede apilar localmente una entrada `CONTENT_EDIT` para
+  reflejarlo sin recargar (el backend ya la guardó).

@@ -6,6 +6,7 @@ import { TrackingRecordHelpsModel } from './trackingRecordHelps.model';
 import { GoalsModel } from '../goals.model';
 import { GoalTasksModel } from '../001_GoalTasks/goalTasks.model';
 import { normalizeHelpTypesInput, formatHelpTypesForFrontend } from './helpTypes';
+import IepQueries from '../../025_Ieps/ieps.queries';
 
 class Queries {
     constructor() {};
@@ -117,6 +118,9 @@ class Queries {
 
             // Recalculate progress
             const dUpdatedProgress = await Queries.recalculateGoalProgress(oData.sGoalId, trx);
+
+            // Si esta meta está vinculada a un IEP con firmas, el cambio de avance las reinicia.
+            await IepQueries.invalidateSignaturesByGoal(oData.sGoalId, 'GOAL_PROGRESS', trx);
 
             // Build response with both frontend and backend field names
             const oResponse = {
@@ -291,6 +295,7 @@ class Queries {
             }
 
             const dUpdatedProgress = await Queries.recalculateGoalProgress(existing.sGoalId, trx);
+            await IepQueries.invalidateSignaturesByGoal(existing.sGoalId, 'GOAL_PROGRESS', trx);
 
             // Preserve attached files in the response (not touched here)
             const recordFiles = await TrackingRecordFilesModel.query(trx)
@@ -337,6 +342,7 @@ class Queries {
 
             // Recalculate progress
             const dUpdatedProgress = await Queries.recalculateGoalProgress(updated.sGoalId, trx);
+            await IepQueries.invalidateSignaturesByGoal(updated.sGoalId, 'GOAL_PROGRESS', trx);
 
             return { dUpdatedProgress };
         });
@@ -357,6 +363,7 @@ class Queries {
 
             // Recalculate progress
             const dUpdatedProgress = await Queries.recalculateGoalProgress(record.sGoalId, trx);
+            await IepQueries.invalidateSignaturesByGoal(record.sGoalId, 'GOAL_PROGRESS', trx);
 
             return { sGoalId: record.sGoalId, dUpdatedProgress };
         });

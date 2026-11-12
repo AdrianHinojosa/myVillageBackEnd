@@ -1242,3 +1242,35 @@ directo para probar. En el entorno de Adrián (sin ese drift) `migrate:latest` c
 
 **Pendiente:** merge a `Development` (coordinar con Adrián); front ya consume estos endpoints (ver
 frontEndChanges.md).
+
+---
+
+## IEP — Firmas: reinicio por meta + log (nov 2026, feedback Lucy)
+
+Lucy (ya pagó los PDFs) pidió que las firmas también se reinicien cuando cambia una meta del IEP, y
+Sam aprobó un log simple de los reinicios. **Esto cambia la regla previa** (antes las metas NO
+invalidaban). Decisión del PO: reinicia tanto por EDITAR una meta vinculada como por su AVANCE.
+
+**Migración:** `3046_IEPs_aSignatureHistory.ts` (jsonb `aSignatureHistory` default `[]`).
+
+**Disparadores de reinicio (solo para metas VINCULADAS al IEP vía `aObjectives[].sLinkedGoalId`):**
+- `GOAL_EDIT`: `goals.controllers.updateGoal` → `IepQueries.invalidateSignaturesByGoal(sGoalId, 'GOAL_EDIT')`.
+- `GOAL_PROGRESS`: los 4 sitios de `trackingRecords.queries` que llaman `recalculateGoalProgress`
+  (create/update/toggleExclusion/delete) → `invalidateSignaturesByGoal(<goalId>, 'GOAL_PROGRESS', trx)`
+  dentro de la misma transacción. Resuelve submeta→meta padre (`sParentGoalId`) para checar el vínculo.
+- `CONTENT_EDIT`: ya existía (en `upsertIep`); ahora además registra en el historial.
+
+`invalidateSignaturesByGoal` usa knex crudo (`IepsModel.knex()('Goals')`) para evitar importar
+GoalsModel (ciclos). No-op si la meta no está vinculada o si no hay firmas. Antes de limpiar
+`aSignatures`, apila en `aSignatureHistory` un snapshot LIGERO (sin la imagen):
+`{ tResetAt, sReason, aSigners:[{ iSlot, sRole, sSignerName, tSignedAt }] }`.
+
+**GET /iep:** `oData` ya incluye `aSignatureHistory` (spread).
+
+**Probado local (HTTP):** editar meta vinculada → reset+GOAL_EDIT; registro en meta vinculada →
+reset+GOAL_PROGRESS; registro en submeta (resuelve padre) → reset+GOAL_PROGRESS; editar contenido →
+reset+CONTENT_EDIT; editar meta NO vinculada → NO reinicia (no sobre-invalida). FE muestra el
+"Historial de reinicios".
+
+**Nota de alcance:** esto excede lo cotizado (la cotización decía que las metas NO invalidan y no
+contemplaba log). Es una adición pedida por Lucy tras pagar; definir con el PO si se cobra aparte.

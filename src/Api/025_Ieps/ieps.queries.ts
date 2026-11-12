@@ -52,10 +52,13 @@ class Queries {
         const oSafeData = nullifyEmptyDates(stringifyJsonbFields(oContent));
 
         if (existingIep) {
-            // Update existing IEP — se limpian las firmas (invalidación por cambio de contenido).
+            // Update existing IEP — se limpian las firmas (invalidación por cambio de contenido) y se
+            // registra el reinicio en el historial.
+            const aHistory = Queries.appendResetHistory(existingIep, 'CONTENT_EDIT');
             return await IepsModel.query().patchAndFetchById(existingIep.sIepId, {
                 ...oSafeData,
                 aSignatures: JSON.stringify([]),
+                aSignatureHistory: JSON.stringify(aHistory),
                 sStudentId,
                 sLastUpdatedBy: sUserId
             }).where('bActive', true);
@@ -75,6 +78,27 @@ class Queries {
     static readSignatures(oIep): any[] {
         const aRaw = oIep && (oIep as any).aSignatures;
         return Array.isArray(aRaw) ? aRaw : [];
+    }
+
+    // Lee el historial de reinicios del IEP (jsonb ya parseado).
+    static readHistory(oIep): any[] {
+        const aRaw = oIep && (oIep as any).aSignatureHistory;
+        return Array.isArray(aRaw) ? aRaw : [];
+    }
+
+    // Devuelve el historial con un nuevo registro de reinicio (solo si había firmas). Snapshot
+    // ligero: quién había firmado y por qué se reinició; NO incluye la imagen de la firma.
+    static appendResetHistory(oIep, sReason): any[] {
+        const aHistory = Queries.readHistory(oIep);
+        const aSigs = Queries.readSignatures(oIep);
+        if (!aSigs.length) return aHistory; // nada que registrar
+        return [...aHistory, {
+            tResetAt: new Date().toISOString(),
+            sReason,
+            aSigners: aSigs.map((s) => ({
+                iSlot: s.iSlot, sRole: s.sRole || '', sSignerName: s.sSignerName || '', tSignedAt: s.tSignedAt || null,
+            })),
+        }];
     }
 
     // Guarda/actualiza la firma de un espacio (iSlot 0-7) del IEP activo del alumno, SIN tocar el
@@ -112,6 +136,44 @@ class Queries {
             sLastUpdatedBy: sUserId,
         }).where('bActive', true);
         return Queries.readSignatures(updated);
+    }
+
+    // Reinicia las firmas del IEP activo del alumno cuando cambia una meta VINCULADA al IEP (su
+    // definición: sReason 'GOAL_EDIT'; o su avance: 'GOAL_PROGRESS'). Registra el reinicio en el
+    // historial. No hace nada si la meta no está vinculada al IEP o si no hay firmas que reiniciar.
+    // Usa knex crudo para resolver la meta y evitar importar GoalsModel (ciclos).
+    static async invalidateSignaturesByGoal(sGoalId, sReason, trx?) {
+        if (!sGoalId) return;
+        const k = trx || IepsModel.knex();
+        const goal = await k('Goals').where('sGoalId', sGoalId).first('sStudentId', 'sParentGoalId');
+        if (!goal) return;
+
+        let sStudentId = goal.sStudentId;
+        let sLinkedId = sGoalId;
+        if (goal.sParentGoalId) {
+            // Un registro de submeta mueve el avance de su meta padre, que es la vinculada al IEP.
+            sLinkedId = goal.sParentGoalId;
+            if (!sStudentId) {
+                const parent = await k('Goals').where('sGoalId', goal.sParentGoalId).first('sStudentId');
+                sStudentId = parent && parent.sStudentId;
+            }
+        }
+        if (!sStudentId) return;
+
+        const iep = await IepsModel.query(trx)
+            .where('sStudentId', sStudentId).where('bActive', true).whereNull('tDeletedAt').first();
+        if (!iep) return;
+        if (!Queries.readSignatures(iep).length) return; // no hay firmas que reiniciar
+
+        const aObj = Array.isArray((iep as any).aObjectives) ? (iep as any).aObjectives : [];
+        const bLinked = aObj.some((o) => o && (o.sLinkedGoalId === sLinkedId || o.sLinkedGoalId === sGoalId));
+        if (!bLinked) return; // la meta no está en el IEP → no afecta las firmas
+
+        const aHistory = Queries.appendResetHistory(iep, sReason);
+        await IepsModel.query(trx).patchAndFetchById(iep.sIepId, {
+            aSignatures: JSON.stringify([]),
+            aSignatureHistory: JSON.stringify(aHistory),
+        }).where('bActive', true);
     }
 }
 
